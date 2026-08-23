@@ -17,7 +17,7 @@ export default function HomePage() {
 
   async function load() {
     setLoading(true);
-    let query = supabase.from('songs').select('*', { count: 'exact' }).order('id');
+    let query = supabase.from('songs').select('*', { count: 'exact' }).order('name_th');
     if (q) query = query.or(`name_th.ilike.%${q}%,id.ilike.%${q}%`);
     const { data, count: c } = await query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
     setSongs(data ?? []);
