@@ -130,19 +130,43 @@ export default function NotationPlayer({ verses, lyrics }) {
         cursorTimeline.push({ time: t0 + (vi * 16 + p - startStep) * stepDur, verseIdx: vi, pos: p });
       }
 
-      lines.forEach(line => {
-        // หาเสียงเดี่ยวที่อยู่ติดหน้าช่องสะบัด — ถือเป็นเสียงที่ 1 ของสะบัด
-        const consumed = new Array(16).fill(false);
-        for (let p = pStart + 1; p < 16; p++) {
-          if (line[p].length > 1 && line[p - 1].length === 1) consumed[p - 1] = true;
-        }
-        for (let p = pStart; p < 16; p++) {
-          if (consumed[p]) continue; // ถูกดึงไปรวมกับสะบัดถัดไปแล้ว
-          const t = t0 + (vi * 16 + p - startStep) * stepDur;
+      // ── สะบัดข้ามมือ: เสียงนำอาจอยู่คนละมือกับคู่สะบัด ──
+      const consumed = lines.map(() => new Array(16).fill(false));
+      const runMap = {}; // `${li}-${p}` → ชุดโน้ตสะบัดเต็ม
+
+      for (let p = pStart; p < 16; p++) {
+        lines.forEach((line, li) => {
           if (line[p].length > 1) {
-            // สะบัด: รวมเสียงนำ (ถ้ามี) + เสียงในช่อง → รัวช่องไฟเท่ากัน จบตรงจังหวะ
-            const lead = (p > pStart && line[p - 1].length === 1) ? line[p - 1] : [];
-            const run = [...lead, ...line[p]];
+            let lead = [];
+            if (p > pStart) {
+              if (line[p - 1].length === 1 && !consumed[li][p - 1]) {
+                // เสียงนำอยู่มือเดียวกัน
+                lead = line[p - 1];
+                consumed[li][p - 1] = true;
+              } else {
+                // หาเสียงนำจากมืออื่น (มืออื่นต้องว่างตรงจังหวะสะบัด)
+                for (let lj = 0; lj < lines.length; lj++) {
+                  if (lj !== li && lines[lj][p].length === 0
+                      && lines[lj][p - 1].length === 1 && !consumed[lj][p - 1]) {
+                    lead = lines[lj][p - 1];
+                    consumed[lj][p - 1] = true;
+                    break;
+                  }
+                }
+              }
+            }
+            runMap[li + '-' + p] = [...lead, ...line[p]];
+          }
+        });
+      }
+
+      lines.forEach((line, li) => {
+        for (let p = pStart; p < 16; p++) {
+          if (consumed[li][p]) continue; // ถูกดึงเข้าชุดสะบัดแล้ว
+          const t = t0 + (vi * 16 + p - startStep) * stepDur;
+          const run = runMap[li + '-' + p];
+          if (run) {
+            // สะบัด: ทุกเสียงช่องไฟเท่ากัน เสียงสุดท้ายจบตรงจังหวะ
             run.forEach((n, ni) => scheduleNote(n, t - (run.length - 1 - ni) * SABAT_GAP));
           } else {
             line[p].forEach(n => scheduleNote(n, t));
