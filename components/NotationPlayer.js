@@ -175,14 +175,21 @@ export default function NotationPlayer({ verses, lyrics }) {
   }
 
   function renderCell(notes, active, vi, p) {
+    const isSabat = notes.length > 1;
     return (
       <span onClick={() => seek(vi, p)} title="กดเพื่อเล่นจากห้องนี้" style={{
         display:'inline-block', minWidth:'26px', textAlign:'center',
         padding:'2px 1px', borderRadius:'3px', fontSize:'0.92rem',
-        cursor:'pointer',
+        cursor:'pointer', position:'relative',
         background: active ? 'rgba(201,168,76,0.4)' : 'transparent',
         color: notes.length ? 'var(--cream)' : 'var(--border)',
       }}>
+        {isSabat && <span style={{
+          position:'absolute', top:'-4px', left:'3px', right:'3px', height:'6px',
+          borderTop:'1.5px solid var(--gold2)',
+          borderRadius:'50% 50% 0 0',
+          pointerEvents:'none',
+        }} />}
         {notes.length ? notes.map(n =>
           n.ch + (n.register === -1 ? LOW_MARK : n.register === 1 ? HIGH_MARK : '')
         ).join('') : '–'}
@@ -206,7 +213,7 @@ export default function NotationPlayer({ verses, lyrics }) {
         <div style={{display:'flex',flexWrap:'nowrap'}}>
           {segs.map((s, si) => (
             <span key={si} style={{display:'flex'}}>
-              {si > 0 && <span style={{color:'var(--gold)',margin:'0 8px',opacity:0.7}}>‖</span>}
+              {si > 0 && <span style={{color:'var(--border)',margin:'0 3px'}}>|</span>}
               {segCells(s.positions, s.vi)}
             </span>
           ))}
