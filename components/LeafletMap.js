@@ -22,7 +22,7 @@ const goldIcon = (L) => L.divIcon({
   iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -22],
 });
 
-export default function LeafletMap({ markers = [], onPick, pickedPos, height = '480px', center = [13.75, 100.5], zoom = 6 }) {
+export default function LeafletMap({ markers = [], onPick, pickedPos, flyTo, height = '480px', center = [13.75, 100.5], zoom = 6 }) {
   const mapRef = useRef(null);
   const mapObj = useRef(null);
   const pickMarker = useRef(null);
@@ -51,6 +51,12 @@ export default function LeafletMap({ markers = [], onPick, pickedPos, height = '
   useEffect(() => {
     if (window.L && mapObj.current) renderMarkers(window.L);
   }, [markers]);
+
+  useEffect(() => {
+    if (window.L && mapObj.current && flyTo) {
+      mapObj.current.flyTo([flyTo[0], flyTo[1]], flyTo[2] ?? 16, { duration: 1.2 });
+    }
+  }, [flyTo]);
 
   useEffect(() => {
     if (!window.L || !mapObj.current || !onPick) return;

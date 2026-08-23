@@ -14,6 +14,10 @@ export default function NewArchiveRecord() {
   const [era, setEra] = useState('past');
   const [desc, setDesc] = useState('');
   const [pos, setPos] = useState(null);           // [lat, lng]
+  const [fly, setFly] = useState(null);
+  const [placeQ, setPlaceQ] = useState('');
+  const [placeResults, setPlaceResults] = useState([]);
+  const [searching, setSearching] = useState(false);
   const [files, setFiles] = useState([]);
   const [ytUrl, setYtUrl] = useState('');
   const [msg, setMsg] = useState('');
@@ -22,6 +26,28 @@ export default function NewArchiveRecord() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
+
+  async function searchPlace() {
+    if (!placeQ.trim()) return;
+    setSearching(true); setPlaceResults([]);
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&limit=6&accept-language=th&q=${encodeURIComponent(placeQ)}`
+      );
+      const data = await res.json();
+      setPlaceResults(data ?? []);
+      if (!data?.length) setMsg('⚠ ไม่พบสถานที่ ลองคำอื่น เช่น เพิ่มชื่อจังหวัด');
+    } catch { setMsg('⚠ ค้นหาไม่สำเร็จ ลองใหม่'); }
+    setSearching(false);
+  }
+
+  function pickPlace(r) {
+    const lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+    setPos([lat, lng]);
+    setFly([lat, lng, 16]);
+    setPlaceResults([]);
+    if (!where.trim()) setWhere(r.display_name.split(',').slice(0, 2).join(','));
+  }
 
   async function submit() {
     if (!who || !what || !whenText || !where) { setMsg('⚠ กรอก ใคร / ทำอะไร / เมื่อไหร่ / ที่ไหน ให้ครบ'); return; }
@@ -105,8 +131,30 @@ export default function NewArchiveRecord() {
             placeholder="เช่น วังบางขุนพรหม กรุงเทพฯ" />
         </div>
         <div className="form-group">
-          <label className="form-label">📍 ปักหมุดตำแหน่ง (คลิกบนแผนที่)</label>
-          <LeafletMap height="300px" onPick={(lat, lng) => setPos([lat, lng])} pickedPos={pos} />
+          <label className="form-label">📍 ตำแหน่งเหตุการณ์ — ค้นหาหรือคลิกบนแผนที่</label>
+          <div style={{display:'flex',gap:'6px',marginBottom:'6px'}}>
+            <input className="form-input" value={placeQ} onChange={e => setPlaceQ(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); searchPlace(); } }}
+              placeholder="🔍 พิมพ์ชื่อสถานที่ เช่น วัดพระแก้ว, วิทยาลัยนาฏศิลป, อ.เมือง เพชรบุรี" />
+            <button type="button" className="btn btn-outline" onClick={searchPlace} disabled={searching}>
+              {searching ? '⏳' : 'ค้นหา'}
+            </button>
+          </div>
+          {placeResults.length > 0 && (
+            <div style={{border:'1px solid var(--gold)',borderRadius:'6px',marginBottom:'6px',overflow:'hidden'}}>
+              {placeResults.map((r, i) => (
+                <div key={i} onClick={() => pickPlace(r)}
+                  style={{padding:'8px 12px',fontSize:'0.8rem',cursor:'pointer',
+                    borderBottom: i < placeResults.length-1 ? '1px solid var(--border)' : 'none',
+                    background:'var(--navy3)'}}
+                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(201,168,76,0.15)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'var(--navy3)'}>
+                  📍 {r.display_name}
+                </div>
+              ))}
+            </div>
+          )}
+          <LeafletMap height="300px" onPick={(lat, lng) => setPos([lat, lng])} pickedPos={pos} flyTo={fly} />
           <div style={{fontSize:'0.72rem',color:pos ? 'var(--jade)' : 'var(--muted)',marginTop:'5px'}}>
             {pos ? `✓ ปักหมุดแล้ว: ${pos[0].toFixed(5)}, ${pos[1].toFixed(5)}` : 'ยังไม่ได้ปักหมุด (ไม่บังคับ แต่แนะนำ — จะแสดงบนแผนที่หลัก)'}
           </div>
