@@ -49,6 +49,7 @@ export default function Topbar() {
         <Link href="/archive">จดหมายเหตุดนตรีไทย</Link>
         <Link href="/leaderboard">ทำเนียบ</Link>
         {user && <Link href="/songs/new">➕ เพิ่มเพลง</Link>}
+        {user && <Link href="/dashboard">ของฉัน</Link>}
         {profile?.role === 'admin' && <Link href="/admin">Admin</Link>}
       </nav>
       <div className="topbar-right">

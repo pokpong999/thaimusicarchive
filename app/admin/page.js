@@ -23,6 +23,9 @@ export default function AdminPage() {
   const [mgRecords, setMgRecords] = useState([]);
   const [mgComments, setMgComments] = useState([]);
   const [mgMsg, setMgMsg] = useState('');
+  const [mgVideos, setMgVideos] = useState([]);
+  const [mgTangs, setMgTangs] = useState([]);
+  const [mgFiles, setMgFiles] = useState([]);
   const [songs, setSongs] = useState([]);
   const [selSong, setSelSong] = useState('');
   const [url, setUrl] = useState('');
@@ -73,6 +76,22 @@ export default function AdminPage() {
     const { data: mc } = await supabase.from('comments')
       .select('*, profiles(display_name)').order('created_at', { ascending: false }).limit(50);
     setMgComments(mc ?? []);
+    const { data: mv } = await supabase.from('song_videos')
+      .select('id, song_id, title, youtube_url, songs(name_th)').eq('approved', true)
+      .order('created_at', { ascending: false }).limit(50);
+    setMgVideos(mv ?? []);
+    const { data: mt } = await supabase.from('song_melody')
+      .select('song_id, instrument, songs(name_th)').neq('instrument', 'ทำนองหลัก').limit(2000);
+    const seen = {}; const tangList = [];
+    (mt ?? []).forEach(r => {
+      const k = r.song_id + '|' + r.instrument;
+      if (!seen[k]) { seen[k] = true; tangList.push(r); }
+    });
+    setMgTangs(tangList);
+    const { data: mf } = await supabase.from('song_files')
+      .select('id, song_id, title, storage_path, songs(name_th)').eq('approved', true)
+      .order('created_at', { ascending: false }).limit(50);
+    setMgFiles(mf ?? []);
   }
 
   async function approveVideo(id) {
@@ -191,6 +210,21 @@ export default function AdminPage() {
   async function deleteComment(id) {
     await supabase.from('comments').delete().eq('id', id); loadAll();
   }
+  async function deleteVideo(id) {
+    if (!confirm('ลบวิดีโอนี้ถาวร?')) return;
+    await supabase.from('song_videos').delete().eq('id', id); loadAll();
+  }
+  async function deleteTang(songId, instrument) {
+    if (!confirm(`ลบทาง${instrument} ของเพลง ${songId} ทั้งหมด?`)) return;
+    await supabase.from('song_melody').delete().eq('song_id', songId).eq('instrument', instrument);
+    setMgMsg(`✓ ลบทาง${instrument} (${songId}) แล้ว`); loadAll();
+  }
+  async function deletePdf(f) {
+    if (!confirm('ลบไฟล์ PDF นี้ถาวร?')) return;
+    await supabase.storage.from('song-pdfs').remove([f.storage_path]);
+    await supabase.from('song_files').delete().eq('id', f.id); loadAll();
+  }
+
   async function setMemberRole(uid, newRole) {
     await supabase.from('profiles').update({ role: newRole }).eq('id', uid); loadAll();
   }
@@ -443,6 +477,43 @@ export default function AdminPage() {
                 <button className="btn btn-danger btn-sm" onClick={() => deleteRecord(r.id)}>🗑</button>
               </div>
             ))}
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:'0.6rem'}}>🎬 วิดีโอเพลง (50 ล่าสุด) — ลบ</div>
+            {mgVideos.map(v => (
+              <div key={v.id} style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'6px'}}>
+                <span style={{flex:1,fontSize:'0.8rem'}}>{v.songs?.name_th}
+                  <span style={{color:'var(--muted)'}}> · {v.title ?? v.youtube_url}</span></span>
+                <a href={v.youtube_url} target="_blank" style={{fontSize:'0.72rem',color:'var(--jade)'}}>ดู↗</a>
+                <button className="btn btn-danger btn-sm" onClick={() => deleteVideo(v.id)}>🗑</button>
+              </div>
+            ))}
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:'0.6rem'}}>🎹 ทางเครื่องดนตรี — ลบ</div>
+            {mgTangs.length === 0
+              ? <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>มีเฉพาะทำนองหลัก</div>
+              : mgTangs.map((t, i) => (
+                <div key={i} style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'6px'}}>
+                  <span style={{flex:1,fontSize:'0.8rem'}}>{t.songs?.name_th}
+                    <span className="badge badge-fixed" style={{marginLeft:'6px'}}>{t.instrument}</span></span>
+                  <button className="btn btn-danger btn-sm" onClick={() => deleteTang(t.song_id, t.instrument)}>🗑</button>
+                </div>
+              ))}
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:'0.6rem'}}>📁 ไฟล์ PDF (50 ล่าสุด) — ลบ</div>
+            {mgFiles.map(f => {
+              const url = supabase.storage.from('song-pdfs').getPublicUrl(f.storage_path).data.publicUrl;
+              return (
+                <div key={f.id} style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'6px'}}>
+                  <span style={{flex:1,fontSize:'0.8rem'}}>{f.songs?.name_th}
+                    <span style={{color:'var(--muted)'}}> · {f.title}</span></span>
+                  <a href={url} target="_blank" style={{fontSize:'0.72rem',color:'var(--jade)'}}>เปิด↗</a>
+                  <button className="btn btn-danger btn-sm" onClick={() => deletePdf(f)}>🗑</button>
+                </div>
+              );
+            })}
           </div>
           <div className="card">
             <div style={{fontWeight:600,marginBottom:'0.6rem'}}>💬 ความคิดเห็น (50 ล่าสุด)</div>
