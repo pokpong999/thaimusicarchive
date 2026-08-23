@@ -127,7 +127,8 @@ export default function NotationPlayer({ verses, lyrics }) {
 
       groups.forEach(group => {
         group.forEach((n, ni) => {
-          const noteTime = t + ni * SABAT_GAP; // สะบัดรัวติดกัน 45ms
+          // สะบัด: เสียงสุดท้ายลงตรงจังหวะ เสียงนำหน้ามาก่อน (grace notes)
+          const noteTime = t - (group.length - 1 - ni) * SABAT_GAP;
           let played = false;
           if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85);
           if (!played) {
