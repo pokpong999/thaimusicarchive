@@ -54,9 +54,15 @@ export default function DashboardPage() {
     setLoading(false);
   }
 
-  async function del(table, id) {
-    if (!confirm('ลบรายการนี้?')) return;
-    await supabase.from(table).delete().eq('id', id);
+  async function del(table, id, item) {
+    if (!confirm('ลบรายการนี้? (ลบแล้วหายจากเว็บทันที)')) return;
+    // ทางเครื่องที่อนุมัติแล้ว: ลบโน้ตจริงในเพลงด้วย
+    if (table === 'melody_submissions' && item?.approved) {
+      await supabase.from('song_melody').delete()
+        .eq('song_id', item.song_id).eq('instrument', item.instrument).eq('submitted_by', user.id);
+    }
+    const { error } = await supabase.from(table).delete().eq('id', id);
+    if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
     load(user.id);
   }
 
@@ -87,8 +93,8 @@ export default function DashboardPage() {
             padding:'6px 0',borderBottom:'1px solid rgba(42,63,92,0.35)',flexWrap:'wrap'}}>
             <div style={{flex:1,minWidth:'220px',fontSize:'0.83rem'}}>{render(it)}</div>
             <Status ok={it.approved} />
-            {!it.approved && table && (
-              <button className="btn btn-danger btn-sm" onClick={() => del(table, it.id)}>🗑 ลบ</button>
+            {table && (
+              <button className="btn btn-danger btn-sm" onClick={() => del(table, it.id, it)}>🗑 ลบ</button>
             )}
           </div>
         ))}

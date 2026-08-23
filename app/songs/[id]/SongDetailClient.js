@@ -337,7 +337,16 @@ export default function SongDetailClient() {
                   </div>
                   <div className="video-body">
                     <div className="video-title">{v.title || song.name_th}</div>
-                    <div className="video-meta"><span>▶ {v.channel_name}</span></div>
+                    <div className="video-meta" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                      <span>▶ {v.channel_name}</span>
+                      {user && v.submitted_by === user.id && (
+                        <button className="btn btn-danger btn-sm" onClick={async () => {
+                          if (!confirm('ลบวิดีโอนี้?')) return;
+                          await supabase.from('song_videos').delete().eq('id', v.id);
+                          load();
+                        }}>🗑 ลบ</button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}

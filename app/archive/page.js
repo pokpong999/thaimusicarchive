@@ -8,6 +8,8 @@ const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future
 
 export default function ArchivePage() {
   const [records, setRecords] = useState([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [myId, setMyId] = useState(null);
   const [era, setEra] = useState('');
   const [q, setQ] = useState('');
   const [view, setView] = useState('map');
@@ -18,6 +20,23 @@ export default function ArchivePage() {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
   useEffect(() => { load(); }, [era, q]);
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      setMyId(data.user.id);
+      const { data: p } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
+      setIsAdmin(p?.role === 'admin');
+    });
+  }, []);
+
+  async function adminDeleteRecord(e, r) {
+    e.preventDefault(); e.stopPropagation();
+    if (!confirm(`ลบบันทึก "${r.what_text}" ถาวร?`)) return;
+    const { error } = await supabase.from('archive_records').delete().eq('id', r.id);
+    if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+    load();
+  }
+
 
   async function load() {
     setLoading(true);
@@ -116,6 +135,9 @@ export default function ArchivePage() {
                     <div style={{fontWeight:600,fontSize:'1rem',margin:'6px 0 2px'}}>{r.what_text}</div>
                     <div style={{fontSize:'0.82rem',color:'var(--muted)'}}>{r.who_text} · {r.where_text}</div>
                   </div>
+                  {(isAdmin || r.submitted_by === myId) && <button className="btn btn-danger btn-sm"
+                    style={{marginLeft:'auto',alignSelf:'flex-start',flexShrink:0}}
+                    onClick={(e) => adminDeleteRecord(e, r)} title="ลบบันทึก">🗑</button>}
                 </div>
               </Link>
             );
