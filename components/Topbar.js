@@ -2,27 +2,28 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import RankBadge from './RankBadge';
 
 export default function Topbar() {
   const [user, setUser] = useState(null);
-  const [role, setRole] = useState(null);
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user);
-      if (data.user) loadRole(data.user.id);
+      if (data.user) loadProfile(data.user.id);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) loadRole(session.user.id);
-      else setRole(null);
+      if (session?.user) loadProfile(session.user.id);
+      else setProfile(null);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  async function loadRole(uid) {
-    const { data } = await supabase.from('profiles').select('role').eq('id', uid).single();
-    setRole(data?.role ?? 'contributor');
+  async function loadProfile(uid) {
+    const { data } = await supabase.from('profiles').select('role, points, display_name').eq('id', uid).single();
+    setProfile(data);
   }
 
   async function logout() {
@@ -39,20 +40,23 @@ export default function Topbar() {
           <circle cx="18" cy="18" r="3.5" fill="#C9A84C" opacity="0.85"/>
         </svg>
         <div>
-          <div className="logo-th">ฐานข้อมูลเพลงไทย</div>
+          <div className="logo-th">หอจดหมายเหตุดนตรีไทย</div>
           <div className="logo-en">Thai Music Archive · THMA</div>
         </div>
       </div></Link>
       <nav className="nav">
-        <Link href="/">รายการเพลง</Link>
-        <Link href="/archive">หอจดหมายเหตุ</Link>
-        {role === 'admin' && <Link href="/admin">Admin</Link>}
+        <Link href="/">จดหมายเหตุเพลงไทย</Link>
+        <Link href="/archive">จดหมายเหตุดนตรีไทย</Link>
+        <Link href="/leaderboard">ทำเนียบ</Link>
+        {profile?.role === 'admin' && <Link href="/admin">Admin</Link>}
       </nav>
       <div className="topbar-right">
         {user ? (
           <>
-            <span style={{fontSize:'0.8rem',color:'var(--muted)'}}>
-              {user.email} {role === 'admin' && <span className="badge badge-fixed">Admin</span>}
+            <RankBadge points={profile?.points} showPoints />
+            <span style={{fontSize:'0.78rem',color:'var(--muted)'}}>
+              {profile?.display_name ?? user.email}
+              {profile?.role === 'admin' && <span className="badge badge-fixed" style={{marginLeft:'6px'}}>Admin</span>}
             </span>
             <button className="btn btn-outline btn-sm" onClick={logout}>ออกจากระบบ</button>
           </>

@@ -1,0 +1,143 @@
+'use client';
+import { useEffect, useRef } from 'react';
+import { parseVerse } from './NotationPlayer';
+
+// ด ร ม ฟ ซ ล ท → C D E F G A B (การปริวรรตโดยอนุโลม)
+const THAI_TO_WESTERN = { 'ด':'c', 'ร':'d', 'ม':'e', 'ฟ':'f', 'ซ':'g', 'ล':'a', 'ท':'b' };
+
+function loadVexFlow() {
+  return new Promise((resolve) => {
+    if (window.Vex) { resolve(window.Vex); return; }
+    const js = document.createElement('script');
+    js.src = 'https://cdn.jsdelivr.net/npm/vexflow@4.2.2/build/cjs/vexflow.js';
+    js.onload = () => resolve(window.Vex);
+    document.head.appendChild(js);
+  });
+}
+
+// แปลงวรรค (16 ตำแหน่ง) → 4 ห้อง แต่ละห้องเป็น list ของ {keys, duration, isRest}
+function verseToMeasures(positions) {
+  const measures = [];
+  for (let m = 0; m < 4; m++) {
+    const slice = positions.slice(m * 4, m * 4 + 4);
+    const events = [];
+    let p = 0;
+    while (p < 4) {
+      const notes = slice[p];
+      if (notes.length === 0) {
+        // rest — นับช่องว่างติดกัน
+        let span = 1;
+        while (p + span < 4 && slice[p + span].length === 0) span++;
+        events.push({ rest: true, units: span });
+        p += span;
+      } else {
+        // โน้ต — นับช่องว่างตามหลัง (เสียงลาก)
+        let span = 1;
+        while (p + span < 4 && slice[p + span].length === 0) span++;
+        events.push({ notes, units: span });
+        p += span;
+      }
+    }
+    measures.push(events);
+  }
+  return measures;
+}
+
+const UNIT_DUR = { 1: '8', 2: 'q', 3: 'qd', 4: 'h' };
+
+function noteKey(n) {
+  const base = THAI_TO_WESTERN[n.ch] ?? 'c';
+  const octave = 4 + (n.register ?? 0);
+  return `${base}/${octave}`;
+}
+
+export default function StaffNotation({ verses }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadVexFlow().then((Vex) => {
+      if (cancelled || !ref.current) return;
+      const VF = Vex.Flow;
+      ref.current.innerHTML = '';
+
+      const measureWidth = 170;
+      const rowWidth = measureWidth * 4 + 60;
+
+      verses.forEach((v, vi) => {
+        const div = document.createElement('div');
+        const label = document.createElement('div');
+        label.textContent = `วรรค ${v.verse_no}${v.section ? ' · ' + v.section : ''}`;
+        label.style.cssText = 'font-size:0.62rem;color:#8A9BB5;margin:8px 0 2px';
+        ref.current.appendChild(label);
+        ref.current.appendChild(div);
+
+        const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
+        renderer.resize(rowWidth, 110);
+        const ctx = renderer.getContext();
+        ctx.setFillStyle('#F5F0E8'); ctx.setStrokeStyle('#F5F0E8');
+
+        const positions = parseVerse(v.combined);
+        const measures = verseToMeasures(positions);
+
+        let x = 10;
+        measures.forEach((events, mi) => {
+          const stave = new VF.Stave(x, 10, measureWidth + (mi === 0 ? 50 : 0));
+          if (mi === 0) { stave.addClef('treble').addTimeSignature('2/4'); }
+          stave.setContext(ctx).draw();
+
+          const vexNotes = [];
+          events.forEach(ev => {
+            let dur = UNIT_DUR[ev.units] ?? '8';
+            const dotted = dur.endsWith('d');
+            if (dotted) dur = dur[0];
+            if (ev.rest) {
+              const n = new VF.StaveNote({ keys: ['b/4'], duration: dur + 'r' });
+              if (dotted) VF.Dot.buildAndAttach([n], { all: true });
+              vexNotes.push(n);
+            } else if (ev.notes.length === 1) {
+              const n = new VF.StaveNote({ keys: [noteKey(ev.notes[0])], duration: dur });
+              if (dotted) VF.Dot.buildAndAttach([n], { all: true });
+              vexNotes.push(n);
+            } else {
+              // สะบัด: หลายโน้ตในหนึ่งตำแหน่ง → เขบ็ตย่อย 16
+              const subNotes = ev.notes.slice(0, 2).map(n =>
+                new VF.StaveNote({ keys: [noteKey(n)], duration: '16' }));
+              vexNotes.push(...subNotes);
+              // เติมเวลาที่เหลือถ้ามีเสียงลาก
+              if (ev.units >= 2) {
+                const sustain = new VF.StaveNote({
+                  keys: [noteKey(ev.notes[ev.notes.length - 1])],
+                  duration: ev.units === 2 ? '8' : ev.units === 3 ? 'q' : 'q',
+                });
+                vexNotes.push(sustain);
+              }
+            }
+          });
+
+          try {
+            const voice = new VF.Voice({ num_beats: 2, beat_value: 4 }).setStrict(false);
+            voice.addTickables(vexNotes);
+            new VF.Formatter().joinVoices([voice]).format([voice], measureWidth - 30);
+            const beams = VF.Beam.generateBeams(vexNotes.filter(n => !n.isRest()));
+            voice.draw(ctx, stave);
+            beams.forEach(b => b.setContext(ctx).draw());
+          } catch (e) { /* ห้องที่ format ไม่ได้ ข้าม */ }
+
+          x += measureWidth + (mi === 0 ? 50 : 0);
+        });
+      });
+    });
+    return () => { cancelled = true; };
+  }, [verses]);
+
+  return (
+    <div>
+      <div style={{fontSize:'0.68rem',color:'var(--muted)',marginBottom:'6px'}}>
+        * การปริวรรตเป็นโน้ตสากลใช้การเทียบโดยอนุโลม (ด→C) — ระดับเสียงจริงเป็นระบบ 7 เท่าไทย
+      </div>
+      <div ref={ref} style={{background:'var(--navy3)',border:'1px solid var(--border)',
+        borderRadius:'8px',padding:'1rem',overflowX:'auto'}} />
+    </div>
+  );
+}

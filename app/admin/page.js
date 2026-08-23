@@ -9,6 +9,8 @@ export default function AdminPage() {
   const [tab, setTab] = useState('archive');
   const [pendingVideos, setPendingVideos] = useState([]);
   const [pendingRecords, setPendingRecords] = useState([]);
+  const [pendingTang, setPendingTang] = useState([]);
+  const [pendingFiles, setPendingFiles] = useState([]);
   const [songs, setSongs] = useState([]);
   const [selSong, setSelSong] = useState('');
   const [url, setUrl] = useState('');
@@ -37,6 +39,12 @@ export default function AdminPage() {
     setPendingRecords(r ?? []);
     const { data: s } = await supabase.from('songs').select('id, name_th').order('name_th');
     setSongs(s ?? []);
+    const { data: t } = await supabase.from('melody_submissions')
+      .select('*, songs(name_th)').eq('approved', false).order('created_at');
+    setPendingTang(t ?? []);
+    const { data: f } = await supabase.from('song_files')
+      .select('*, songs(name_th)').eq('approved', false).order('created_at');
+    setPendingFiles(f ?? []);
   }
 
   async function approveVideo(id) {
@@ -57,6 +65,28 @@ export default function AdminPage() {
   }
   async function rejectRecord(id) {
     await supabase.from('archive_records').delete().eq('id', id);
+    loadAll();
+  }
+
+  async function approveTang(id) {
+    await supabase.from('melody_submissions').update({
+      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
+    }).eq('id', id);
+    loadAll();
+  }
+  async function rejectTang(id) {
+    await supabase.from('melody_submissions').delete().eq('id', id);
+    loadAll();
+  }
+
+  async function approveFile(id) {
+    await supabase.from('song_files').update({
+      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
+    }).eq('id', id);
+    loadAll();
+  }
+  async function rejectFile(id) {
+    await supabase.from('song_files').delete().eq('id', id);
     loadAll();
   }
 
@@ -93,7 +123,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['add','เพิ่มวิดีโอตรง']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','ไฟล์ PDF ('+pendingFiles.length+')'],['add','เพิ่มวิดีโอตรง']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -148,6 +178,54 @@ export default function AdminPage() {
               </div>
             </div>
           ))
+      )}
+
+      {tab === 'tang' && (
+        pendingTang.length === 0
+          ? <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ไม่มีทางเครื่องรอตรวจ</div>
+          : pendingTang.map(t => (
+            <div className="card" key={t.id}>
+              <div style={{display:'flex',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap'}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontWeight:600}}>{t.songs?.name_th} <span className="song-id">({t.song_id})</span>
+                    <span className="badge badge-fixed" style={{marginLeft:'8px'}}>{t.instrument}</span></div>
+                  <pre style={{fontSize:'0.78rem',color:'var(--cream)',background:'var(--navy3)',
+                    padding:'0.7rem',borderRadius:'5px',marginTop:'0.6rem',overflowX:'auto',
+                    whiteSpace:'pre-wrap',fontFamily:'monospace'}}>{t.notation_text}</pre>
+                  <div style={{fontSize:'0.7rem',color:'var(--muted)'}}>
+                    {t.notation_text.split('\n').filter(l => l.trim()).length} วรรค
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
+                  <button className="btn btn-jade btn-sm" onClick={() => approveTang(t.id)}>✓ Approve</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => rejectTang(t.id)}>✕ Reject</button>
+                </div>
+              </div>
+            </div>
+          ))
+      )}
+
+      {tab === 'files' && (
+        pendingFiles.length === 0
+          ? <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ไม่มีไฟล์รอตรวจ</div>
+          : pendingFiles.map(f => {
+            const url = supabase.storage.from('song-pdfs').getPublicUrl(f.storage_path).data.publicUrl;
+            return (
+              <div className="card" key={f.id}>
+                <div style={{display:'flex',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap'}}>
+                  <div>
+                    <div style={{fontWeight:600}}>{f.songs?.name_th} <span className="song-id">({f.song_id})</span></div>
+                    <div style={{fontSize:'0.8rem',color:'var(--muted)',marginTop:'4px'}}>{f.title}</div>
+                    <a href={url} target="_blank" style={{fontSize:'0.75rem',color:'var(--jade)'}}>เปิดดู PDF ↗</a>
+                  </div>
+                  <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
+                    <button className="btn btn-jade btn-sm" onClick={() => approveFile(f.id)}>✓ Approve</button>
+                    <button className="btn btn-danger btn-sm" onClick={() => rejectFile(f.id)}>✕ Reject</button>
+                  </div>
+                </div>
+              </div>
+            );
+          })
       )}
 
       {tab === 'add' && (

@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import AnniversaryBanner from '../components/AnniversaryBanner';
 
 const PAGE_SIZE = 25;
 
@@ -23,7 +24,6 @@ export default function HomePage() {
     setSongs(data ?? []);
     setCount(c ?? 0);
     setLoading(false);
-    // load video counts for visible songs
     if (data?.length) {
       const ids = data.map(s => s.id);
       const { data: vids } = await supabase.from('song_videos')
@@ -37,45 +37,48 @@ export default function HomePage() {
   const totalPages = Math.ceil(count / PAGE_SIZE);
 
   return (
-    <main className="container">
-      <div className="section-title">รายการเพลงทั้งหมด</div>
-      <div className="section-subtitle">Thai Classical Music Catalog · {count} songs</div>
-      <div className="search-bar">
-        <input className="search-input" placeholder="ค้นหาชื่อเพลง หรือ Song ID..."
-          value={q} onChange={e => { setQ(e.target.value); setPage(0); }} />
-      </div>
-      <div className="table-wrap">
-        <table>
-          <thead><tr>
-            <th>Song ID</th><th>ชื่อเพลง</th><th>ประเภท</th><th>วรรค</th><th>กระสวน</th><th>วิดีโอ</th>
-          </tr></thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan="6" style={{textAlign:'center',color:'var(--muted)'}}>กำลังโหลด...</td></tr>
-            ) : songs.map(s => (
-              <tr key={s.id}>
-                <td className="song-id">{s.id}</td>
-                <td><Link href={`/songs/${s.id}`}><span className="song-name">{s.name_th}</span></Link></td>
-                <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.type}</td>
-                <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{s.total_verses}</td>
-                <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{s.unique_patterns}</td>
-                <td>{videoCounts[s.id]
-                  ? <span style={{color:'var(--jade)',fontSize:'0.78rem'}}>▶ {videoCounts[s.id]}</span>
-                  : <span style={{color:'var(--border)'}}>—</span>}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="pagination">
-        <div style={{fontSize:'0.75rem',color:'var(--muted)'}}>
-          หน้า {page + 1} / {totalPages || 1} · ทั้งหมด {count} เพลง
+    <>
+      <AnniversaryBanner />
+      <main className="container">
+        <div className="section-title">รายการเพลงทั้งหมด</div>
+        <div className="section-subtitle">Thai Classical Music Catalog · {count} songs</div>
+        <div className="search-bar">
+          <input className="search-input" placeholder="ค้นหาชื่อเพลง หรือ Song ID..."
+            value={q} onChange={e => { setQ(e.target.value); setPage(0); }} />
         </div>
-        <div style={{display:'flex',gap:'4px'}}>
-          <button className="page-btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹ ก่อนหน้า</button>
-          <button className="page-btn" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>ถัดไป ›</button>
+        <div className="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Song ID</th><th>ชื่อเพลง</th><th>ประเภท</th><th>วรรค</th><th>กระสวน</th><th>วิดีโอ</th>
+            </tr></thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan="6" style={{textAlign:'center',color:'var(--muted)'}}>กำลังโหลด...</td></tr>
+              ) : songs.map(s => (
+                <tr key={s.id}>
+                  <td className="song-id">{s.id}</td>
+                  <td><Link href={`/songs/${s.id}`}><span className="song-name">{s.name_th}</span></Link></td>
+                  <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.type}</td>
+                  <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{s.total_verses}</td>
+                  <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{s.unique_patterns}</td>
+                  <td>{videoCounts[s.id]
+                    ? <span style={{color:'var(--jade)',fontSize:'0.78rem'}}>▶ {videoCounts[s.id]}</span>
+                    : <span style={{color:'var(--border)'}}>—</span>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </div>
-    </main>
+        <div className="pagination">
+          <div style={{fontSize:'0.75rem',color:'var(--muted)'}}>
+            หน้า {page + 1} / {totalPages || 1} · ทั้งหมด {count} เพลง
+          </div>
+          <div style={{display:'flex',gap:'4px'}}>
+            <button className="page-btn" disabled={page === 0} onClick={() => setPage(p => p - 1)}>‹ ก่อนหน้า</button>
+            <button className="page-btn" disabled={page >= totalPages - 1} onClick={() => setPage(p => p + 1)}>ถัดไป ›</button>
+          </div>
+        </div>
+      </main>
+    </>
   );
 }
