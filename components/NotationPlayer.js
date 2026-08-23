@@ -120,21 +120,24 @@ export default function NotationPlayer({ verses, lyrics }) {
         const t = t0 + (vi * 16 + p) * stepDur;
         cursorTimeline.push({ time: t, verseIdx: vi, pos: p });
 
-        let notesToPlay = [];
-        if (!useHands) notesToPlay = cb[p];
-        else if (hand === 'R') notesToPlay = rh[p];
-        else if (hand === 'L') notesToPlay = lh[p];
-        else notesToPlay = [...rh[p], ...lh[p]];
+        // แยกเป็นกลุ่มต่อมือ — สะบัดไล่เวลาภายในมือเดียวกัน, สองมือลงพร้อมกัน
+        let groups = [];
+        if (!useHands) groups = [cb[p]];
+        else if (hand === 'R') groups = [rh[p]];
+        else if (hand === 'L') groups = [lh[p]];
+        else groups = [rh[p], lh[p]];
 
-        const sub = notesToPlay.length > 1 ? stepDur / notesToPlay.length : 0;
-        notesToPlay.forEach((n, ni) => {
-          const noteTime = t + ni * sub;
-          let played = false;
-          if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85);
-          if (!played) {
-            const f = noteFreq(n.ch, n.register);
-            if (f) synthNote(ctx, f, noteTime, stepDur * 2.2);
-          }
+        groups.forEach(group => {
+          const sub = group.length > 1 ? stepDur / group.length : 0;
+          group.forEach((n, ni) => {
+            const noteTime = t + ni * sub;
+            let played = false;
+            if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85);
+            if (!played) {
+              const f = noteFreq(n.ch, n.register);
+              if (f) synthNote(ctx, f, noteTime, stepDur * 2.2);
+            }
+          });
         });
       }
     });
