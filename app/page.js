@@ -13,8 +13,23 @@ export default function HomePage() {
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(true);
   const [videoCounts, setVideoCounts] = useState({});
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => { load(); }, [page, q]);
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      if (!data.user) return;
+      const { data: p } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
+      setIsAdmin(p?.role === 'admin');
+    });
+  }, []);
+
+  async function adminDeleteSong(s) {
+    if (!confirm(`ลบเพลง "${s.name_th}" (${s.id}) ถาวร?\nโน้ต วิดีโอ ไฟล์ และคอมเมนต์ของเพลงนี้จะถูกลบทั้งหมด`)) return;
+    const { error } = await supabase.from('songs').delete().eq('id', s.id);
+    if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+    load();
+  }
 
   async function load() {
     setLoading(true);
@@ -49,11 +64,11 @@ export default function HomePage() {
         <div className="table-wrap">
           <table>
             <thead><tr>
-              <th>Song ID</th><th>ชื่อเพลง</th><th>ประเภท</th><th>วรรค</th><th>กระสวน</th><th>วิดีโอ</th>
+              <th>Song ID</th><th>ชื่อเพลง</th><th>ประเภท</th><th>วรรค</th><th>กระสวน</th><th>วิดีโอ</th>{isAdmin && <th></th>}
             </tr></thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="6" style={{textAlign:'center',color:'var(--muted)'}}>กำลังโหลด...</td></tr>
+                <tr><td colSpan={isAdmin ? 7 : 6} style={{textAlign:'center',color:'var(--muted)'}}>กำลังโหลด...</td></tr>
               ) : songs.map(s => (
                 <tr key={s.id}>
                   <td className="song-id">{s.id}</td>
@@ -64,6 +79,10 @@ export default function HomePage() {
                   <td>{videoCounts[s.id]
                     ? <span style={{color:'var(--jade)',fontSize:'0.78rem'}}>▶ {videoCounts[s.id]}</span>
                     : <span style={{color:'var(--border)'}}>—</span>}</td>
+                  {isAdmin && <td>
+                    <button className="btn btn-danger btn-sm" onClick={() => adminDeleteSong(s)}
+                      title="ลบเพลง (Admin)">🗑</button>
+                  </td>}
                 </tr>
               ))}
             </tbody>
