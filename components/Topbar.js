@@ -45,6 +45,7 @@ export default function Topbar() {
       </div></Link>
       <nav className="nav">
         <Link href="/">รายการเพลง</Link>
+        <Link href="/archive">หอจดหมายเหตุ</Link>
         {role === 'admin' && <Link href="/admin">Admin</Link>}
       </nav>
       <div className="topbar-right">

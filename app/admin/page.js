@@ -6,7 +6,9 @@ import { supabase, extractYouTubeId } from '../../lib/supabase';
 export default function AdminPage() {
   const [user, setUser] = useState(null);
   const [role, setRole] = useState(null);
-  const [pending, setPending] = useState([]);
+  const [tab, setTab] = useState('archive');
+  const [pendingVideos, setPendingVideos] = useState([]);
+  const [pendingRecords, setPendingRecords] = useState([]);
   const [songs, setSongs] = useState([]);
   const [selSong, setSelSong] = useState('');
   const [url, setUrl] = useState('');
@@ -20,33 +22,42 @@ export default function AdminPage() {
       if (data.user) {
         const { data: p } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
         setRole(p?.role);
-        if (p?.role === 'admin') { loadPending(); loadSongs(); }
+        if (p?.role === 'admin') { loadAll(); }
       }
       setLoading(false);
     });
   }, []);
 
-  async function loadPending() {
-    const { data } = await supabase.from('song_videos')
+  async function loadAll() {
+    const { data: v } = await supabase.from('song_videos')
       .select('*, songs(name_th)').eq('approved', false).order('created_at');
-    setPending(data ?? []);
+    setPendingVideos(v ?? []);
+    const { data: r } = await supabase.from('archive_records')
+      .select('*, archive_media(*)').eq('approved', false).order('created_at');
+    setPendingRecords(r ?? []);
+    const { data: s } = await supabase.from('songs').select('id, name_th').order('name_th');
+    setSongs(s ?? []);
   }
 
-  async function loadSongs() {
-    const { data } = await supabase.from('songs').select('id, name_th').order('id');
-    setSongs(data ?? []);
-  }
-
-  async function approve(vid) {
+  async function approveVideo(id) {
     await supabase.from('song_videos').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
-    }).eq('id', vid);
-    loadPending();
+    }).eq('id', id);
+    loadAll();
   }
-
-  async function reject(vid) {
-    await supabase.from('song_videos').delete().eq('id', vid);
-    loadPending();
+  async function rejectVideo(id) {
+    await supabase.from('song_videos').delete().eq('id', id);
+    loadAll();
+  }
+  async function approveRecord(id) {
+    await supabase.from('archive_records').update({
+      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
+    }).eq('id', id);
+    loadAll();
+  }
+  async function rejectRecord(id) {
+    await supabase.from('archive_records').delete().eq('id', id);
+    loadAll();
   }
 
   async function addDirect() {
@@ -77,48 +88,91 @@ export default function AdminPage() {
   return (
     <main className="container">
       <div className="section-title">Admin Panel</div>
-      <div className="section-subtitle">จัดการวิดีโอ · {pending.length} รายการรอตรวจ</div>
-
-      <div className="card" style={{borderColor:'rgba(201,168,76,0.3)'}}>
-        <div style={{fontSize:'0.95rem',marginBottom:'1rem'}}>➕ เพิ่มวิดีโอโดยตรง (อนุมัติทันที)</div>
-        <div className="form-group">
-          <label className="form-label">เลือกเพลง</label>
-          <select className="form-input" value={selSong} onChange={e => setSelSong(e.target.value)}>
-            <option value="">— เลือกเพลง —</option>
-            {songs.map(s => <option key={s.id} value={s.id}>{s.id} · {s.name_th}</option>)}
-          </select>
-        </div>
-        <div className="form-group">
-          <label className="form-label">YouTube URL</label>
-          <input className="form-input" value={url} onChange={e => setUrl(e.target.value)}
-            placeholder="https://www.youtube.com/watch?v=..." />
-        </div>
-        <div className="form-group">
-          <label className="form-label">คำอธิบาย (ถ้ามี)</label>
-          <input className="form-input" value={title} onChange={e => setTitle(e.target.value)} />
-        </div>
-        <button className="btn btn-jade" onClick={addDirect}>✓ เพิ่มและอนุมัติทันที</button>
-        {msg && <div style={{marginTop:'0.8rem',fontSize:'0.82rem',color:'var(--jade)'}}>{msg}</div>}
+      <div className="section-subtitle">
+        หอจดหมายเหตุรอตรวจ {pendingRecords.length} · วิดีโอเพลงรอตรวจ {pendingVideos.length}
       </div>
 
-      <div className="section-title" style={{fontSize:'1rem',marginTop:'2rem'}}>รายการรอตรวจ</div>
-      {pending.length === 0 ? (
-        <div style={{color:'var(--muted)',fontSize:'0.85rem',marginTop:'0.8rem'}}>ไม่มีรายการรอตรวจ</div>
-      ) : pending.map(v => (
-        <div className="card" key={v.id}>
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'1rem',flexWrap:'wrap'}}>
-            <div>
-              <div style={{fontWeight:500}}>{v.songs?.name_th} <span className="song-id">({v.song_id})</span></div>
-              <div style={{fontSize:'0.78rem',color:'var(--muted)',marginTop:'4px'}}>{v.title || '(ไม่มีคำอธิบาย)'}</div>
-              <a href={v.youtube_url} target="_blank" style={{fontSize:'0.75rem',color:'var(--jade)'}}>เปิดดูบน YouTube ↗</a>
-            </div>
-            <div style={{display:'flex',gap:'8px'}}>
-              <button className="btn btn-jade btn-sm" onClick={() => approve(v.id)}>✓ Approve</button>
-              <button className="btn btn-danger btn-sm" onClick={() => reject(v.id)}>✕ Reject</button>
-            </div>
+      <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['add','เพิ่มวิดีโอตรง']].map(([k,label]) => (
+          <div key={k} onClick={() => setTab(k)}
+            style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
+              color: tab===k ? 'var(--gold)' : 'var(--muted)',
+              borderBottom: tab===k ? '2px solid var(--gold)' : '2px solid transparent'}}>
+            {label}
           </div>
+        ))}
+      </div>
+
+      {tab === 'archive' && (
+        pendingRecords.length === 0
+          ? <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ไม่มีบันทึกรอตรวจ</div>
+          : pendingRecords.map(r => (
+            <div className="card" key={r.id}>
+              <div style={{display:'flex',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap'}}>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                    <span className="badge badge-fixed">{r.era}</span>
+                    <span style={{fontSize:'0.75rem',color:'var(--muted)'}}>{r.when_text}</span>
+                  </div>
+                  <div style={{fontWeight:600,margin:'6px 0 2px'}}>{r.what_text}</div>
+                  <div style={{fontSize:'0.8rem',color:'var(--muted)'}}>{r.who_text} · {r.where_text}</div>
+                  {r.description && <div style={{fontSize:'0.78rem',color:'var(--muted)',marginTop:'6px'}}>{r.description}</div>}
+                  <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
+                    แนบ: รูป {(r.archive_media??[]).filter(m=>m.media_type==='image').length} · วิดีโอ {(r.archive_media??[]).filter(m=>m.media_type==='youtube').length}
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
+                  <button className="btn btn-jade btn-sm" onClick={() => approveRecord(r.id)}>✓ Approve</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => rejectRecord(r.id)}>✕ Reject</button>
+                </div>
+              </div>
+            </div>
+          ))
+      )}
+
+      {tab === 'videos' && (
+        pendingVideos.length === 0
+          ? <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ไม่มีวิดีโอรอตรวจ</div>
+          : pendingVideos.map(v => (
+            <div className="card" key={v.id}>
+              <div style={{display:'flex',justifyContent:'space-between',gap:'1rem',flexWrap:'wrap'}}>
+                <div>
+                  <div style={{fontWeight:500}}>{v.songs?.name_th} <span className="song-id">({v.song_id})</span></div>
+                  <div style={{fontSize:'0.78rem',color:'var(--muted)',marginTop:'4px'}}>{v.title || '(ไม่มีคำอธิบาย)'}</div>
+                  <a href={v.youtube_url} target="_blank" style={{fontSize:'0.75rem',color:'var(--jade)'}}>เปิดดูบน YouTube ↗</a>
+                </div>
+                <div style={{display:'flex',gap:'8px'}}>
+                  <button className="btn btn-jade btn-sm" onClick={() => approveVideo(v.id)}>✓ Approve</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => rejectVideo(v.id)}>✕ Reject</button>
+                </div>
+              </div>
+            </div>
+          ))
+      )}
+
+      {tab === 'add' && (
+        <div className="card" style={{borderColor:'rgba(201,168,76,0.3)'}}>
+          <div style={{fontSize:'0.95rem',marginBottom:'1rem'}}>➕ เพิ่มวิดีโอเพลงโดยตรง (อนุมัติทันที)</div>
+          <div className="form-group">
+            <label className="form-label">เลือกเพลง</label>
+            <select className="form-input" value={selSong} onChange={e => setSelSong(e.target.value)}>
+              <option value="">— เลือกเพลง —</option>
+              {songs.map(s => <option key={s.id} value={s.id}>{s.name_th} ({s.id})</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">YouTube URL</label>
+            <input className="form-input" value={url} onChange={e => setUrl(e.target.value)}
+              placeholder="https://www.youtube.com/watch?v=..." />
+          </div>
+          <div className="form-group">
+            <label className="form-label">คำอธิบาย (ถ้ามี)</label>
+            <input className="form-input" value={title} onChange={e => setTitle(e.target.value)} />
+          </div>
+          <button className="btn btn-jade" onClick={addDirect}>✓ เพิ่มและอนุมัติทันที</button>
+          {msg && <div style={{marginTop:'0.8rem',fontSize:'0.82rem',color:'var(--jade)'}}>{msg}</div>}
         </div>
-      ))}
+      )}
     </main>
   );
 }
