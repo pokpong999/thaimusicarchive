@@ -103,43 +103,55 @@ export default function NotationPlayer({ verses, lyrics }) {
     setPlayState('playing');
 
     const stepDur = 60 / bpm / 2;
-    const t0 = ctx.currentTime + 0.12;
+    const t0 = ctx.currentTime + 0.15;
     const totalSteps = verses.length * 16;
     const cursorTimeline = [];
+    const startVerse = Math.floor(startStep / 16);
 
-    for (let gs = startStep; gs < totalSteps; gs++) {
-      const vi = Math.floor(gs / 16);
-      const p = gs % 16;
+    function scheduleNote(n, noteTime) {
+      let played = false;
+      if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85);
+      if (!played) {
+        const f = noteFreq(n.ch, n.register);
+        if (f) synthNote(ctx, f, noteTime, stepDur * 2.2);
+      }
+    }
+
+    for (let vi = startVerse; vi < verses.length; vi++) {
       const v = verses[vi];
-      const t = t0 + (gs - startStep) * stepDur;
-      cursorTimeline.push({ time: t, verseIdx: vi, pos: p });
-
       const rh = parseVerse(v.right_hand);
       const lh = parseVerse(v.left_hand);
       const cb = parseVerse(v.combined);
       const useHands = v.right_hand || v.left_hand;
+      const lines = !useHands ? [cb] : hand === 'R' ? [rh] : hand === 'L' ? [lh] : [rh, lh];
+      const pStart = vi === startVerse ? startStep % 16 : 0;
 
-      let groups = [];
-      if (!useHands) groups = [cb[p]];
-      else if (hand === 'R') groups = [rh[p]];
-      else if (hand === 'L') groups = [lh[p]];
-      else groups = [rh[p], lh[p]];
+      for (let p = pStart; p < 16; p++) {
+        cursorTimeline.push({ time: t0 + (vi * 16 + p - startStep) * stepDur, verseIdx: vi, pos: p });
+      }
 
-      groups.forEach(group => {
-        group.forEach((n, ni) => {
-          // สะบัด: เสียงสุดท้ายลงตรงจังหวะ เสียงนำหน้ามาก่อน (grace notes)
-          const noteTime = t - (group.length - 1 - ni) * SABAT_GAP;
-          let played = false;
-          if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85);
-          if (!played) {
-            const f = noteFreq(n.ch, n.register);
-            if (f) synthNote(ctx, f, noteTime, stepDur * 2.2);
+      lines.forEach(line => {
+        // หาเสียงเดี่ยวที่อยู่ติดหน้าช่องสะบัด — ถือเป็นเสียงที่ 1 ของสะบัด
+        const consumed = new Array(16).fill(false);
+        for (let p = pStart + 1; p < 16; p++) {
+          if (line[p].length > 1 && line[p - 1].length === 1) consumed[p - 1] = true;
+        }
+        for (let p = pStart; p < 16; p++) {
+          if (consumed[p]) continue; // ถูกดึงไปรวมกับสะบัดถัดไปแล้ว
+          const t = t0 + (vi * 16 + p - startStep) * stepDur;
+          if (line[p].length > 1) {
+            // สะบัด: รวมเสียงนำ (ถ้ามี) + เสียงในช่อง → รัวช่องไฟเท่ากัน จบตรงจังหวะ
+            const lead = (p > pStart && line[p - 1].length === 1) ? line[p - 1] : [];
+            const run = [...lead, ...line[p]];
+            run.forEach((n, ni) => scheduleNote(n, t - (run.length - 1 - ni) * SABAT_GAP));
+          } else {
+            line[p].forEach(n => scheduleNote(n, t));
           }
-        });
+        }
       });
     }
 
-    const endTime = t0 + (totalSteps - startStep) * stepDur;
+        const endTime = t0 + (totalSteps - startStep) * stepDur;
     let idx = 0;
     function tick() {
       if (playIdRef.current !== myId) return;
