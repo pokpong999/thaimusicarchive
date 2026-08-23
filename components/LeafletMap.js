@@ -69,6 +69,9 @@ export default function LeafletMap({ markers = [], onPick, pickedPos, height = '
       if (m.lat == null || m.lng == null) return;
       const mk = L.marker([m.lat, m.lng], { icon: goldIcon(L) });
       mk.bindPopup(m.popupHtml ?? '', { maxWidth: 260 });
+      if (m.tooltipHtml) {
+        mk.bindTooltip(m.tooltipHtml, { direction: 'top', offset: [0, -20], opacity: 1, className: 'thma-tooltip' });
+      }
       markerLayer.current.addLayer(mk);
       bounds.push([m.lat, m.lng]);
     });

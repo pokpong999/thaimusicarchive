@@ -1,0 +1,75 @@
+'use client';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { supabase } from '../../lib/supabase';
+import RankBadge from '../../components/RankBadge';
+
+export default function ProfilePage() {
+  const [user, setUser] = useState(null);
+  const [p, setP] = useState(null);
+  const [msg, setMsg] = useState('');
+
+  useEffect(() => {
+    supabase.auth.getUser().then(async ({ data }) => {
+      setUser(data.user);
+      if (data.user) {
+        const { data: prof } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+        setP(prof ?? {});
+      }
+    });
+  }, []);
+
+  function set(k, v) { setP(prev => ({ ...prev, [k]: v })); }
+
+  async function save() {
+    const { error } = await supabase.from('profiles').update({
+      display_name: p.display_name || null, phone: p.phone || null,
+      line_id: p.line_id || null, organization: p.organization || null,
+      province: p.province || null, bio: p.bio || null,
+    }).eq('id', user.id);
+    setMsg(error ? '⚠ ' + error.message : '✓ บันทึกแล้ว');
+  }
+
+  if (!user) return (
+    <main className="container" style={{maxWidth:'500px'}}>
+      <div className="lock-box">
+        <div style={{marginBottom:'1rem'}}>เข้าสู่ระบบเพื่อจัดการโปรไฟล์</div>
+        <Link href="/login"><button className="btn btn-primary">เข้าสู่ระบบ</button></Link>
+      </div>
+    </main>
+  );
+  if (!p) return <main className="container">กำลังโหลด...</main>;
+
+  const F = ({ k, label, ph }) => (
+    <div className="form-group">
+      <label className="form-label">{label}</label>
+      <input className="form-input" value={p[k] ?? ''} onChange={e => set(k, e.target.value)} placeholder={ph} />
+    </div>
+  );
+
+  return (
+    <main className="container" style={{maxWidth:'560px'}}>
+      <div className="card">
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.2rem'}}>
+          <div className="section-title" style={{fontSize:'1.1rem'}}>โปรไฟล์ของฉัน</div>
+          <RankBadge points={p.points} showPoints />
+        </div>
+        <F k="display_name" label="ชื่อที่แสดง *" ph="ชื่อ-นามสกุล หรือนามแฝง" />
+        <F k="phone" label="เบอร์โทร" ph="08x-xxx-xxxx" />
+        <F k="line_id" label="LINE ID" ph="" />
+        <F k="organization" label="สำนัก / วง / สถาบัน" ph="เช่น วิทยาลัยนาฏศิลป" />
+        <F k="province" label="จังหวัด" ph="" />
+        <div className="form-group">
+          <label className="form-label">แนะนำตัว</label>
+          <textarea className="form-input" rows="3" value={p.bio ?? ''}
+            onChange={e => set('bio', e.target.value)} style={{resize:'vertical'}} />
+        </div>
+        <button className="btn btn-jade" onClick={save}>✓ บันทึกโปรไฟล์</button>
+        {msg && <div style={{marginTop:'0.8rem',fontSize:'0.82rem',color:'var(--jade)'}}>{msg}</div>}
+        <div style={{marginTop:'1rem',fontSize:'0.7rem',color:'var(--muted)'}}>
+          ข้อมูลส่วนตัว (เบอร์โทร/LINE) เห็นเฉพาะ Admin เพื่อการติดต่อ — ไม่แสดงสาธารณะ
+        </div>
+      </div>
+    </main>
+  );
+}

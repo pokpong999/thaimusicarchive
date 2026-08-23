@@ -2,13 +2,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadGongSamples, playSampleNote, samplesAvailable } from '../lib/sampler';
+import { CHING_PATTERNS, parsePattern, playPercussion } from '../lib/nathab';
+import { supabase } from '../lib/supabase';
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
 
 const NOTE_STEP = { 'ด':0, 'ร':1, 'ม':2, 'ฟ':3, 'ซ':4, 'ล':5, 'ท':6 };
 const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
-const SABAT_GAP = 0.045; // ช่องไฟสะบัด (วินาที) — ปรับได้
+const SABAT_GAP = 0.06; // ช่องไฟสะบัด (วินาที) — ปรับได้
 
 function noteFreq(ch, register) {
   const step = NOTE_STEP[ch];
@@ -75,6 +77,11 @@ export default function NotationPlayer({ verses, lyrics }) {
   const [sound, setSound] = useState('real');
   const [bpm, setBpm] = useState(120);
   const [hongsPerLine, setHongsPerLine] = useState(8);
+  const [nathab, setNathab] = useState('none');       // none | ปรบไก่ | สองไม้
+  const [drumInst, setDrumInst] = useState('ตะโพน');
+  const [level, setLevel] = useState('สองชั้น');
+  const [chingOn, setChingOn] = useState(false);
+  const nathabRowsRef = useRef(null);
   const [playState, setPlayState] = useState('stopped');
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [sampleCount, setSampleCount] = useState(null);
@@ -190,6 +197,38 @@ export default function NotationPlayer({ verses, lyrics }) {
         }
       });
     });
+
+    // ── หน้าทับกลอง + ฉิ่ง ──
+    if (nathab !== 'none' || chingOn) {
+      let drumHits = null, drumLen = 0;
+      if (nathab !== 'none') {
+        if (!nathabRowsRef.current) {
+          const { data } = await supabase.from('nathab_patterns').select('*');
+          nathabRowsRef.current = data ?? [];
+        }
+        const row = nathabRowsRef.current.find(r =>
+          r.nathab === nathab && r.level === level && r.instrument === drumInst);
+        if (row) {
+          const parsed2 = parsePattern(row.pattern_text);
+          drumHits = parsed2.hits; drumLen = parsed2.len;
+        }
+      }
+      const chingDef = CHING_PATTERNS[level];
+      const chingLen = chingDef.hongs * 4;
+
+      for (let s = startStep; s < totalSteps; s++) {
+        const t = t0 + (s - startStep) * stepDur;
+        if (drumHits && drumLen > 0) {
+          const pp = (s % drumLen) + 1;
+          drumHits.forEach(h => { if (h.pos === pp) playPercussion(ctx, h.syll, t, 0.75); });
+        }
+        if (chingOn) {
+          const cp = (s % chingLen) + 1;
+          const syll = chingDef.hits[cp];
+          if (syll) playPercussion(ctx, syll, t, 0.7);
+        }
+      }
+    }
 
     const endTime = t0 + (totalSteps - startStep) * stepDur;
     let idx = 0;
@@ -326,6 +365,29 @@ export default function NotationPlayer({ verses, lyrics }) {
           <option value="R">🔊 มือขวา</option>
           <option value="L">🔊 มือซ้าย</option>
         </select>
+        <select className="filter-select" value={nathab} onChange={e => setNathab(e.target.value)} disabled={playState !== 'stopped'}>
+          <option value="none">🥁 ไม่มีกลอง</option>
+          <option value="ปรบไก่">หน้าทับปรบไก่</option>
+          <option value="สองไม้">หน้าทับสองไม้</option>
+        </select>
+        {nathab !== 'none' && (
+          <select className="filter-select" value={drumInst} onChange={e => setDrumInst(e.target.value)} disabled={playState !== 'stopped'}>
+            <option value="ตะโพน">ตะโพน</option>
+            <option value="กลองแขก">กลองแขก</option>
+            <option value="กลองสองหน้า">กลองสองหน้า</option>
+            <option value="โทนรำมะนา">โทนรำมะนา</option>
+          </select>
+        )}
+        <select className="filter-select" value={level} onChange={e => setLevel(e.target.value)} disabled={playState !== 'stopped'}>
+          <option value="สามชั้น">สามชั้น</option>
+          <option value="สองชั้น">สองชั้น</option>
+          <option value="ชั้นเดียว">ชั้นเดียว</option>
+        </select>
+        <label style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'0.78rem',color:'var(--muted)',cursor:'pointer'}}>
+          <input type="checkbox" checked={chingOn} onChange={e => setChingOn(e.target.checked)}
+            disabled={playState !== 'stopped'} style={{accentColor:'var(--gold)'}} />
+          ฉิ่ง
+        </label>
         <select className="filter-select" value={hongsPerLine} onChange={e => setHongsPerLine(+e.target.value)}>
           <option value="2">2 ห้อง/บรรทัด</option>
           <option value="4">4 ห้อง/บรรทัด</option>

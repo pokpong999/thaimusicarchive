@@ -5,12 +5,16 @@ import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../../lib/supabase';
 import NotationPlayer from '../../../components/NotationPlayer';
 import ExportBar from '../../../components/ExportBar';
+import CommentSection from '../../../components/CommentSection';
+import ShareBar from '../../../components/ShareBar';
 
 export default function SongDetail() {
   const { id } = useParams();
   const [song, setSong] = useState(null);
   const [melody, setMelody] = useState([]);
   const [instruments, setInstruments] = useState(['ทำนองหลัก']);
+  const [contributors, setContributors] = useState({});
+  const [songOwner, setSongOwner] = useState(null);
   const [instrument, setInstrument] = useState('ทำนองหลัก');
   const [showTangForm, setShowTangForm] = useState(false);
   const [tangInstrument, setTangInstrument] = useState('ระนาดเอก');
@@ -51,9 +55,20 @@ export default function SongDetail() {
     setHistoryDraft(s?.history ?? '');
     setLyricsDraft(s?.lyrics ?? '');
     const { data: inst } = await supabase.from('song_melody')
-      .select('instrument').eq('song_id', id).eq('approved', true);
+      .select('instrument, submitted_by').eq('song_id', id).eq('approved', true);
     const uniq = [...new Set((inst ?? []).map(r => r.instrument ?? 'ทำนองหลัก'))];
     setInstruments(uniq.length ? uniq : ['ทำนองหลัก']);
+    // เครดิตผู้เพิ่มข้อมูล
+    const byInst = {};
+    (inst ?? []).forEach(r => { if (r.submitted_by && !byInst[r.instrument]) byInst[r.instrument] = r.submitted_by; });
+    const uids = [...new Set([...Object.values(byInst), s?.contributed_by].filter(Boolean))];
+    if (uids.length) {
+      const { data: profs } = await supabase.from('profiles').select('id, display_name').in('id', uids);
+      const nameOf = {}; (profs ?? []).forEach(pr => nameOf[pr.id] = pr.display_name);
+      const cmap = {}; Object.entries(byInst).forEach(([k, uid]) => cmap[k] = nameOf[uid]);
+      setContributors(cmap);
+      if (s?.contributed_by) setSongOwner(nameOf[s.contributed_by]);
+    }
     const { data: v } = await supabase.from('song_videos')
       .select('*').eq('song_id', id).eq('approved', true).order('created_at');
     setVideos(v ?? []);
@@ -137,6 +152,9 @@ export default function SongDetail() {
           {song.type && <span className="badge badge-mixed">{song.type}</span>}
           {song.notation && song.notation !== '-' && <span className="badge badge-fixed">{song.notation}</span>}
         </div>
+        {songOwner && <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
+          ✍️ เพิ่มข้อมูลโดย: {songOwner}</div>}
+        <div style={{marginTop:'0.8rem'}}><ShareBar title={song.name_th + ' — หอจดหมายเหตุดนตรีไทย'} /></div>
         <div className="detail-meta">
           <div className="meta-pill"><span className="meta-label">วรรค</span>
             <span className="meta-value" style={{fontFamily:'monospace',color:'var(--jade)'}}>{song.total_verses}</span></div>
@@ -201,6 +219,9 @@ export default function SongDetail() {
             </select>
             {user && <button className="btn btn-outline btn-sm" onClick={() => setShowTangForm(!showTangForm)}>
               {showTangForm ? 'ยกเลิก' : '＋ เสนอทางเครื่องอื่น'}</button>}
+            {contributors[instrument] && (
+              <span style={{fontSize:'0.7rem',color:'var(--jade)'}}>✍️ ทางนี้บันทึกโดย: {contributors[instrument]}</span>
+            )}
           </div>
 
           {showTangForm && (
@@ -324,6 +345,7 @@ export default function SongDetail() {
           )}
         </>
       )}
+      <CommentSection targetType="song" targetId={id} />
     </main>
   );
 }

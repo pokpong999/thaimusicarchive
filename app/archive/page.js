@@ -37,8 +37,16 @@ export default function ArchivePage() {
     return supabase.storage.from('archive-images').getPublicUrl(img.storage_path).data.publicUrl;
   }
 
-  const markers = records.filter(r => r.lat != null && r.lng != null).map(r => ({
+  const markers = records.filter(r => r.lat != null && r.lng != null).map(r => {
+    const thumb = thumbUrl(r);
+    return ({
     lat: r.lat, lng: r.lng,
+    tooltipHtml: `
+      <div style="font-family:'Noto Sans Thai',sans-serif;max-width:200px;text-align:center">
+        ${thumb ? `<img src="${thumb}" style="width:180px;height:110px;object-fit:cover;border-radius:6px;display:block;margin-bottom:5px"/>` : ''}
+        <div style="font-size:0.75rem;font-weight:600">${r.what_text}</div>
+        <div style="font-size:0.65rem;color:#666">${r.when_text}</div>
+      </div>`,
     popupHtml: `
       <div style="font-family:'Noto Sans Thai',sans-serif;min-width:200px">
         <div style="font-size:0.7rem;color:#8A6D1F">${ERAS[r.era] ?? r.era} · ${r.when_text}</div>
@@ -49,7 +57,7 @@ export default function ArchivePage() {
           <a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" style="font-size:0.78rem;color:#4285F4">Google Maps ↗</a>
         </div>
       </div>`,
-  }));
+  });});
 
   return (
     <main className="container">

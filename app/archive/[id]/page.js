@@ -4,6 +4,8 @@ import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabase';
 import LeafletMap from '../../../components/LeafletMap';
+import CommentSection from '../../../components/CommentSection';
+import ShareBar from '../../../components/ShareBar';
 
 const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future: 'อนาคต' };
 
@@ -41,6 +43,7 @@ export default function ArchiveDetail() {
           <div className="meta-pill"><span className="meta-label">ใคร</span><span className="meta-value">{rec.who_text}</span></div>
           <div className="meta-pill"><span className="meta-label">ที่ไหน</span><span className="meta-value">{rec.where_text}</span></div>
         </div>
+        <div style={{marginTop:'0.8rem'}}><ShareBar title={rec.what_text + ' — หอจดหมายเหตุดนตรีไทย'} /></div>
         {rec.description && (
           <div style={{marginTop:'1.2rem',fontSize:'0.88rem',lineHeight:1.8,whiteSpace:'pre-wrap'}}>{rec.description}</div>
         )}
@@ -79,6 +82,7 @@ export default function ArchiveDetail() {
           </div>
         </div>
       ))}
+      <CommentSection targetType="archive" targetId={id} />
     </main>
   );
 }

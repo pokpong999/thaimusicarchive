@@ -14,6 +14,15 @@ export default function AdminPage() {
   const [sampleFiles, setSampleFiles] = useState([]);
   const [sampleList, setSampleList] = useState([]);
   const [sampleMsg, setSampleMsg] = useState('');
+  const [pendingSongs, setPendingSongs] = useState([]);
+  const [songIdInput, setSongIdInput] = useState({});
+  const [members, setMembers] = useState([]);
+  const [nathabRows, setNathabRows] = useState([]);
+  const [mgQ, setMgQ] = useState('');
+  const [mgSongs, setMgSongs] = useState([]);
+  const [mgRecords, setMgRecords] = useState([]);
+  const [mgComments, setMgComments] = useState([]);
+  const [mgMsg, setMgMsg] = useState('');
   const [songs, setSongs] = useState([]);
   const [selSong, setSelSong] = useState('');
   const [url, setUrl] = useState('');
@@ -50,6 +59,20 @@ export default function AdminPage() {
     setPendingFiles(f ?? []);
     const { data: sl } = await supabase.storage.from('instrument-samples').list('gong');
     setSampleList((sl ?? []).map(x => x.name));
+    const { data: ps } = await supabase.from('song_submissions')
+      .select('*').eq('approved', false).order('created_at');
+    setPendingSongs(ps ?? []);
+    const { data: mb } = await supabase.from('profiles')
+      .select('*').order('points', { ascending: false });
+    setMembers(mb ?? []);
+    const { data: np } = await supabase.from('nathab_patterns').select('*').order('id');
+    setNathabRows(np ?? []);
+    const { data: mr } = await supabase.from('archive_records')
+      .select('id, what_text, who_text, when_text, approved').order('created_at', { ascending: false }).limit(50);
+    setMgRecords(mr ?? []);
+    const { data: mc } = await supabase.from('comments')
+      .select('*, profiles(display_name)').order('created_at', { ascending: false }).limit(50);
+    setMgComments(mc ?? []);
   }
 
   async function approveVideo(id) {
@@ -114,6 +137,89 @@ export default function AdminPage() {
     loadAll();
   }
 
+  // ── อนุมัติเพลงใหม่: สร้าง song + แตกโน้ต + ให้แต้ม ──
+  async function approveSong(sub) {
+    const sid = (songIdInput[sub.id] ?? '').trim().toUpperCase();
+    if (!sid) { alert('ใส่ Song ID ก่อน เช่น USR001'); return; }
+    const lines = sub.notation_text.split('\n').map(l => l.trim()).filter(l => l);
+    const { error: e1 } = await supabase.from('songs').insert({
+      id: sid, name_th: sub.name_th, type: sub.song_type,
+      total_verses: lines.length, unique_patterns: 0, contributed_by: sub.submitted_by,
+    });
+    if (e1) { alert('สร้างเพลงไม่สำเร็จ: ' + e1.message); return; }
+    const rows = lines.map((l, i) => ({
+      song_id: sid, verse_no: i + 1, instrument: sub.instrument || 'ทำนองหลัก',
+      combined: l, approved: true, submitted_by: sub.submitted_by,
+    }));
+    const { error: e2 } = await supabase.from('song_melody').insert(rows);
+    if (e2) { alert('บันทึกโน้ตไม่สำเร็จ: ' + e2.message); return; }
+    await supabase.from('song_submissions').update({
+      approved: true, approved_by: user.id, approved_at: new Date().toISOString(), assigned_song_id: sid,
+    }).eq('id', sub.id);
+    await supabase.rpc('add_points', { uid: sub.submitted_by, pts: 10 });
+    loadAll();
+  }
+  async function rejectSong(id) {
+    if (!confirm('ปฏิเสธเพลงนี้?')) return;
+    await supabase.from('song_submissions').delete().eq('id', id);
+    loadAll();
+  }
+
+  // ── จัดการข้อมูล ──
+  async function searchSongs() {
+    let q = supabase.from('songs').select('id, name_th, type').order('name_th').limit(30);
+    if (mgQ) q = q.or(`name_th.ilike.%${mgQ}%,id.ilike.%${mgQ}%`);
+    const { data } = await q;
+    setMgSongs(data ?? []);
+  }
+  async function saveSong(s) {
+    const { error } = await supabase.from('songs').update({ name_th: s.name_th, type: s.type }).eq('id', s.id);
+    setMgMsg(error ? '⚠ ' + error.message : '✓ บันทึก ' + s.id);
+  }
+  async function deleteSong(id) {
+    if (!confirm(`ลบเพลง ${id} ถาวร? โน้ต/วิดีโอ/ไฟล์ของเพลงนี้จะถูกลบทั้งหมด`)) return;
+    await supabase.from('songs').delete().eq('id', id);
+    setMgMsg('✓ ลบ ' + id + ' แล้ว'); searchSongs();
+  }
+  async function deleteRecord(id) {
+    if (!confirm('ลบบันทึกนี้ถาวร?')) return;
+    await supabase.from('archive_records').delete().eq('id', id); loadAll();
+  }
+  async function toggleRecordApprove(r) {
+    await supabase.from('archive_records').update({ approved: !r.approved }).eq('id', r.id); loadAll();
+  }
+  async function deleteComment(id) {
+    await supabase.from('comments').delete().eq('id', id); loadAll();
+  }
+  async function setMemberRole(uid, newRole) {
+    await supabase.from('profiles').update({ role: newRole }).eq('id', uid); loadAll();
+  }
+  async function saveNathab(row) {
+    const { error } = await supabase.from('nathab_patterns')
+      .update({ pattern_text: row.pattern_text }).eq('id', row.id);
+    setMgMsg(error ? '⚠ ' + error.message : `✓ บันทึกหน้าทับ ${row.nathab} ${row.level} ${row.instrument}`);
+  }
+
+  async function exportMembers() {
+    await new Promise((res) => {
+      if (window.XLSX) return res();
+      const js = document.createElement('script');
+      js.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      js.onload = res; document.head.appendChild(js);
+    });
+    const rows = [['ชื่อ','อีเมล','เบอร์โทร','LINE','สำนัก/วง','จังหวัด','แต้ม','สถานะ','สมัครเมื่อ']];
+    members.forEach(m => rows.push([
+      m.display_name ?? '', m.email ?? '', m.phone ?? '', m.line_id ?? '',
+      m.organization ?? '', m.province ?? '', m.points ?? 0, m.role ?? '',
+      m.created_at ? new Date(m.created_at).toLocaleDateString('th-TH') : '',
+    ]));
+    const ws = window.XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = rows[0].map(() => ({ wch: 18 }));
+    const wb = window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb, ws, 'สมาชิก');
+    window.XLSX.writeFile(wb, 'THMA_members.xlsx');
+  }
+
   async function addDirect() {
     const ytId = extractYouTubeId(url);
     if (!selSong) { setMsg('⚠ เลือกเพลงก่อน'); return; }
@@ -147,7 +253,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','ไฟล์ PDF ('+pendingFiles.length+')'],['samples','🎵 เสียงเครื่อง'],['add','เพิ่มวิดีโอตรง']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -279,6 +385,130 @@ export default function AdminPage() {
           </div>
           <button className="btn btn-jade" onClick={uploadSamples}>⬆ อัปโหลดไฟล์เสียง</button>
           {sampleMsg && <div style={{marginTop:'0.8rem',fontSize:'0.82rem',color:'var(--jade)'}}>{sampleMsg}</div>}
+        </div>
+      )}
+
+      {tab === 'newsongs' && (
+        pendingSongs.length === 0
+          ? <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ไม่มีเพลงใหม่รอตรวจ</div>
+          : pendingSongs.map(s => (
+            <div className="card" key={s.id}>
+              <div style={{fontWeight:600}}>{s.name_th}
+                <span className="badge badge-fixed" style={{marginLeft:'8px'}}>{s.song_type}</span>
+                <span className="badge badge-mixed" style={{marginLeft:'4px'}}>{s.instrument}</span></div>
+              {s.note && <div style={{fontSize:'0.75rem',color:'var(--muted)',marginTop:'4px'}}>📝 {s.note}</div>}
+              <pre style={{fontSize:'0.8rem',background:'var(--navy3)',padding:'0.7rem',borderRadius:'5px',
+                marginTop:'0.6rem',overflowX:'auto',whiteSpace:'pre-wrap',fontFamily:'monospace'}}>{s.notation_text}</pre>
+              <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',marginTop:'0.6rem'}}>
+                <input className="form-input" style={{width:'140px'}} placeholder="Song ID เช่น USR001"
+                  value={songIdInput[s.id] ?? ''} onChange={e => setSongIdInput({...songIdInput, [s.id]: e.target.value})} />
+                <button className="btn btn-jade btn-sm" onClick={() => approveSong(s)}>✓ อนุมัติ + สร้างเพลง</button>
+                <button className="btn btn-danger btn-sm" onClick={() => rejectSong(s.id)}>✕ ปฏิเสธ</button>
+              </div>
+            </div>
+          ))
+      )}
+
+      {tab === 'manage' && (
+        <>
+          {mgMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.6rem'}}>{mgMsg}</div>}
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:'0.6rem'}}>🎼 เพลง — แก้ไข / ลบ</div>
+            <div style={{display:'flex',gap:'8px',marginBottom:'0.8rem'}}>
+              <input className="form-input" placeholder="ค้นหาชื่อเพลงหรือ ID..." value={mgQ}
+                onChange={e => setMgQ(e.target.value)} onKeyDown={e => e.key === 'Enter' && searchSongs()} />
+              <button className="btn btn-outline btn-sm" onClick={searchSongs}>ค้นหา</button>
+            </div>
+            {mgSongs.map((s, i) => (
+              <div key={s.id} style={{display:'flex',gap:'6px',alignItems:'center',marginBottom:'6px',flexWrap:'wrap'}}>
+                <span className="song-id" style={{width:'70px'}}>{s.id}</span>
+                <input className="form-input" style={{flex:1,minWidth:'160px'}} value={s.name_th}
+                  onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, name_th: e.target.value} : x))} />
+                <input className="form-input" style={{width:'130px'}} value={s.type ?? ''}
+                  onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, type: e.target.value} : x))} />
+                <button className="btn btn-jade btn-sm" onClick={() => saveSong(s)}>💾</button>
+                <button className="btn btn-danger btn-sm" onClick={() => deleteSong(s.id)}>🗑</button>
+              </div>
+            ))}
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:'0.6rem'}}>📜 จดหมายเหตุ (50 ล่าสุด) — ซ่อน / ลบ</div>
+            {mgRecords.map(r => (
+              <div key={r.id} style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'6px',flexWrap:'wrap'}}>
+                <span style={{flex:1,fontSize:'0.82rem',minWidth:'200px'}}>
+                  {r.approved ? '🟢' : '⚪'} {r.what_text} <span style={{color:'var(--muted)'}}>· {r.who_text} · {r.when_text}</span>
+                </span>
+                <button className="btn btn-outline btn-sm" onClick={() => toggleRecordApprove(r)}>
+                  {r.approved ? 'ซ่อน' : 'แสดง'}</button>
+                <button className="btn btn-danger btn-sm" onClick={() => deleteRecord(r.id)}>🗑</button>
+              </div>
+            ))}
+          </div>
+          <div className="card">
+            <div style={{fontWeight:600,marginBottom:'0.6rem'}}>💬 ความคิดเห็น (50 ล่าสุด)</div>
+            {mgComments.map(c => (
+              <div key={c.id} style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'6px'}}>
+                <span style={{flex:1,fontSize:'0.8rem'}}>
+                  <b>{c.profiles?.display_name ?? '?'}</b> ({c.target_type}/{c.target_id}): {(c.body ?? '(รูปภาพ)').slice(0, 80)}
+                </span>
+                <button className="btn btn-danger btn-sm" onClick={() => deleteComment(c.id)}>🗑</button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {tab === 'members' && (
+        <div className="card">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.8rem'}}>
+            <div style={{fontWeight:600}}>👥 สมาชิกทั้งหมด ({members.length})</div>
+            <button className="btn btn-jade btn-sm" onClick={exportMembers}>📊 Export Excel</button>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>ชื่อ</th><th>อีเมล</th><th>โทร</th><th>LINE</th><th>สำนัก</th><th>จังหวัด</th><th>แต้ม</th><th>สถานะ</th></tr></thead>
+              <tbody>
+                {members.map(m => (
+                  <tr key={m.id}>
+                    <td>{m.display_name ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.email ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.phone ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.line_id ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.organization ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.province ?? '—'}</td>
+                    <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{m.points ?? 0}</td>
+                    <td>
+                      <select className="filter-select" value={m.role ?? 'contributor'}
+                        onChange={e => setMemberRole(m.id, e.target.value)} style={{fontSize:'0.72rem',padding:'2px 6px'}}>
+                        <option value="contributor">สมาชิก</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'nathab' && (
+        <div>
+          <div style={{fontSize:'0.78rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
+            แก้ไขหน้าทับได้โดยตรง — รูปแบบ: พยางค์กลองต่อตำแหน่ง คั่นห้องด้วย | (เช่น - - - เท่ง | - - - พรึม)
+            พยางค์ที่รองรับ: เท่ง ทิง ติง พรึม ตุ๊บ ทั่ม ป๊ะ จ๊ะ โจ๊ะ
+          </div>
+          {nathabRows.map((row, i) => (
+            <div className="card" key={row.id} style={{padding:'0.8rem'}}>
+              <div style={{fontSize:'0.8rem',fontWeight:600,marginBottom:'0.4rem'}}>
+                {row.nathab} · {row.level} · {row.instrument}
+              </div>
+              <textarea className="form-input" rows="2" value={row.pattern_text}
+                onChange={e => setNathabRows(nathabRows.map((x,j) => j===i ? {...x, pattern_text: e.target.value} : x))}
+                style={{fontFamily:'monospace',fontSize:'0.8rem',resize:'vertical'}} />
+              <button className="btn btn-jade btn-sm" style={{marginTop:'0.4rem'}} onClick={() => saveNathab(row)}>💾 บันทึก</button>
+            </div>
+          ))}
         </div>
       )}
 

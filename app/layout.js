@@ -2,8 +2,19 @@ import './globals.css';
 import Topbar from '../components/Topbar';
 
 export const metadata = {
+  metadataBase: new URL('https://thaimusicarchive.com'),
   title: 'หอจดหมายเหตุดนตรีไทย — Thai Music Archive',
-  description: 'หอจดหมายเหตุดนตรีไทย · ฐานข้อมูลกระสวนและทำนองเพลงไทยคลาสสิก 300 เพลง พร้อมบันทึกเหตุการณ์ดนตรีไทย อดีต ปัจจุบัน อนาคต · Thai Classical Music Archive',
+  description: 'ฐานข้อมูลเพลงไทย 300 เพลง โน้ตเล่นเสียงจริงระบบ 7 เสียงไทย หน้าทับกลอง-ฉิ่ง บันทึกเหตุการณ์ดนตรีไทยบนแผนที่ อดีต ปัจจุบัน อนาคต',
+  openGraph: {
+    title: 'หอจดหมายเหตุดนตรีไทย · Thai Music Archive',
+    description: 'ฐานข้อมูลเพลงไทย โน้ตเล่นเสียงได้จริง และหอจดหมายเหตุเหตุการณ์ดนตรีไทยบนแผนที่',
+    url: 'https://thaimusicarchive.com',
+    siteName: 'หอจดหมายเหตุดนตรีไทย',
+    images: [{ url: '/og.png', width: 1200, height: 630 }],
+    locale: 'th_TH',
+    type: 'website',
+  },
+  twitter: { card: 'summary_large_image', images: ['/og.png'] },
 };
 
 export default function RootLayout({ children }) {
@@ -16,8 +27,13 @@ export default function RootLayout({ children }) {
       <body>
         <Topbar />
         {children}
-        <footer className="footer">
-          หอจดหมายเหตุดนตรีไทย · Thai Music Archive (THMA) · ข้อมูลและลิขสิทธิ์โดย Pk
+        <footer className="footer" style={{lineHeight:2}}>
+          <div style={{fontWeight:600,color:'var(--cream)'}}>หอจดหมายเหตุดนตรีไทย · Thai Music Archive (THMA)</div>
+          <div>ข้อมูลและลิขสิทธิ์ © ปกป้อง ขำประเสริฐ (Pokpong Khamprasert) — ผลงานที่สมาชิกเพิ่มแสดงเครดิตผู้เพิ่มกำกับไว้</div>
+          <div style={{fontSize:'0.78rem'}}>
+            ติดต่อผู้ดูแล: ✉️ <a href="mailto:tasanastudio@gmail.com" style={{color:'var(--gold2)'}}>tasanastudio@gmail.com</a>
+            {' '}· 💬 LINE: p.khamprasert · ☎️ 097-220-5864
+          </div>
         </footer>
       </body>
     </html>

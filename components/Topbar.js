@@ -48,16 +48,16 @@ export default function Topbar() {
         <Link href="/">จดหมายเหตุเพลงไทย</Link>
         <Link href="/archive">จดหมายเหตุดนตรีไทย</Link>
         <Link href="/leaderboard">ทำเนียบ</Link>
+        {user && <Link href="/songs/new">➕ เพิ่มเพลง</Link>}
         {profile?.role === 'admin' && <Link href="/admin">Admin</Link>}
       </nav>
       <div className="topbar-right">
         {user ? (
           <>
             <RankBadge points={profile?.points} showPoints />
-            <span style={{fontSize:'0.78rem',color:'var(--muted)'}}>
-              {profile?.display_name ?? user.email}
-              {profile?.role === 'admin' && <span className="badge badge-fixed" style={{marginLeft:'6px'}}>Admin</span>}
-            </span>
+            <Link href="/profile"><span style={{fontSize:'0.78rem',color:'var(--muted)',cursor:'pointer',textDecoration:'underline dotted'}}>
+              {profile?.display_name ?? user.email}</span></Link>
+            {profile?.role === 'admin' && <span className="badge badge-fixed">Admin</span>}
             <button className="btn btn-outline btn-sm" onClick={logout}>ออกจากระบบ</button>
           </>
         ) : (
