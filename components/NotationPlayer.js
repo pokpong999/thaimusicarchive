@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadGongSamples, playSampleNote, samplesAvailable } from '../lib/sampler';
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
@@ -8,7 +8,7 @@ const NOTE_STEP = { 'ด':0, 'ร':1, 'ม':2, 'ฟ':3, 'ซ':4, 'ล':5, 'ท':
 const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
-const SABAT_GAP = 0.045; // สะบัด: โน้ต 2-3 ตามติดโน้ตแรก 45ms คงที่ทุก tempo
+const SABAT_GAP = 0.045; // ช่องไฟสะบัด (วินาที) — ปรับได้
 
 function noteFreq(ch, register) {
   const step = NOTE_STEP[ch];
@@ -30,16 +30,25 @@ function parseToken(token) {
   return notes;
 }
 
+// วรรคยาวตามจริง — ไม่บังคับ 4 ห้อง (รองรับ 1-2 ห้อง เช่นเพลงชั้นเดียว)
 export function parseVerse(str) {
-  if (!str) return Array(16).fill([]);
+  if (!str) return [];
   const positions = [];
   const hongs = str.split('|');
   for (const hong of hongs) {
     const tokens = hong.trim().split(/\s+/).filter(t => t.length > 0);
-    for (const t of tokens) positions.push(t === '-' ? [] : parseToken(t));
+    if (tokens.length === 0) continue;
+    const cells = tokens.map(t => t === '-' ? [] : parseToken(t));
+    while (cells.length < 4) cells.push([]);
+    positions.push(...cells.slice(0, 4));
   }
-  while (positions.length < 16) positions.push([]);
-  return positions.slice(0, 16);
+  return positions;
+}
+
+function padTo(arr, len) {
+  const out = arr.slice();
+  while (out.length < len) out.push([]);
+  return out;
 }
 
 function synthNote(ctx, freq, time, dur, gain = 0.45) {
@@ -65,7 +74,8 @@ export default function NotationPlayer({ verses, lyrics }) {
   const [hand, setHand] = useState('both');
   const [sound, setSound] = useState('real');
   const [bpm, setBpm] = useState(120);
-  const [playState, setPlayState] = useState('stopped'); // stopped | playing | paused
+  const [hongsPerLine, setHongsPerLine] = useState(8);
+  const [playState, setPlayState] = useState('stopped');
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [sampleCount, setSampleCount] = useState(null);
   const [cursor, setCursor] = useState(null);
@@ -74,6 +84,25 @@ export default function NotationPlayer({ verses, lyrics }) {
   const rafRef = useRef(null);
   const playIdRef = useRef(0);
 
+  // ── แปลงโน้ตทุกวรรคครั้งเดียว: ความยาวจริงต่อวรรค + offset สะสม ──
+  const parsed = useMemo(() => {
+    let offset = 0;
+    return (verses ?? []).map(v => {
+      const cb = parseVerse(v.combined);
+      const rh = parseVerse(v.right_hand);
+      const lh = parseVerse(v.left_hand);
+      const len = Math.max(cb.length, rh.length, lh.length, 4);
+      const item = {
+        v, len, offset,
+        cb: padTo(cb, len), rh: padTo(rh, len), lh: padTo(lh, len),
+        useHands: !!(v.right_hand || v.left_hand),
+      };
+      offset += len;
+      return item;
+    });
+  }, [verses]);
+  const totalSteps = parsed.length ? parsed[parsed.length-1].offset + parsed[parsed.length-1].len : 0;
+
   useEffect(() => () => {
     playIdRef.current++;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -81,7 +110,6 @@ export default function NotationPlayer({ verses, lyrics }) {
   }, []);
 
   async function startFrom(startStep) {
-    // ปิดรอบเก่า (buffers เก็บไว้ใช้ต่อ ไม่ต้องโหลดใหม่)
     playIdRef.current++;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (ctxRef.current) { ctxRef.current.close().catch(() => {}); }
@@ -104,9 +132,7 @@ export default function NotationPlayer({ verses, lyrics }) {
 
     const stepDur = 60 / bpm / 2;
     const t0 = ctx.currentTime + 0.15;
-    const totalSteps = verses.length * 16;
     const cursorTimeline = [];
-    const startVerse = Math.floor(startStep / 16);
 
     function scheduleNote(n, noteTime) {
       let played = false;
@@ -117,40 +143,31 @@ export default function NotationPlayer({ verses, lyrics }) {
       }
     }
 
-    for (let vi = startVerse; vi < verses.length; vi++) {
-      const v = verses[vi];
-      const rh = parseVerse(v.right_hand);
-      const lh = parseVerse(v.left_hand);
-      const cb = parseVerse(v.combined);
-      const useHands = v.right_hand || v.left_hand;
-      const lines = !useHands ? [cb] : hand === 'R' ? [rh] : hand === 'L' ? [lh] : [rh, lh];
-      const pStart = vi === startVerse ? startStep % 16 : 0;
+    parsed.forEach((pv, vi) => {
+      if (pv.offset + pv.len <= startStep) return;
+      const pStart = Math.max(0, startStep - pv.offset);
+      const lines = !pv.useHands ? [pv.cb]
+        : hand === 'R' ? [pv.rh] : hand === 'L' ? [pv.lh] : [pv.rh, pv.lh];
 
-      for (let p = pStart; p < 16; p++) {
-        cursorTimeline.push({ time: t0 + (vi * 16 + p - startStep) * stepDur, verseIdx: vi, pos: p });
+      for (let p = pStart; p < pv.len; p++) {
+        cursorTimeline.push({ time: t0 + (pv.offset + p - startStep) * stepDur, verseIdx: vi, pos: p });
       }
 
-      // ── สะบัดข้ามมือ: เสียงนำอาจอยู่คนละมือกับคู่สะบัด ──
-      const consumed = lines.map(() => new Array(16).fill(false));
-      const runMap = {}; // `${li}-${p}` → ชุดโน้ตสะบัดเต็ม
-
-      for (let p = pStart; p < 16; p++) {
+      // ── สะบัดข้ามมือ ──
+      const consumed = lines.map(() => new Array(pv.len).fill(false));
+      const runMap = {};
+      for (let p = pStart; p < pv.len; p++) {
         lines.forEach((line, li) => {
           if (line[p].length > 1) {
             let lead = [];
             if (p > pStart) {
               if (line[p - 1].length === 1 && !consumed[li][p - 1]) {
-                // เสียงนำอยู่มือเดียวกัน
-                lead = line[p - 1];
-                consumed[li][p - 1] = true;
+                lead = line[p - 1]; consumed[li][p - 1] = true;
               } else {
-                // หาเสียงนำจากมืออื่น (มืออื่นต้องว่างตรงจังหวะสะบัด)
                 for (let lj = 0; lj < lines.length; lj++) {
                   if (lj !== li && lines[lj][p].length === 0
                       && lines[lj][p - 1].length === 1 && !consumed[lj][p - 1]) {
-                    lead = lines[lj][p - 1];
-                    consumed[lj][p - 1] = true;
-                    break;
+                    lead = lines[lj][p - 1]; consumed[lj][p - 1] = true; break;
                   }
                 }
               }
@@ -161,21 +178,20 @@ export default function NotationPlayer({ verses, lyrics }) {
       }
 
       lines.forEach((line, li) => {
-        for (let p = pStart; p < 16; p++) {
-          if (consumed[li][p]) continue; // ถูกดึงเข้าชุดสะบัดแล้ว
-          const t = t0 + (vi * 16 + p - startStep) * stepDur;
+        for (let p = pStart; p < pv.len; p++) {
+          if (consumed[li][p]) continue;
+          const t = t0 + (pv.offset + p - startStep) * stepDur;
           const run = runMap[li + '-' + p];
           if (run) {
-            // สะบัด: ทุกเสียงช่องไฟเท่ากัน เสียงสุดท้ายจบตรงจังหวะ
             run.forEach((n, ni) => scheduleNote(n, t - (run.length - 1 - ni) * SABAT_GAP));
           } else {
             line[p].forEach(n => scheduleNote(n, t));
           }
         }
       });
-    }
+    });
 
-        const endTime = t0 + (totalSteps - startStep) * stepDur;
+    const endTime = t0 + (totalSteps - startStep) * stepDur;
     let idx = 0;
     function tick() {
       if (playIdRef.current !== myId) return;
@@ -204,10 +220,9 @@ export default function NotationPlayer({ verses, lyrics }) {
     setPlayState('stopped'); setCursor(null);
   }
 
-  // กดที่ห้อง → เล่นตั้งแต่ต้นห้องนั้น
   function seek(vi, p) {
     const hongStart = Math.floor(p / 4) * 4;
-    startFrom(vi * 16 + hongStart);
+    startFrom(parsed[vi].offset + hongStart);
   }
 
   function renderCell(notes, active, vi, p) {
@@ -258,9 +273,22 @@ export default function NotationPlayer({ verses, lyrics }) {
     );
   }
 
-  function khimRow(v, reg) {
-    return parseVerse(v.combined).map(notes => notes.filter(n => String(n.register) === reg));
+  function khimRow(pv, reg) {
+    return pv.cb.map(notes => notes.filter(n => String(n.register) === reg));
   }
+
+  // ── จัดกลุ่มวรรคลงบรรทัด ตามจำนวนห้องต่อบรรทัดที่เลือก ──
+  const lineGroups = useMemo(() => {
+    const groups = [];
+    let cur = [], curHongs = 0;
+    parsed.forEach((pv, vi) => {
+      const h = pv.len / 4;
+      if (cur.length > 0 && curHongs + h > hongsPerLine) { groups.push(cur); cur = []; curHongs = 0; }
+      cur.push(vi); curHongs += h;
+    });
+    if (cur.length) groups.push(cur);
+    return groups;
+  }, [parsed, hongsPerLine]);
 
   if (!verses || verses.length === 0) {
     return <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ยังไม่มีข้อมูลโน้ตสำหรับเพลงนี้</div>;
@@ -298,6 +326,12 @@ export default function NotationPlayer({ verses, lyrics }) {
           <option value="R">🔊 มือขวา</option>
           <option value="L">🔊 มือซ้าย</option>
         </select>
+        <select className="filter-select" value={hongsPerLine} onChange={e => setHongsPerLine(+e.target.value)}>
+          <option value="2">2 ห้อง/บรรทัด</option>
+          <option value="4">4 ห้อง/บรรทัด</option>
+          <option value="8">8 ห้อง/บรรทัด</option>
+          <option value="16">16 ห้อง/บรรทัด</option>
+        </select>
         <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'0.75rem',color:'var(--muted)'}}>
           ช้า <input type="range" min="50" max="220" value={bpm} onChange={e => setBpm(+e.target.value)}
             style={{accentColor:'var(--gold)'}} disabled={playState !== 'stopped'} /> เร็ว
@@ -305,7 +339,7 @@ export default function NotationPlayer({ verses, lyrics }) {
         </div>
         {sampleCount != null && sound === 'real' && (
           <span style={{fontSize:'0.68rem',color: sampleCount > 0 ? 'var(--jade)' : 'var(--danger)'}}>
-            {sampleCount > 0 ? `♪ เสียงจริง ${sampleCount}/16 ลูก` : '⚠ ยังไม่มีไฟล์เสียง — ใช้เสียงสังเคราะห์แทน'}
+            {sampleCount > 0 ? `♪ เสียงจริง ${sampleCount}/16 ลูก` : '⚠ ยังไม่มีไฟล์เสียง'}
           </span>
         )}
         <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>💡 กดที่ห้องใดก็ได้เพื่อเล่นจากตรงนั้น</span>
@@ -314,29 +348,28 @@ export default function NotationPlayer({ verses, lyrics }) {
       {mode === 'staff' ? <StaffNotation verses={verses} /> :
       <div style={{background:'var(--navy3)',border:'1px solid var(--border)',borderRadius:'8px',
         padding:'1rem',overflowX:'auto',display:'flex',flexDirection:'column',gap:'0.7rem'}}>
-        {Array.from({ length: Math.ceil(verses.length / 2) }, (_, pi) => {
-          const pair = verses.slice(pi * 2, pi * 2 + 2);
-          const idx0 = pi * 2;
-          const label = pair.length === 2
-            ? `วรรค ${pair[0].verse_no}–${pair[1].verse_no}`
-            : `วรรค ${pair[0].verse_no}`;
-          const luk = pair.map(v => v.luktok).filter(Boolean).join(' / ');
-          const segs = f => pair.map((v, k) => ({ positions: parseVerse(f(v)), vi: idx0 + k }));
+        {lineGroups.map((group, gi) => {
+          const first = parsed[group[0]].v;
+          const last = parsed[group[group.length-1]].v;
+          const label = group.length > 1
+            ? `วรรค ${first.verse_no}–${last.verse_no}` : `วรรค ${first.verse_no}`;
+          const luk = group.map(vi => parsed[vi].v.luktok).filter(Boolean).join(' / ');
+          const segs = f => group.map(vi => ({ positions: f(parsed[vi]), vi }));
           return (
-            <div key={pi} style={{paddingBottom:'0.5rem',
-              borderBottom: pi < Math.ceil(verses.length/2)-1 ? '1px dashed rgba(42,63,92,0.6)' : 'none'}}>
+            <div key={gi} style={{paddingBottom:'0.5rem',
+              borderBottom: gi < lineGroups.length-1 ? '1px dashed rgba(42,63,92,0.6)' : 'none'}}>
               <div style={{fontSize:'0.62rem',color:'var(--muted)',marginBottom:'3px'}}>
-                {label}{pair[0].section ? ` · ${pair[0].section}` : ''}{luk ? ` · ลูกตก: ${luk}` : ''}
+                {label}{first.section ? ` · ${first.section}` : ''}{luk ? ` · ลูกตก: ${luk}` : ''}
               </div>
-              {mode === 'combined' && renderMulti(segs(v => v.combined), null)}
+              {mode === 'combined' && renderMulti(segs(pv => pv.cb), null)}
               {mode === 'hands' && <>
-                {renderMulti(segs(v => v.right_hand), 'R')}
-                {renderMulti(segs(v => v.left_hand), 'L')}
+                {renderMulti(segs(pv => pv.rh), 'R')}
+                {renderMulti(segs(pv => pv.lh), 'L')}
               </>}
               {mode === 'khim' && ['1','0','-1'].map(reg =>
-                <div key={reg}>{renderMulti(pair.map((v, k) => ({ positions: khimRow(v, reg), vi: idx0 + k })), REG_LABEL[reg])}</div>
+                <div key={reg}>{renderMulti(group.map(vi => ({ positions: khimRow(parsed[vi], reg), vi })), REG_LABEL[reg])}</div>
               )}
-              {mode === 'vocal' && renderMulti(segs(v => v.combined), '♪')}
+              {mode === 'vocal' && renderMulti(segs(pv => pv.cb), '♪')}
             </div>
           );
         })}
