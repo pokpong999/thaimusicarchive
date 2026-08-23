@@ -1,23 +1,21 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { loadGongSamples, playSampleNote, samplesAvailable } from '../lib/sampler';
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
 
-// ── 7-TET Thai tuning ──
-// ด ร ม ฟ ซ ล ท = step 0..6, octave = 7 steps, ratio per step = 2^(1/7)
+// ── 7-TET Thai tuning (สำหรับเสียงสังเคราะห์ fallback) ──
 const NOTE_STEP = { 'ด':0, 'ร':1, 'ม':2, 'ฟ':3, 'ซ':4, 'ล':5, 'ท':6 };
-const BASE_FREQ = 261.63; // ด กลาง
-const LOW_MARK = '\u0E3A';   // พินทุ (จุดล่าง) = เสียงต่ำ
-const HIGH_MARK = '\u0E4D';  // นิคหิต (วงกลมบน) = เสียงสูง
+const BASE_FREQ = 261.63;
+const LOW_MARK = '\u0E3A';
+const HIGH_MARK = '\u0E4D';
 
 function noteFreq(ch, register) {
   const step = NOTE_STEP[ch];
   if (step == null) return null;
-  const totalStep = step + register * 7;
-  return BASE_FREQ * Math.pow(2, totalStep / 7);
+  return BASE_FREQ * Math.pow(2, (step + register * 7) / 7);
 }
 
-// แปลง token เช่น "ล" "ทฺ" "ซํ" "รม" → [{ch, register}]
 function parseToken(token) {
   const notes = [];
   for (let i = 0; i < token.length; i++) {
@@ -32,28 +30,24 @@ function parseToken(token) {
   return notes;
 }
 
-// แปลงสตริงวรรค "- - - ล | - - ด รม | ..." → array 16 ช่อง (แต่ละช่อง = array of notes)
 export function parseVerse(str) {
   if (!str) return Array(16).fill([]);
   const positions = [];
   const hongs = str.split('|');
   for (const hong of hongs) {
     const tokens = hong.trim().split(/\s+/).filter(t => t.length > 0);
-    for (const t of tokens) {
-      positions.push(t === '-' ? [] : parseToken(t));
-    }
+    for (const t of tokens) positions.push(t === '-' ? [] : parseToken(t));
   }
   while (positions.length < 16) positions.push([]);
   return positions.slice(0, 16);
 }
 
-// ── เสียงฆ้อง/ระนาดสังเคราะห์ ──
-function playNote(ctx, freq, time, dur, gain = 0.5) {
+function synthNote(ctx, freq, time, dur, gain = 0.45) {
   const osc = ctx.createOscillator();
   const osc2 = ctx.createOscillator();
   const g = ctx.createGain();
   osc.type = 'sine'; osc.frequency.value = freq;
-  osc2.type = 'sine'; osc2.frequency.value = freq * 3.02; // harmonic แบบโลหะ
+  osc2.type = 'sine'; osc2.frequency.value = freq * 3.02;
   const g2 = ctx.createGain(); g2.gain.value = 0.18;
   osc.connect(g); osc2.connect(g2); g2.connect(g);
   g.connect(ctx.destination);
@@ -67,67 +61,107 @@ function playNote(ctx, freq, time, dur, gain = 0.5) {
 const REG_LABEL = { '-1': 'ต่ำ', '0': 'กลาง', '1': 'สูง' };
 
 export default function NotationPlayer({ verses, lyrics }) {
-  // verses: [{verse_no, section, right_hand, left_hand, combined, luktok}]
-  const [mode, setMode] = useState('combined'); // combined | hands | khim | vocal
-  const [hand, setHand] = useState('both');     // both | R | L (สำหรับเล่นเสียง)
+  const [mode, setMode] = useState('combined');
+  const [hand, setHand] = useState('both');
+  const [sound, setSound] = useState('real');   // real | synth
   const [bpm, setBpm] = useState(120);
   const [playing, setPlaying] = useState(false);
-  const [cursor, setCursor] = useState(null);   // {verseIdx, pos}
+  const [loadingSamples, setLoadingSamples] = useState(false);
+  const [sampleCount, setSampleCount] = useState(null);
+  const [cursor, setCursor] = useState(null);
   const ctxRef = useRef(null);
-  const stopRef = useRef(false);
+  const buffersRef = useRef(null);
+  const rafRef = useRef(null);
+  const playIdRef = useRef(0);
 
-  useEffect(() => () => { stopRef.current = true; }, []);
+  useEffect(() => () => {
+    playIdRef.current++;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (ctxRef.current) ctxRef.current.close().catch(() => {});
+  }, []);
 
   function getCtx() {
-    if (!ctxRef.current) ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    if (!ctxRef.current || ctxRef.current.state === 'closed')
+      ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
     return ctxRef.current;
   }
 
   async function play() {
-    if (playing) { stopRef.current = true; setPlaying(false); setCursor(null); return; }
+    if (playing) { stop(); return; }
     const ctx = getCtx();
     await ctx.resume();
-    stopRef.current = false;
+
+    // โหลด sample จริง (ครั้งแรกเท่านั้น)
+    let buffers = buffersRef.current;
+    if (sound === 'real' && !buffers) {
+      setLoadingSamples(true);
+      buffers = await loadGongSamples(ctx);
+      buffersRef.current = buffers;
+      setSampleCount(Object.keys(buffers).length);
+      setLoadingSamples(false);
+    }
+    const useReal = sound === 'real' && samplesAvailable(buffers);
+
+    const myId = ++playIdRef.current;
     setPlaying(true);
 
-    const stepDur = 60 / bpm / 2; // 1 ตำแหน่ง = ครึ่งจังหวะ
-    let t = ctx.currentTime + 0.1;
-    const schedule = [];
+    // ═══ SCHEDULE ทุกโน้ตล่วงหน้าบน audio clock — จังหวะแม่นระดับ sample ═══
+    const stepDur = 60 / bpm / 2;
+    const t0 = ctx.currentTime + 0.15;
+    const cursorTimeline = [];
 
     verses.forEach((v, vi) => {
       const rh = parseVerse(v.right_hand);
       const lh = parseVerse(v.left_hand);
       const cb = parseVerse(v.combined);
+      const useHands = v.right_hand || v.left_hand;
+
       for (let p = 0; p < 16; p++) {
-        const notesToPlay = [];
-        if (hand === 'both' || mode === 'combined') {
-          if (hand === 'R') notesToPlay.push(...rh[p]);
-          else if (hand === 'L') notesToPlay.push(...lh[p]);
-          else { notesToPlay.push(...rh[p], ...lh[p]); }
-        } else if (hand === 'R') notesToPlay.push(...rh[p]);
-        else if (hand === 'L') notesToPlay.push(...lh[p]);
-        schedule.push({ time: t, verseIdx: vi, pos: p, notes: notesToPlay });
-        // สะบัด: หลายโน้ตในช่องเดียว เล่นรัวแบ่งเวลากัน
+        const t = t0 + (vi * 16 + p) * stepDur;
+        cursorTimeline.push({ time: t, verseIdx: vi, pos: p });
+
+        let notesToPlay = [];
+        if (!useHands) notesToPlay = cb[p];
+        else if (hand === 'R') notesToPlay = rh[p];
+        else if (hand === 'L') notesToPlay = lh[p];
+        else notesToPlay = [...rh[p], ...lh[p]];
+
+        const sub = notesToPlay.length > 1 ? stepDur / notesToPlay.length : 0;
         notesToPlay.forEach((n, ni) => {
-          const f = noteFreq(n.ch, n.register);
-          if (f) {
-            const sub = notesToPlay.length > 1 ? stepDur / notesToPlay.length : 0;
-            playNote(ctx, f, t + ni * sub, stepDur * 2.2, 0.45);
+          const noteTime = t + ni * sub;
+          let played = false;
+          if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85);
+          if (!played) {
+            const f = noteFreq(n.ch, n.register);
+            if (f) synthNote(ctx, f, noteTime, stepDur * 2.2);
           }
         });
-        t += stepDur;
       }
     });
 
-    // cursor animation
-    for (const s of schedule) {
-      const wait = (s.time - ctx.currentTime) * 1000;
-      if (wait > 0) await new Promise(r => setTimeout(r, wait));
-      if (stopRef.current) break;
-      setCursor({ verseIdx: s.verseIdx, pos: s.pos });
+    // ═══ CURSOR: requestAnimationFrame เทียบกับ audio clock — ไม่หลุดจังหวะ ═══
+    const endTime = t0 + verses.length * 16 * stepDur;
+    let idx = 0;
+    function tick() {
+      if (playIdRef.current !== myId) return;
+      const now = ctx.currentTime;
+      while (idx < cursorTimeline.length && cursorTimeline[idx].time <= now) {
+        setCursor({ verseIdx: cursorTimeline[idx].verseIdx, pos: cursorTimeline[idx].pos });
+        idx++;
+      }
+      if (now < endTime) rafRef.current = requestAnimationFrame(tick);
+      else { setPlaying(false); setCursor(null); }
     }
-    setPlaying(false);
-    setCursor(null);
+    rafRef.current = requestAnimationFrame(tick);
+  }
+
+  function stop() {
+    playIdRef.current++;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (ctxRef.current) { ctxRef.current.close().catch(() => {}); ctxRef.current = null; }
+    buffersRef.current = buffersRef.current; // buffers ใช้ซ้ำได้หลัง ctx ใหม่? — ไม่ได้ ต้อง decode ใหม่
+    buffersRef.current = null;
+    setPlaying(false); setCursor(null);
   }
 
   function renderCell(notes, active) {
@@ -135,9 +169,8 @@ export default function NotationPlayer({ verses, lyrics }) {
       <span style={{
         display:'inline-block', minWidth:'26px', textAlign:'center',
         padding:'2px 1px', borderRadius:'3px', fontSize:'0.92rem',
-        background: active ? 'rgba(201,168,76,0.35)' : 'transparent',
+        background: active ? 'rgba(201,168,76,0.4)' : 'transparent',
         color: notes.length ? 'var(--cream)' : 'var(--border)',
-        transition: 'background 0.1s',
       }}>
         {notes.length ? notes.map(n =>
           n.ch + (n.register === -1 ? LOW_MARK : n.register === 1 ? HIGH_MARK : '')
@@ -148,7 +181,7 @@ export default function NotationPlayer({ verses, lyrics }) {
 
   function renderLine(parsedPositions, vi, label) {
     return (
-      <div style={{display:'flex',alignItems:'center',gap:'6px',fontFamily:"'Noto Sans Thai',monospace"}}>
+      <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
         {label && <span style={{fontSize:'0.65rem',color:'var(--muted)',width:'26px',textAlign:'right',flexShrink:0}}>{label}</span>}
         <div style={{display:'flex',flexWrap:'nowrap'}}>
           {parsedPositions.map((notes, p) => (
@@ -163,13 +196,10 @@ export default function NotationPlayer({ verses, lyrics }) {
   }
 
   function renderKhim(v, vi) {
-    // 3 บรรทัดแบบขิม: สูง / กลาง / ต่ำ จากทำนองรวม
     const cb = parseVerse(v.combined);
     const rows = { '1': [], '0': [], '-1': [] };
     cb.forEach(notes => {
-      ['1','0','-1'].forEach(reg => {
-        rows[reg].push(notes.filter(n => String(n.register) === reg));
-      });
+      ['1','0','-1'].forEach(reg => rows[reg].push(notes.filter(n => String(n.register) === reg)));
     });
     return ['1','0','-1'].map(reg => (
       <div key={reg}>{renderLine(rows[reg], vi, REG_LABEL[reg])}</div>
@@ -182,11 +212,14 @@ export default function NotationPlayer({ verses, lyrics }) {
 
   return (
     <div>
-      {/* controls */}
       <div style={{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',marginBottom:'1rem'}}>
-        <button className="btn btn-jade" onClick={play}>
-          {playing ? '■ หยุด' : '▶ เล่นโน้ต'}
+        <button className="btn btn-jade" onClick={play} disabled={loadingSamples}>
+          {loadingSamples ? '⏳ โหลดเสียง...' : playing ? '■ หยุด' : '▶ เล่นโน้ต'}
         </button>
+        <select className="filter-select" value={sound} onChange={e => setSound(e.target.value)}>
+          <option value="real">🎵 เสียงฆ้องวงใหญ่จริง</option>
+          <option value="synth">〰 เสียงสังเคราะห์</option>
+        </select>
         <select className="filter-select" value={mode} onChange={e => setMode(e.target.value)}>
           <option value="combined">บรรทัดเดียว (ทำนองรวม)</option>
           <option value="hands">สองบรรทัด (แยกมือ R/L)</option>
@@ -195,19 +228,22 @@ export default function NotationPlayer({ verses, lyrics }) {
           <option value="staff">โน้ตสากล 5 เส้น</option>
         </select>
         <select className="filter-select" value={hand} onChange={e => setHand(e.target.value)}>
-          <option value="both">🔊 เล่นทั้งสองมือ</option>
-          <option value="R">🔊 มือขวาอย่างเดียว</option>
-          <option value="L">🔊 มือซ้ายอย่างเดียว</option>
+          <option value="both">🔊 ทั้งสองมือ</option>
+          <option value="R">🔊 มือขวา</option>
+          <option value="L">🔊 มือซ้าย</option>
         </select>
         <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'0.75rem',color:'var(--muted)'}}>
           ช้า <input type="range" min="50" max="220" value={bpm} onChange={e => setBpm(+e.target.value)}
-            style={{accentColor:'var(--gold)'}} /> เร็ว
+            style={{accentColor:'var(--gold)'}} disabled={playing} /> เร็ว
           <span style={{fontFamily:'monospace'}}>{bpm}</span>
         </div>
-        <span style={{fontSize:'0.68rem',color:'var(--jade)'}}>♪ ระบบเสียง 7 เท่าไทย (7-TET)</span>
+        {sampleCount != null && sound === 'real' && (
+          <span style={{fontSize:'0.68rem',color: sampleCount > 0 ? 'var(--jade)' : 'var(--danger)'}}>
+            {sampleCount > 0 ? `♪ เสียงจริง ${sampleCount}/16 ลูก` : '⚠ ยังไม่มีไฟล์เสียง — ใช้เสียงสังเคราะห์แทน'}
+          </span>
+        )}
       </div>
 
-      {/* notation */}
       {mode === 'staff' ? <StaffNotation verses={verses} /> :
       <div style={{background:'var(--navy3)',border:'1px solid var(--border)',borderRadius:'8px',
         padding:'1rem',overflowX:'auto',display:'flex',flexDirection:'column',gap:'0.7rem'}}>
@@ -230,7 +266,7 @@ export default function NotationPlayer({ verses, lyrics }) {
           <div style={{marginTop:'0.5rem',padding:'0.8rem',background:'var(--navy2)',borderRadius:'6px'}}>
             <div style={{fontSize:'0.68rem',color:'var(--muted)',marginBottom:'4px'}}>เนื้อร้อง</div>
             <div style={{fontSize:'0.9rem',lineHeight:2,whiteSpace:'pre-wrap'}}>
-              {lyrics || <span style={{color:'var(--muted)'}}>ยังไม่มีเนื้อร้อง — Admin เพิ่มได้ในหน้าแก้ไข</span>}
+              {lyrics || <span style={{color:'var(--muted)'}}>ยังไม่มีเนื้อร้อง</span>}
             </div>
           </div>
         )}

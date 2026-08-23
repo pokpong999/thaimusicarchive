@@ -11,6 +11,9 @@ export default function AdminPage() {
   const [pendingRecords, setPendingRecords] = useState([]);
   const [pendingTang, setPendingTang] = useState([]);
   const [pendingFiles, setPendingFiles] = useState([]);
+  const [sampleFiles, setSampleFiles] = useState([]);
+  const [sampleList, setSampleList] = useState([]);
+  const [sampleMsg, setSampleMsg] = useState('');
   const [songs, setSongs] = useState([]);
   const [selSong, setSelSong] = useState('');
   const [url, setUrl] = useState('');
@@ -45,6 +48,8 @@ export default function AdminPage() {
     const { data: f } = await supabase.from('song_files')
       .select('*, songs(name_th)').eq('approved', false).order('created_at');
     setPendingFiles(f ?? []);
+    const { data: sl } = await supabase.storage.from('instrument-samples').list('gong');
+    setSampleList((sl ?? []).map(x => x.name));
   }
 
   async function approveVideo(id) {
@@ -90,6 +95,25 @@ export default function AdminPage() {
     loadAll();
   }
 
+  const EXPECTED = ['m_low','f_low','s_low','l_low','t_low',
+    'd_mid','r_mid','m_mid','f_mid','s_mid','l_mid','t_mid',
+    'd_high','r_high','m_high','f_high'];
+
+  async function uploadSamples() {
+    if (!sampleFiles.length) { setSampleMsg('⚠ เลือกไฟล์ก่อน'); return; }
+    setSampleMsg('กำลังอัปโหลด...');
+    let ok = 0, skip = 0;
+    for (const file of Array.from(sampleFiles)) {
+      const name = file.name.replace(/\.(mp3|wav|m4a)$/i, '');
+      if (!EXPECTED.includes(name)) { skip++; continue; }
+      const { error } = await supabase.storage.from('instrument-samples')
+        .upload(`gong/${name}.mp3`, file, { upsert: true });
+      if (!error) ok++;
+    }
+    setSampleMsg(`✓ อัปโหลด ${ok} ไฟล์` + (skip ? ` · ข้าม ${skip} ไฟล์ (ชื่อไม่ตรงระบบ)` : ''));
+    loadAll();
+  }
+
   async function addDirect() {
     const ytId = extractYouTubeId(url);
     if (!selSong) { setMsg('⚠ เลือกเพลงก่อน'); return; }
@@ -123,7 +147,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','ไฟล์ PDF ('+pendingFiles.length+')'],['add','เพิ่มวิดีโอตรง']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','ไฟล์ PDF ('+pendingFiles.length+')'],['samples','🎵 เสียงเครื่อง'],['add','เพิ่มวิดีโอตรง']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -226,6 +250,36 @@ export default function AdminPage() {
               </div>
             );
           })
+      )}
+
+      {tab === 'samples' && (
+        <div className="card" style={{borderColor:'rgba(76,154,132,0.3)'}}>
+          <div style={{fontSize:'0.95rem',fontWeight:600,marginBottom:'0.4rem'}}>🎵 ไฟล์เสียงฆ้องวงใหญ่ (16 ลูก)</div>
+          <div style={{fontSize:'0.75rem',color:'var(--muted)',marginBottom:'1rem',lineHeight:1.7}}>
+            ตั้งชื่อไฟล์: <code style={{color:'var(--gold)'}}>ตัวโน้ต_ระดับ.mp3</code> เช่น d_mid.mp3, t_low.mp3, f_high.mp3<br/>
+            (d=ด r=ร m=ม f=ฟ s=ซ l=ล t=ท · low=ต่ำฺ mid=กลาง high=สูงํ) · เลือกหลายไฟล์พร้อมกันได้ · อัปโหลดซ้ำ=แทนที่
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(90px,1fr))',gap:'6px',marginBottom:'1rem'}}>
+            {EXPECTED.map(k => {
+              const have = sampleList.includes(k + '.mp3');
+              return (
+                <div key={k} style={{padding:'6px 8px',borderRadius:'5px',fontSize:'0.72rem',
+                  fontFamily:'monospace',textAlign:'center',
+                  background: have ? 'rgba(76,154,132,0.15)' : 'var(--navy3)',
+                  border: have ? '1px solid rgba(76,154,132,0.4)' : '1px solid var(--border)',
+                  color: have ? 'var(--jade)' : 'var(--muted)'}}>
+                  {have ? '✓' : '·'} {k}
+                </div>
+              );
+            })}
+          </div>
+          <div className="form-group">
+            <input className="form-input" type="file" accept=".mp3,.wav,.m4a" multiple
+              onChange={e => setSampleFiles(e.target.files)} />
+          </div>
+          <button className="btn btn-jade" onClick={uploadSamples}>⬆ อัปโหลดไฟล์เสียง</button>
+          {sampleMsg && <div style={{marginTop:'0.8rem',fontSize:'0.82rem',color:'var(--jade)'}}>{sampleMsg}</div>}
+        </div>
       )}
 
       {tab === 'add' && (
