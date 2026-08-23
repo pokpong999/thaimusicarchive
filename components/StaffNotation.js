@@ -18,7 +18,8 @@ function loadVexFlow() {
 // แปลงวรรค (16 ตำแหน่ง) → 4 ห้อง แต่ละห้องเป็น list ของ {keys, duration, isRest}
 function verseToMeasures(positions) {
   const measures = [];
-  for (let m = 0; m < 4; m++) {
+  const nMeasures = Math.max(1, Math.ceil(positions.length / 4));
+  for (let m = 0; m < nMeasures; m++) {
     const slice = positions.slice(m * 4, m * 4 + 4);
     const events = [];
     let p = 0;
@@ -72,13 +73,14 @@ export default function StaffNotation({ verses }) {
         ref.current.appendChild(label);
         ref.current.appendChild(div);
 
+        const positions = parseVerse(v.combined);
+        const measures = verseToMeasures(positions);
+        const rowWidth = measureWidth * measures.length + 60;
+
         const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
         renderer.resize(rowWidth, 110);
         const ctx = renderer.getContext();
         ctx.setFillStyle('#F5F0E8'); ctx.setStrokeStyle('#F5F0E8');
-
-        const positions = parseVerse(v.combined);
-        const measures = verseToMeasures(positions);
 
         let x = 10;
         measures.forEach((events, mi) => {
