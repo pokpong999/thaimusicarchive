@@ -6,6 +6,7 @@ import { supabase } from '../../../lib/supabase';
 import LeafletMap from '../../../components/LeafletMap';
 import CommentSection from '../../../components/CommentSection';
 import ShareBar from '../../../components/ShareBar';
+import { useMe } from '../../../components/Gate';
 
 const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future: 'อนาคต' };
 
@@ -13,6 +14,9 @@ export default function ArchiveDetailClient() {
   const { id } = useParams();
   const [rec, setRec] = useState(null);
   const [notFound, setNotFound] = useState(false);
+  const { isAdmin, user } = useMe();
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState('');
 
   useEffect(() => { load(); }, [id]);
 
@@ -29,6 +33,34 @@ export default function ArchiveDetailClient() {
   const images = (rec.archive_media ?? []).filter(m => m.media_type === 'image');
   const videos = (rec.archive_media ?? []).filter(m => m.media_type === 'youtube');
   const hasPos = rec.lat != null && rec.lng != null;
+  const canEditMedia = isAdmin || (user && rec.created_by === user.id);
+
+  async function addImages(files) {
+    if (!files?.length) return;
+    setBusy(true);
+    for (const file of Array.from(files)) {
+      if (file.size > 5 * 1024 * 1024) { setMsg('⚠ ' + file.name + ' ใหญ่เกิน 5MB'); continue; }
+      const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
+      const path = `${id}/${Date.now()}_${Math.random().toString(36).slice(2,7)}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('archive-images').upload(path, file);
+      if (upErr) { setMsg('⚠ อัปโหลดไม่สำเร็จ: ' + upErr.message); continue; }
+      const { error: insErr } = await supabase.from('archive_media')
+        .insert({ record_id: id, media_type: 'image', storage_path: path });
+      if (insErr) setMsg('⚠ บันทึกไม่สำเร็จ: ' + insErr.message);
+    }
+    await load(); setBusy(false);
+    setMsg(m => m || '✓ เพิ่มรูปแล้ว');
+    setTimeout(() => setMsg(''), 3500);
+  }
+
+  async function delImage(m) {
+    if (!confirm('ลบรูปนี้?')) return;
+    setBusy(true);
+    await supabase.storage.from('archive-images').remove([m.storage_path]);
+    await supabase.from('archive_media').delete().eq('id', m.id);
+    await load(); setBusy(false);
+    setMsg('✓ ลบรูปแล้ว'); setTimeout(() => setMsg(''), 3000);
+  }
 
   return (
     <main className="container" style={{maxWidth:'760px'}}>
@@ -63,14 +95,45 @@ export default function ArchiveDetailClient() {
         </div>
       )}
 
-      {images.length > 0 && (
-        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:'1rem',marginBottom:'1.4rem'}}>
-          {images.map(m => {
-            const url = supabase.storage.from('archive-images').getPublicUrl(m.storage_path).data.publicUrl;
-            return <a href={url} target="_blank" key={m.id}>
-              <img src={url} alt={m.caption ?? ''} style={{width:'100%',borderRadius:'8px',border:'1px solid var(--border)'}} />
-            </a>;
-          })}
+      {(images.length > 0 || canEditMedia) && (
+        <div style={{marginBottom:'1.4rem'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'10px',marginBottom:'0.7rem'}}>
+            <div style={{fontWeight:600,fontSize:'0.9rem'}}>🖼 ภาพประกอบ ({images.length})</div>
+            {canEditMedia && (
+              <label className="btn btn-outline btn-sm" style={{cursor:'pointer',fontSize:'0.72rem'}}>
+                {busy ? '⏳ กำลังอัปโหลด...' : '＋ เพิ่มรูป'}
+                <input type="file" accept="image/*" multiple style={{display:'none'}} disabled={busy}
+                  onChange={e => addImages(e.target.files)} />
+              </label>
+            )}
+            {msg && <span style={{fontSize:'0.75rem',color:'var(--jade)'}}>{msg}</span>}
+          </div>
+          {images.length > 0 ? (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:'1rem'}}>
+              {images.map(m => {
+                const url = supabase.storage.from('archive-images').getPublicUrl(m.storage_path).data.publicUrl;
+                return (
+                  <div key={m.id} style={{position:'relative'}}>
+                    <a href={url} target="_blank">
+                      <img src={url} alt={m.caption ?? ''}
+                        style={{width:'100%',borderRadius:'8px',border:'1px solid var(--border)',display:'block'}} />
+                    </a>
+                    {canEditMedia && (
+                      <button className="btn btn-sm" disabled={busy} onClick={() => delImage(m)}
+                        style={{position:'absolute',right:'8px',top:'8px',background:'rgba(15,27,45,0.9)',
+                          border:'1px solid #C0574B',color:'#E08878',fontSize:'0.7rem'}}>🗑</button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : canEditMedia && (
+            <div style={{height:'120px',border:'1px dashed var(--gold)',borderRadius:'10px',
+              display:'flex',alignItems:'center',justifyContent:'center',color:'var(--muted)',
+              fontSize:'0.82rem',background:'var(--navy3)'}}>
+              ยังไม่มีภาพประกอบ — กด "＋ เพิ่มรูป" เพื่ออัปโหลด (เลือกหลายรูปพร้อมกันได้)
+            </div>
+          )}
         </div>
       )}
 
