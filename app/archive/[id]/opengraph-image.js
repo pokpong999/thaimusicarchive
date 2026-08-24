@@ -42,7 +42,7 @@ export default async function OgImage({ params }) {
   } catch {}
 
   const whatSize = photo
-    ? (what.length > 30 ? 44 : what.length > 16 ? 56 : 68)
+    ? (what.length > 34 ? 50 : what.length > 18 ? 64 : 78)
     : (what.length > 34 ? 54 : what.length > 18 ? 70 : 88);
   const D = (style, ...children) => ({ type: 'div', props: { style: { display: 'flex', ...style }, children } });
 
@@ -65,13 +65,17 @@ export default async function OgImage({ params }) {
     D({ color: '#8A9BB5', fontSize: '22px', opacity: 0.8 }, 'thaimusicarchive.com')
   );
 
+  // มีรูป: ใช้รูปเต็มพื้นหลัง แล้ววางข้อความทับบนฝ้าไล่เฉดให้อ่านชัด
   const tree = D(
-    { width: '100%', height: '100%', background: '#0F1B2D',
+    { width: '100%', height: '100%', position: 'relative', background: '#0F1B2D',
       borderTop: '10px solid #C9A84C', borderBottom: '10px solid #C9A84C' },
     ...(photo ? [
-      { type: 'img', props: { src: photo, width: 470, height: 610,
-        style: { objectFit: 'cover', width: '470px', height: '610px' } } },
-      textCol,
+      { type: 'img', props: { src: photo, width: 1200, height: 630,
+        style: { position: 'absolute', top: 0, left: 0, width: '1200px', height: '630px',
+                 objectFit: 'cover' } } },
+      D({ position: 'absolute', top: 0, left: 0, width: '1200px', height: '630px',
+          background: 'linear-gradient(90deg, rgba(9,17,30,0.97) 0%, rgba(9,17,30,0.93) 42%, rgba(9,17,30,0.55) 72%, rgba(9,17,30,0.30) 100%)' }),
+      D({ position: 'relative', width: '780px', height: '630px' }, textCol),
     ] : [textCol])
   );
 

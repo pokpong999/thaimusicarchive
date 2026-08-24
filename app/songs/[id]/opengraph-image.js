@@ -17,7 +17,7 @@ export default async function OgImage({ params }) {
     if (rows?.[0]?.name_th) name = rows[0].name_th;
   } catch {}
 
-  const fontSize = name.length > 20 ? 68 : name.length > 12 ? 88 : 108;
+  const fontSize = name.length > 26 ? 76 : name.length > 18 ? 96 : name.length > 10 ? 120 : 142;
   const D = (style, ...children) => ({ type: 'div', props: { style: { display: 'flex', ...style }, children } });
 
   const tree = D(
@@ -30,9 +30,10 @@ export default async function OgImage({ params }) {
           display: 'flex', alignItems: 'center', justifyContent: 'center' },
         D({ width: '16px', height: '16px', borderRadius: '50%', background: '#C9A84C' })),
       D({ color: '#8A9BB5', fontSize: '30px' }, 'หอจดหมายเหตุดนตรีไทย - Thai Music Archive')),
-    D({ display: 'flex', flexDirection: 'column', gap: '10px' },
-      D({ color: '#C9A84C', fontSize: '34px' }, 'โน้ตเพลง - เล่นเสียงได้จริง'),
-      D({ color: '#F5F0E8', fontSize: `${fontSize}px`, fontWeight: 700, lineHeight: 1.15 }, name)),
+    D({ display: 'flex', flexDirection: 'column', gap: '6px' },
+      D({ color: '#C9A84C', fontSize: '32px' }, 'โน้ตเพลง · เล่นเสียงได้จริง'),
+      D({ color: '#F5F0E8', fontSize: `${fontSize}px`, fontWeight: 700, lineHeight: 1.12 }, name),
+      D({ width: '160px', height: '7px', background: '#C9A84C', marginTop: '14px' })),
     D({ color: '#4C9A84', fontSize: '26px' }, 'thaimusicarchive.com')
   );
 
