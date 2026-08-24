@@ -263,20 +263,32 @@ export default function NotationPlayer({ verses, lyrics }) {
           drumHits = parsed2.hits; drumLen = parsed2.len;
         }
       }
-      const chingDef = CHING_PATTERNS[level];
-      const chingLen = chingDef.hongs * 4;
-
+      // ฉิ่งตามอัตราของท่อน (คอลัมน์ level ของ song_melody — เพลงเถาท่อนละอัตรา)
+      // + ฉิ่งกำหนดเองของเพลงจังหวะพิเศษ (คอลัมน์ ching: '-'/'ฉ'/'บ' ต่อตำแหน่ง)
+      // จังหวะฉิ่งนับใหม่ทุกต้นท่อน · ถ้าไม่มีข้อมูลใช้อัตราที่เลือกใน dropdown
+      const marks = new Array(totalSteps).fill('');
+      {
+        let lastSec = null, rel = 0, cyc = (CHING_PATTERNS[level]?.hongs ?? 4) * 4;
+        parsed.forEach(pv => {
+          const v = pv.v;
+          if ((v.section ?? null) !== lastSec) {
+            lastSec = v.section ?? null; rel = 0;
+            cyc = (CHING_PATTERNS[v.level || level]?.hongs ?? CHING_PATTERNS[level].hongs) * 4;
+          }
+          const custom = v.ching ? [...v.ching] : null;
+          for (let i = 0; i < pv.len; i++, rel++) {
+            if (custom) marks[pv.offset + i] = custom[i] === 'ฉ' ? 'ฉิ่ง' : custom[i] === 'บ' ? 'ฉับ' : '';
+            else { const pp = (rel % cyc) + 1; marks[pv.offset + i] = pp === cyc / 2 ? 'ฉิ่ง' : pp === cyc ? 'ฉับ' : ''; }
+          }
+        });
+      }
       for (let s = startStep; s < totalSteps; s++) {
         const t = t0 + (s - startStep) * stepDur;
         if (drumHits && drumLen > 0) {
           const pp = (s % drumLen) + 1;
           drumHits.forEach(h => { if (h.pos === pp) q(t, () => playPercussion(ctx, h.syll, t, 0.75)); });
         }
-        if (chingOn) {
-          const cp = (s % chingLen) + 1;
-          const syll = chingDef.hits[cp];
-          if (syll) q(t, () => playPercussion(ctx, syll, t, 0.7));
-        }
+        if (chingOn && marks[s]) { const syll = marks[s]; q(t, () => playPercussion(ctx, syll, t, 0.7)); }
       }
     }
 
