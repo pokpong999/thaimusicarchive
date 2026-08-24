@@ -20,11 +20,12 @@ export default async function OgImage({ params }) {
     if (rows?.[0]?.name_th) name = rows[0].name_th;
   } catch {}
 
-  const fontSize = name.length > 26 ? 76 : name.length > 18 ? 96 : name.length > 10 ? 120 : 142;
+  if (name.length > 44) name = name.slice(0, 43).trim() + '…';
+  const fontSize = name.length > 30 ? 62 : name.length > 22 ? 78 : name.length > 14 ? 100 : 124;
 
   const tree = D(
     { width: '100%', height: '100%', flexDirection: 'column',
-      background: '#0F1B2D', padding: '60px 70px', justifyContent: 'space-between',
+      background: '#0F1B2D', padding: '66px 84px 62px', justifyContent: 'space-between',
       borderTop: '10px solid #C9A84C', borderBottom: '10px solid #C9A84C',
       fontFamily: 'NotoThai' },
     D({ alignItems: 'center', gap: '18px' },
@@ -34,7 +35,7 @@ export default async function OgImage({ params }) {
       D({ color: '#8A9BB5', fontSize: '30px' }, 'หอจดหมายเหตุดนตรีไทย · Thai Music Archive')),
     D({ flexDirection: 'column' },
       D({ color: '#C9A84C', fontSize: '32px', marginBottom: '6px' }, 'โน้ตเพลง · เล่นเสียงได้จริง'),
-      D({ color: '#F5F0E8', fontSize: `${fontSize}px`, fontWeight: 700, lineHeight: 1.12 }, name),
+      D({ color: '#F5F0E8', fontSize: `${fontSize}px`, fontWeight: 700, lineHeight: 1.2, maxWidth: '1000px' }, name),
       D({ width: '160px', height: '7px', background: '#C9A84C', marginTop: '18px' })),
     D({ color: '#4C9A84', fontSize: '26px' }, 'thaimusicarchive.com')
   );

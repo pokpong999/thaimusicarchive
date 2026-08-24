@@ -46,14 +46,17 @@ export default async function OgImage({ params }) {
     }
   } catch {}
 
+  const clip = (t, n) => { t = (t ?? '').trim(); return t.length > n ? t.slice(0, n - 1).trim() + '…' : t; };
+  what = clip(what, 58); who = clip(who, 42); when = clip(when, 30); where = clip(where, 40);
+
   const whatSize = photo
-    ? (what.length > 34 ? 50 : what.length > 18 ? 64 : 78)
-    : (what.length > 34 ? 54 : what.length > 18 ? 70 : 88);
+    ? (what.length > 44 ? 38 : what.length > 30 ? 46 : what.length > 16 ? 56 : 68)
+    : (what.length > 44 ? 42 : what.length > 30 ? 50 : what.length > 16 ? 62 : 78);
 
   const build = (photo) => {
   const textCol = D(
     { flexDirection: 'column', justifyContent: 'space-between', flex: 1, height: '100%',
-      padding: photo ? '48px 54px' : '54px 70px' },
+      padding: photo ? '64px 72px 60px' : '64px 84px 60px' },
     D({ alignItems: 'center', gap: '14px' },
       D({ width: '38px', height: '38px', borderRadius: '50%', border: '3px solid #C9A84C',
           alignItems: 'center', justifyContent: 'center' },
@@ -61,8 +64,8 @@ export default async function OgImage({ params }) {
       D({ color: '#8A9BB5', fontSize: '24px' }, 'หอจดหมายเหตุดนตรีไทย · Thai Music Archive')),
     D({ flexDirection: 'column' },
       when ? D({ color: '#C9A84C', fontSize: '28px', marginBottom: '8px' }, when) : D({}),
-      who ? D({ color: '#8A9BB5', fontSize: '34px', marginBottom: '10px' }, who) : D({}),
-      D({ color: '#F5F0E8', fontSize: `${whatSize}px`, fontWeight: 700, lineHeight: 1.15 }, what),
+      who ? D({ color: '#8A9BB5', fontSize: '30px', marginBottom: '10px' }, who) : D({}),
+      D({ color: '#F5F0E8', fontSize: `${whatSize}px`, fontWeight: 700, lineHeight: 1.22, maxWidth: '100%' }, what),
       where ? D({ color: '#4C9A84', fontSize: '28px', marginTop: '12px' }, '◆ ' + where) : D({})),
     D({ color: '#8A9BB5', fontSize: '22px' }, 'thaimusicarchive.com')
   );
@@ -76,7 +79,7 @@ export default async function OgImage({ params }) {
         style: { position: 'absolute', top: 0, left: 0, width: '1200px', height: '630px', objectFit: 'cover' } }),
       D({ position: 'absolute', top: 0, left: 0, width: '1200px', height: '630px',
           background: 'linear-gradient(90deg, rgba(9,17,30,0.97) 0%, rgba(9,17,30,0.93) 42%, rgba(9,17,30,0.55) 72%, rgba(9,17,30,0.30) 100%)' }),
-      D({ position: 'relative', width: '790px', height: '630px' }, textCol),
+      D({ position: 'relative', width: '760px', height: '630px' }, textCol),
     ] : [textCol])
   );
   };
