@@ -143,8 +143,6 @@ export default function SongDetailClient() {
     setUrl(''); setTitle(''); setShowForm(false);
   }
 
-  if (!song) return <main className="container">กำลังโหลด...</main>;
-
   useEffect(() => {
     if (tab !== 'analysis' || krasuan !== null) return;
     supabase.from('krasuan_catalog').select('section, verse_no, code, pattern')
@@ -154,6 +152,8 @@ export default function SongDetailClient() {
       .eq('song_id', id).order('sentence_no').limit(300)
       .then(({ data }) => setLuktok(data ?? []));
   }, [tab]);
+
+  if (!song) return <main className="container">กำลังโหลด...</main>;
 
   async function uploadAudio() {
     if (!audioFile) { setAudioMsg('⚠ เลือกไฟล์เสียงก่อน'); return; }
