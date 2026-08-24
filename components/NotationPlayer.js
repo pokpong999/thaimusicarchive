@@ -14,7 +14,7 @@ const NOTE_STEP = { 'ด':0, 'ร':1, 'ม':2, 'ฟ':3, 'ซ':4, 'ล':5, 'ท':
 const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
-const SABAT_GAP = 0.06; // ช่องไฟสะบัด (วินาที) — ปรับได้
+const SABAT_DEFAULT = 0.06; // ช่องไฟสะบัดเริ่มต้น (วินาที)
 
 function noteFreq(ch, register) {
   const step = NOTE_STEP[ch];
@@ -81,6 +81,7 @@ export default function NotationPlayer({ verses, lyrics }) {
   const [hand, setHand] = useState('both');
   const [sound, setSound] = useState('real');
   const [ensemble, setEnsemble] = useState('khrueangsai'); // khrueangsai | piphat
+  const [sabatGap, setSabatGap] = useState(SABAT_DEFAULT);
   const [bpm, setBpm] = useState(120);
   const [hongsPerLine, setHongsPerLine] = useState(8);
   const [nathab, setNathab] = useState('none');       // none | ปรบไก่ | สองไม้
@@ -247,7 +248,7 @@ export default function NotationPlayer({ verses, lyrics }) {
           const t = t0 + (pv.offset + p - startStep) * stepDur;
           const run = runMap[li + '-' + p];
           if (run) {
-            run.forEach((n, ni) => { const tt = t - (run.length - 1 - ni) * SABAT_GAP; q(tt, () => scheduleNote(n, tt)); });
+            run.forEach((n, ni) => { const tt = t - (run.length - 1 - ni) * sabatGap; q(tt, () => scheduleNote(n, tt)); });
           } else {
             line[p].forEach(n => q(t, () => scheduleNote(n, t)));
           }
@@ -424,6 +425,14 @@ export default function NotationPlayer({ verses, lyrics }) {
         <select className="filter-select" value={sound} onChange={e => setSound(e.target.value)} disabled={playState !== 'stopped'}>
           {can('player_real') && <option value="real">🎵 เสียงฆ้องวงใหญ่จริง</option>}
           <option value="synth">〰 เสียงสังเคราะห์</option>
+        </select>
+        <select className="filter-select" value={sabatGap} onChange={e => setSabatGap(+e.target.value)}
+          disabled={playState !== 'stopped'} title="ช่องไฟระหว่างเสียงสะบัด">
+          <option value="0.030">สะบัดรัวเร็ว</option>
+          <option value="0.045">สะบัดค่อนข้างเร็ว</option>
+          <option value="0.060">สะบัดปกติ</option>
+          <option value="0.080">สะบัดหนืด</option>
+          <option value="0.100">สะบัดช้า</option>
         </select>
         <select className="filter-select" value={ensemble} onChange={e => setEnsemble(e.target.value)} disabled={playState !== 'stopped'}>
           <option value="khrueangsai">🎻 ระบบเครื่องสาย</option>
