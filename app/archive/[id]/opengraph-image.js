@@ -26,19 +26,23 @@ export default async function OgImage({ params }) {
       when = rows[0].when_text || ''; where = rows[0].where_text || '';
     }
     const mres = await fetch(
-      `${SB}/rest/v1/archive_media?record_id=eq.${encodeURIComponent(params.id)}&media_type=eq.image&select=storage_path&limit=1`,
+      `${SB}/rest/v1/archive_media?record_id=eq.${encodeURIComponent(params.id)}&media_type=eq.image&select=id,storage_path&order=id.asc&limit=4`,
       { headers: { apikey: KEY } }
     );
     const media = await mres.json();
-    if (media?.[0]?.storage_path) {
-      const imgRes = await fetch(`${SB}/storage/v1/object/public/archive-images/${media[0].storage_path}`);
-      if (imgRes.ok) {
+    // ไล่ทีละรูปจนกว่าจะได้รูปที่ขนาดเหมาะกับการฝังในภาพแชร์
+    for (const m of (Array.isArray(media) ? media : [])) {
+      if (!m?.storage_path) continue;
+      try {
+        const imgRes = await fetch(`${SB}/storage/v1/object/public/archive-images/${m.storage_path}`);
+        if (!imgRes.ok) continue;
         const buf = Buffer.from(await imgRes.arrayBuffer());
-        if (buf.length < 4 * 1024 * 1024) {
-          const ct = imgRes.headers.get('content-type') || 'image/jpeg';
-          photo = `data:${ct};base64,${buf.toString('base64')}`;
-        }
-      }
+        if (buf.length > 1.6 * 1024 * 1024) continue;   // ใหญ่ไป ข้ามไปรูปถัดไป
+        const ct = imgRes.headers.get('content-type') || 'image/jpeg';
+        if (!/^image\/(jpeg|png|webp)/.test(ct)) continue;
+        photo = `data:${ct};base64,${buf.toString('base64')}`;
+        break;
+      } catch { /* รูปนี้ใช้ไม่ได้ ลองรูปถัดไป */ }
     }
   } catch {}
 
@@ -46,6 +50,7 @@ export default async function OgImage({ params }) {
     ? (what.length > 34 ? 50 : what.length > 18 ? 64 : 78)
     : (what.length > 34 ? 54 : what.length > 18 ? 70 : 88);
 
+  const build = (photo) => {
   const textCol = D(
     { flexDirection: 'column', justifyContent: 'space-between', flex: 1, height: '100%',
       padding: photo ? '48px 54px' : '54px 70px' },
@@ -62,7 +67,7 @@ export default async function OgImage({ params }) {
     D({ color: '#8A9BB5', fontSize: '22px' }, 'thaimusicarchive.com')
   );
 
-  const tree = D(
+  return D(
     { width: '100%', height: '100%', position: 'relative', background: '#0F1B2D',
       borderTop: '10px solid #C9A84C', borderBottom: '10px solid #C9A84C',
       fontFamily: 'NotoThai' },
@@ -74,12 +79,20 @@ export default async function OgImage({ params }) {
       D({ position: 'relative', width: '790px', height: '630px' }, textCol),
     ] : [textCol])
   );
+  };
+  const tree = build(photo);
 
-  return new ImageResponse(tree, {
+  const opts = {
     ...size,
     fonts: [
       { name: 'NotoThai', data: thaiFont, weight: 700, style: 'normal' },
       { name: 'Latin', data: latinFont, weight: 700, style: 'normal' },
     ],
-  });
+  };
+  try {
+    return new ImageResponse(tree, opts);
+  } catch (e) {
+    // กันพลาด: ถ้าฝังรูปไม่สำเร็จ ยังต้องได้ภาพแชร์แบบข้อความล้วน
+    return new ImageResponse(build(null), opts);
+  }
 }
