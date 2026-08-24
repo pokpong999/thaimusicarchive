@@ -30,6 +30,20 @@ export default function AdminPage() {
   const [memberQ, setMemberQ] = useState('');
   const [memberList, setMemberList] = useState([]);
   const [memberMsg, setMemberMsg] = useState('');
+  const [permRows, setPermRows] = useState([]);
+  const [permMsg, setPermMsg] = useState('');
+  async function loadPerms() {
+    const { data } = await supabase.from('feature_permissions').select('*').order('sort');
+    setPermRows(data ?? []);
+  }
+  async function togglePerm(row, tierKey) {
+    const next = { ...row, [tierKey]: !row[tierKey] };
+    setPermRows(permRows.map(r => r.feature_key === row.feature_key ? next : r));
+    const { error } = await supabase.from('feature_permissions')
+      .update({ [tierKey]: next[tierKey] }).eq('feature_key', row.feature_key);
+    setPermMsg(error ? '⚠ ' + error.message : `✓ ${row.label} → มีผลทันที`);
+    setTimeout(() => setPermMsg(''), 2500);
+  }
   const [songs, setSongs] = useState([]);
   const [selSong, setSelSong] = useState('');
   const [url, setUrl] = useState('');
@@ -339,7 +353,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['members','👥 สมาชิก']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -608,6 +622,52 @@ export default function AdminPage() {
         </>
       )}
 
+      {tab === 'perm' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🔐 ตารางสิทธิ์การมองเห็น</div>
+          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
+            ติ๊ก = เปิดให้เห็น/ใช้งาน · บันทึกและมีผลทันทีทั้งเว็บ · คอลัมน์ Admin ล็อกเปิดเสมอ
+            {permRows.length === 0 && <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadPerms}>โหลดตาราง</button>}
+          </div>
+          {permMsg && <div style={{fontSize:'0.78rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{permMsg}</div>}
+          {permRows.length > 0 && (
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
+                <thead><tr style={{borderBottom:'2px solid var(--border)'}}>
+                  <th style={{textAlign:'left',padding:'6px'}}>สิทธิ์</th>
+                  <th style={{padding:'6px'}}>👤 ผู้เยี่ยมชม</th>
+                  <th style={{padding:'6px'}}>สมาชิกฟรี</th>
+                  <th style={{padding:'6px'}}>💎 อุปถัมภ์</th>
+                  <th style={{padding:'6px'}}>Admin</th>
+                </tr></thead>
+                <tbody>
+                  {permRows.map((row, i) => (
+                    <>
+                      {(i === 0 || permRows[i-1].section !== row.section) && (
+                        <tr key={row.section}><td colSpan={5} style={{padding:'10px 6px 4px',color:'var(--gold)',fontWeight:700,fontSize:'0.75rem'}}>▸ {row.section}</td></tr>
+                      )}
+                      <tr key={row.feature_key} style={{borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
+                        <td style={{padding:'6px'}}>{row.label}</td>
+                        {['guest','free','premium'].map(tk => (
+                          <td key={tk} style={{textAlign:'center'}}>
+                            <input type="checkbox" checked={!!row[tk]} onChange={() => togglePerm(row, tk)}
+                              style={{width:'17px',height:'17px',accentColor:'var(--gold)',cursor:'pointer'}} />
+                          </td>
+                        ))}
+                        <td style={{textAlign:'center'}}>
+                          <input type="checkbox" checked disabled style={{width:'17px',height:'17px',accentColor:'var(--jade)'}} />
+                        </td>
+                      </tr>
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {permRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดตาราง" (ต้องรัน thma_permissions.sql ก่อน)</div>}
+        </div>
+      )}
+
       {tab === 'members' && (
         <div className="card">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.8rem'}}>
@@ -659,6 +719,52 @@ export default function AdminPage() {
               <button className="btn btn-jade btn-sm" style={{marginTop:'0.4rem'}} onClick={() => saveNathab(row)}>💾 บันทึก</button>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'perm' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🔐 ตารางสิทธิ์การมองเห็น</div>
+          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
+            ติ๊ก = เปิดให้เห็น/ใช้งาน · บันทึกและมีผลทันทีทั้งเว็บ · คอลัมน์ Admin ล็อกเปิดเสมอ
+            {permRows.length === 0 && <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadPerms}>โหลดตาราง</button>}
+          </div>
+          {permMsg && <div style={{fontSize:'0.78rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{permMsg}</div>}
+          {permRows.length > 0 && (
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
+                <thead><tr style={{borderBottom:'2px solid var(--border)'}}>
+                  <th style={{textAlign:'left',padding:'6px'}}>สิทธิ์</th>
+                  <th style={{padding:'6px'}}>👤 ผู้เยี่ยมชม</th>
+                  <th style={{padding:'6px'}}>สมาชิกฟรี</th>
+                  <th style={{padding:'6px'}}>💎 อุปถัมภ์</th>
+                  <th style={{padding:'6px'}}>Admin</th>
+                </tr></thead>
+                <tbody>
+                  {permRows.map((row, i) => (
+                    <>
+                      {(i === 0 || permRows[i-1].section !== row.section) && (
+                        <tr key={row.section}><td colSpan={5} style={{padding:'10px 6px 4px',color:'var(--gold)',fontWeight:700,fontSize:'0.75rem'}}>▸ {row.section}</td></tr>
+                      )}
+                      <tr key={row.feature_key} style={{borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
+                        <td style={{padding:'6px'}}>{row.label}</td>
+                        {['guest','free','premium'].map(tk => (
+                          <td key={tk} style={{textAlign:'center'}}>
+                            <input type="checkbox" checked={!!row[tk]} onChange={() => togglePerm(row, tk)}
+                              style={{width:'17px',height:'17px',accentColor:'var(--gold)',cursor:'pointer'}} />
+                          </td>
+                        ))}
+                        <td style={{textAlign:'center'}}>
+                          <input type="checkbox" checked disabled style={{width:'17px',height:'17px',accentColor:'var(--jade)'}} />
+                        </td>
+                      </tr>
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {permRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดตาราง" (ต้องรัน thma_permissions.sql ก่อน)</div>}
         </div>
       )}
 

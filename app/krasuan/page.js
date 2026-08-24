@@ -1,4 +1,5 @@
 'use client';
+import { FeaturePage } from '../../components/Gate';
 import { useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
@@ -44,6 +45,7 @@ export default function KrasuanPage() {
   const visual = code.split('').map(l => CODE_MAP[l] ?? '????').join(' | ');
 
   return (
+    <FeaturePage feature="page_krasuan">
     <main className="container" style={{maxWidth:'760px'}}>
       <div className="section-title" style={{fontSize:'1.2rem'}}>🥁 ค้นหากระสวน (Krasuan Code)</div>
       <div className="section-subtitle">เลือกรหัส 4 ตัว (1 ตัว = 1 ห้อง) แล้วดูว่ากระสวนนี้ปรากฏในเพลงใดบ้าง · ฐานข้อมูล 19,963 วรรค</div>
@@ -110,5 +112,6 @@ export default function KrasuanPage() {
         </>
       )}
     </main>
+    </FeaturePage>
   );
 }

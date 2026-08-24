@@ -1,4 +1,5 @@
 'use client';
+import { usePermissions } from '../../components/Gate';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -7,6 +8,7 @@ import LeafletMap from '../../components/LeafletMap';
 const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future: 'อนาคต' };
 
 export default function ArchivePage() {
+  const { can } = usePermissions();
   const [records, setRecords] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [myId, setMyId] = useState(null);
@@ -107,7 +109,7 @@ function eraColor(year, minY, maxY) {
           <div className="section-subtitle">บันทึกเหตุการณ์ อดีต ปัจจุบัน อนาคต · {records.length} รายการ</div>
         </div>
         {user
-          ? <Link href="/archive/new"><button className="btn btn-primary">✚ บันทึกเหตุการณ์</button></Link>
+          ? (can('archive_submit') ? <Link href="/archive/new"><button className="btn btn-primary">✚ บันทึกเหตุการณ์</button></Link> : null)
           : <Link href="/login"><button className="btn btn-outline btn-sm">เข้าสู่ระบบเพื่อบันทึก</button></Link>}
       </div>
 

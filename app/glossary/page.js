@@ -1,5 +1,5 @@
 'use client';
-import { AdminOnlyPage } from '../../components/Gate';
+import { FeaturePage } from '../../components/Gate';
 const TERMS = [
   ['กระสวน', 'Krasuan', 'รูปแบบจังหวะของ 1 วรรค (16 ตำแหน่ง) ไม่สนใจระดับเสียง', 'The rhythmic pattern of one phrase (16 positions), pitch ignored'],
   ['วรรค', 'Wak (phrase)', 'หน่วยทำนอง 4 ห้อง = 16 ตำแหน่งโน้ต', 'A melodic unit of 4 measures = 16 note positions'],
@@ -20,7 +20,7 @@ const TERMS = [
 
 export default function GlossaryPage() {
   return (
-    <AdminOnlyPage>
+    <FeaturePage feature="page_glossary">
     <main className="container" style={{maxWidth:'760px'}}>
       <div className="section-title" style={{fontSize:'1.3rem'}}>📖 อภิธานศัพท์ · Glossary</div>
       <div className="section-subtitle">ศัพท์ดนตรีไทยพื้นฐานสำหรับผู้ใช้ฐานข้อมูล · Essential terms for using this archive</div>
@@ -37,6 +37,6 @@ export default function GlossaryPage() {
         ))}
       </div>
     </main>
-    </AdminOnlyPage>
+    </FeaturePage>
   );
 }

@@ -1,5 +1,5 @@
 'use client';
-import { AdminOnlyPage } from '../../components/Gate';
+import { FeaturePage } from '../../components/Gate';
 const CODES = [
   ['O','----'],['A','X---'],['B','-X--'],['C','--X-'],['D','---X'],['E','XX--'],['F','X-X-'],['G','X--X'],
   ['H','-XX-'],['I','-X-X'],['J','--XX'],['K','XXX-'],['L','XX-X'],['M','X-XX'],['N','-XXX'],['P','XXXX'],
@@ -7,7 +7,7 @@ const CODES = [
 
 export default function SpecPage() {
   return (
-    <AdminOnlyPage>
+    <FeaturePage feature="page_spec">
     <main className="container" style={{maxWidth:'760px',lineHeight:2}}>
       <div className="section-title" style={{fontSize:'1.35rem'}}>Krasuan Code Standard v1.0</div>
       <div className="section-subtitle">มาตรฐานรหัสกระสวนเพลงไทย · The standard encoding for Thai classical music rhythmic patterns</div>
@@ -53,6 +53,6 @@ export default function SpecPage() {
       </div>
       <a href="/krasuan"><button className="btn btn-primary btn-sm">🥁 ทดลองค้นกระสวน · Try Krasuan Search</button></a>
     </main>
-    </AdminOnlyPage>
+    </FeaturePage>
   );
 }

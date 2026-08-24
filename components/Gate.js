@@ -44,3 +44,55 @@ export function PremiumLock({ feature = 'ฟีเจอร์นี้' }) {
     </div>
   );
 }
+
+// ── ระบบสิทธิ์รายฟีเจอร์ (อ่านจากตาราง feature_permissions, realtime) ──
+let _permCache = null;
+export function usePermissions() {
+  const me = useMe();
+  const [perms, setPerms] = useState(_permCache);
+  useEffect(() => {
+    let ch = null;
+    async function load() {
+      const { data } = await supabase.from('feature_permissions').select('*');
+      _permCache = {};
+      (data ?? []).forEach(r => { _permCache[r.feature_key] = r; });
+      setPerms({ ..._permCache });
+    }
+    if (!_permCache) load(); else setPerms(_permCache);
+    try {
+      ch = supabase.channel('perm-live')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'feature_permissions' }, load)
+        .subscribe();
+    } catch (e) {}
+    return () => { if (ch) supabase.removeChannel(ch); };
+  }, []);
+  const tier = me.loading ? null
+    : me.isAdmin ? 'admin' : !me.user ? 'guest' : (me.tier === 'premium' ? 'premium' : 'free');
+  function can(key) {
+    if (tier === 'admin') return true;
+    const r = perms?.[key];
+    if (!r) return true;                 // ไม่มีในตาราง = เปิด
+    return !!r[tier ?? 'guest'];
+  }
+  return { can, tier, isAdmin: me.isAdmin, user: me.user,
+    loading: me.loading || perms == null };
+}
+
+// ห่อทั้งหน้า: เปิดตามตารางสิทธิ์
+export function FeaturePage({ feature, children }) {
+  const { can, loading, user } = usePermissions();
+  if (loading) return <main className="container" style={{textAlign:'center',paddingTop:'4rem',color:'var(--muted)'}}>กำลังโหลด...</main>;
+  if (can(feature)) return children;
+  return (
+    <main className="container" style={{maxWidth:'560px',textAlign:'center',paddingTop:'4rem'}}>
+      <div style={{fontSize:'2.5rem'}}>🚧</div>
+      <div className="section-title" style={{fontSize:'1.15rem',margin:'0.8rem 0'}}>ส่วนนี้ยังไม่เปิดสำหรับบัญชีของคุณ</div>
+      <div style={{color:'var(--muted)',fontSize:'0.88rem',lineHeight:1.9}}>
+        {!user ? 'ลองเข้าสู่ระบบ หรือส่วนนี้อาจอยู่ระหว่างปรับปรุง' : 'ส่วนนี้อาจอยู่ระหว่างปรับปรุง หรือเปิดเฉพาะสมาชิกอุปถัมภ์'}</div>
+      <div style={{display:'flex',gap:'10px',justifyContent:'center',marginTop:'1.2rem'}}>
+        <a href="/premium"><button className="btn btn-primary btn-sm">💎 สมาชิกอุปถัมภ์</button></a>
+        <a href="/"><button className="btn btn-outline btn-sm">← หน้าแรก</button></a>
+      </div>
+    </main>
+  );
+}

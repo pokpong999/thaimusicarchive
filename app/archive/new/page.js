@@ -1,4 +1,5 @@
 'use client';
+import { FeaturePage } from '../../../components/Gate';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../../lib/supabase';
@@ -90,6 +91,7 @@ export default function NewArchiveRecord() {
   );
 
   return (
+    <FeaturePage feature="archive_submit">
     <main className="container" style={{maxWidth:'640px'}}>
       <Link href="/archive"><span style={{color:'var(--muted)',fontSize:'0.8rem'}}>← กลับหอจดหมายเหตุ</span></Link>
       <div className="card" style={{marginTop:'1rem'}}>
@@ -181,5 +183,6 @@ export default function NewArchiveRecord() {
         {msg && <div style={{marginTop:'0.8rem',fontSize:'0.82rem',color:'var(--jade)'}}>{msg}</div>}
       </div>
     </main>
+    </FeaturePage>
   );
 }

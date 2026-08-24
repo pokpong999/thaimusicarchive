@@ -26,10 +26,10 @@ function dl(blob, filename) {
   URL.revokeObjectURL(a.href);
 }
 
-import { useMe } from './Gate';
+import { usePermissions } from './Gate';
 
 export default function ExportBar({ song, instrument, verses, targetId }) {
-  const { loading: meLoading, isPremium } = useMe();
+  const { loading: meLoading, can } = usePermissions();
   const [busy, setBusy] = useState('');
   const base = `${song.id}_${song.name_th}_${instrument}`.replace(/\s+/g, '_');
 
@@ -120,7 +120,7 @@ export default function ExportBar({ song, instrument, verses, targetId }) {
     </button>
   );
 
-  if (!meLoading && !isPremium) {
+  if (!meLoading && !can('export') && !can('print')) {
     return (
       <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
         <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>🖨 พิมพ์/ดาวน์โหลดโน้ต:</span>
@@ -134,9 +134,12 @@ export default function ExportBar({ song, instrument, verses, targetId }) {
   return (
     <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
       <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>ดาวน์โหลด:</span>
-      <a href={`/songs/${song?.id}/print`} className="btn btn-sm"
+      {!can('export') && <a href="/premium" style={{fontSize:'0.7rem',color:'var(--gold)'}}>💎 ดาวน์โหลดไฟล์สำหรับสมาชิกอุปถัมภ์</a>}
+      {can('export') && <>
+      </>}
+      {can('print') && <a href={`/songs/${song?.id}/print`} className="btn btn-sm"
         style={{background:'var(--gold)',color:'var(--navy)',fontWeight:600,fontSize:'0.72rem'}}>
-        🖨 ฉบับพิมพ์ / PDF สวย</a>
+        🖨 ฉบับพิมพ์ / PDF สวย</a>}
       <B id="docx" label="📄 DOCX" fn={exportDocx} />
       <B id="pdf" label="📕 PDF" fn={exportPdf} />
       <B id="jpg" label="🖼 JPG" fn={exportJpg} />

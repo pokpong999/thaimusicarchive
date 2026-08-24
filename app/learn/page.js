@@ -1,5 +1,5 @@
 'use client';
-import { AdminOnlyPage } from '../../components/Gate';
+import { FeaturePage } from '../../components/Gate';
 import { useState } from 'react';
 import { thaiToKeys } from '../../lib/thnotation';
 import { playPercussion } from '../../lib/nathab';
@@ -25,7 +25,7 @@ export default function LearnPage() {
   }).join('');
 
   return (
-    <AdminOnlyPage>
+    <FeaturePage feature="page_learn">
     <main className="container" style={{maxWidth:'720px',lineHeight:1.9}}>
       <div className="section-title" style={{fontSize:'1.3rem'}}>🎓 เรียนรู้ · Learn</div>
 
@@ -75,6 +75,6 @@ export default function LearnPage() {
         <a href="/" style={{color:'var(--gold2)'}}>🎼 เปิดโน้ตเพลงจริง 300 เพลง</a>
       </div>
     </main>
-    </AdminOnlyPage>
+    </FeaturePage>
   );
 }

@@ -1,4 +1,5 @@
 'use client';
+import { FeaturePage } from '../../components/Gate';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { thaiToKeys } from '../../lib/thnotation';
@@ -40,6 +41,7 @@ export default function ComparePage() {
       .then(({ data }) => setSongs(data ?? []));
   }, []);
   return (
+    <FeaturePage feature="page_compare">
     <main className="container" style={{maxWidth:'1100px'}}>
       <div className="section-title" style={{fontSize:'1.2rem'}}>⚖️ เปรียบเทียบเพลง</div>
       <div className="section-subtitle">เปิดโน้ต 2 เพลงคู่กัน — เหมาะสำหรับเทียบอัตราจังหวะของเพลงเถา หรือทางต่างสำนัก</div>
@@ -49,5 +51,6 @@ export default function ComparePage() {
         <SongCol side="ข" songs={songs} sel={b} setSel={setB} />
       </div>
     </main>
+    </FeaturePage>
   );
 }

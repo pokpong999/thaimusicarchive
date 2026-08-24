@@ -1,4 +1,5 @@
 'use client';
+import { FeaturePage } from '../../components/Gate';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
@@ -30,6 +31,7 @@ export default function TimelinePage() {
   }, []);
 
   return (
+    <FeaturePage feature="page_timeline">
     <main className="container" style={{maxWidth:'720px'}}>
       <div className="section-title" style={{fontSize:'1.2rem'}}>🕰 เส้นเวลาดนตรีไทย</div>
       <div className="section-subtitle">เหตุการณ์ในจดหมายเหตุ เรียงตามปี พ.ศ.</div>
@@ -56,5 +58,6 @@ export default function TimelinePage() {
         ))}
       </div>
     </main>
+    </FeaturePage>
   );
 }

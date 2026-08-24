@@ -1,4 +1,5 @@
 'use client';
+import { usePermissions } from './Gate';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadGongSamples, playSampleNote, samplesAvailable } from '../lib/sampler';
@@ -75,7 +76,14 @@ function synthNote(ctx, freq, time, dur, gain = 0.45) {
 const REG_LABEL = { '-1': 'ต่ำ', '0': 'กลาง', '1': 'สูง' };
 
 export default function NotationPlayer({ verses, lyrics }) {
+  const { can } = usePermissions();
   const [mode, setMode] = useState('combined');
+  useEffect(() => {
+    if (!can('player_staff') && mode === 'staff') setMode('combined');
+    if (!can('player_hands') && ['hands','khim','vocal'].includes(mode)) setMode('combined');
+    if (!can('player_real') && sound === 'real') setSound('synth');
+    if (!can('player_perc') && nathab !== 'none') setNathab('none');
+  }, [can, mode, sound, nathab]);
   const [hand, setHand] = useState('both');
   const [sound, setSound] = useState('real');
   const [bpm, setBpm] = useState(120);
@@ -366,26 +374,26 @@ export default function NotationPlayer({ verses, lyrics }) {
           </>
         )}
         <select className="filter-select" value={sound} onChange={e => setSound(e.target.value)} disabled={playState !== 'stopped'}>
-          <option value="real">🎵 เสียงฆ้องวงใหญ่จริง</option>
+          {can('player_real') && <option value="real">🎵 เสียงฆ้องวงใหญ่จริง</option>}
           <option value="synth">〰 เสียงสังเคราะห์</option>
         </select>
         <select className="filter-select" value={mode} onChange={e => setMode(e.target.value)}>
           <option value="combined">บรรทัดเดียว (ทำนองรวม)</option>
-          <option value="hands">สองบรรทัด (แยกมือ R/L)</option>
-          <option value="khim">สามบรรทัด (แบบขิม)</option>
-          <option value="vocal">โน้ตขับร้อง (มีเนื้อ)</option>
-          <option value="staff">โน้ตสากล 5 เส้น</option>
+          {can('player_hands') && <option value="hands">สองบรรทัด (แยกมือ R/L)</option>}
+          {can('player_hands') && <option value="khim">สามบรรทัด (แบบขิม)</option>}
+          {can('player_hands') && <option value="vocal">โน้ตขับร้อง (มีเนื้อ)</option>}
+          {can('player_staff') && <option value="staff">โน้ตสากล 5 เส้น</option>}
         </select>
         <select className="filter-select" value={hand} onChange={e => setHand(e.target.value)} disabled={playState !== 'stopped'}>
           <option value="both">🔊 ทั้งสองมือ</option>
           <option value="R">🔊 มือขวา</option>
           <option value="L">🔊 มือซ้าย</option>
         </select>
-        <select className="filter-select" value={nathab} onChange={e => setNathab(e.target.value)} disabled={playState !== 'stopped'}>
+        {can('player_perc') && <select className="filter-select" value={nathab} onChange={e => setNathab(e.target.value)} disabled={playState !== 'stopped'}>
           <option value="none">🥁 ไม่มีกลอง</option>
           <option value="ปรบไก่">หน้าทับปรบไก่</option>
           <option value="สองไม้">หน้าทับสองไม้</option>
-        </select>
+        </select>}
         {nathab !== 'none' && (
           <select className="filter-select" value={drumInst} onChange={e => setDrumInst(e.target.value)} disabled={playState !== 'stopped'}>
             <option value="ตะโพน">ตะโพน</option>

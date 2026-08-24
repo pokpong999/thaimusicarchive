@@ -1,4 +1,5 @@
 'use client';
+import { FeaturePage } from '../../components/Gate';
 import { useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
@@ -29,6 +30,7 @@ export default function SearchPage() {
   const total = songs.length + records.length + people.length;
 
   return (
+    <FeaturePage feature="page_search">
     <main className="container" style={{maxWidth:'760px'}}>
       <div className="section-title" style={{fontSize:'1.2rem'}}>🔍 ค้นหาทั้งเว็บ</div>
       <div style={{display:'flex',gap:'8px',margin:'1rem 0 1.5rem'}}>
@@ -75,5 +77,6 @@ export default function SearchPage() {
         </div>
       )}
     </main>
+    </FeaturePage>
   );
 }

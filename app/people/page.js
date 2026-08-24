@@ -1,4 +1,5 @@
 'use client';
+import { FeaturePage } from '../../components/Gate';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
@@ -22,6 +23,7 @@ export default function PeoplePage() {
   const shown = q ? people.filter(([n]) => n.includes(q)) : people;
 
   return (
+    <FeaturePage feature="page_people">
     <main className="container" style={{maxWidth:'760px'}}>
       <div className="section-title" style={{fontSize:'1.2rem'}}>👥 ทำเนียบบุคคลในจดหมายเหตุ</div>
       <div className="section-subtitle">ครูดนตรี ศิลปิน และบุคคลในประวัติศาสตร์ดนตรีไทย · รวบรวมอัตโนมัติจากบันทึกจดหมายเหตุ</div>
@@ -39,5 +41,6 @@ export default function PeoplePage() {
       </div>
       {people.length === 0 && <div style={{color:'var(--muted)',marginTop:'1rem'}}>ยังไม่มีข้อมูล</div>}
     </main>
+    </FeaturePage>
   );
 }

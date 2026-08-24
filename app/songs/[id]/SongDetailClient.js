@@ -6,9 +6,11 @@ import { supabase, extractYouTubeId } from '../../../lib/supabase';
 import NotationPlayer from '../../../components/NotationPlayer';
 import ExportBar from '../../../components/ExportBar';
 import CommentSection from '../../../components/CommentSection';
+import { usePermissions } from '../../../components/Gate';
 import ShareBar from '../../../components/ShareBar';
 
 export default function SongDetailClient() {
+  const { can } = usePermissions();
   const { id } = useParams();
   const [song, setSong] = useState(null);
   const [melody, setMelody] = useState([]);
@@ -178,13 +180,18 @@ export default function SongDetailClient() {
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   }
 
-  const TABS = [
+  const TABS_ALL = [
     ['history', '📜 ประวัติเพลง'],
     ['notation', '♪ โน้ตเพลง'],
     ['videos', `🎬 วิดีโอ (${videos.length})`],
     ['analysis', '📊 วิเคราะห์'],
     ['audio', `🔊 เสียง (${audios.length})`],
   ];
+  const TABS = TABS_ALL.filter(([k]) =>
+    (k !== 'analysis' || can('tab_analysis')) &&
+    (k !== 'videos' || can('tab_videos')) &&
+    (k !== 'audio' || can('tab_audio')));
+
 
   return (
     <main className="container">
@@ -201,8 +208,8 @@ export default function SongDetailClient() {
           ✍️ เพิ่มข้อมูลโดย: {songOwner}</div>}
         <div style={{marginTop:'0.8rem',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}}>
           <ShareBar title={song.name_th + ' — หอจดหมายเหตุดนตรีไทย'} />
-          <button className="btn btn-outline btn-sm" style={{fontSize:'0.7rem'}} onClick={copyCitation}>
-            {copied ? '✓ คัดลอกแล้ว' : '📚 คัดลอกการอ้างอิง'}</button>
+          {can('cite') && <button className="btn btn-outline btn-sm" style={{fontSize:'0.7rem'}} onClick={copyCitation}>
+            {copied ? '✓ คัดลอกแล้ว' : '📚 คัดลอกการอ้างอิง'}</button>}
         </div>
         <div className="detail-meta">
           <div className="meta-pill"><span className="meta-label">วรรค</span>
@@ -491,7 +498,8 @@ export default function SongDetailClient() {
           )}
         </>
       )}
-      <CommentSection targetType="song" targetId={id} />
+      {can('comments') ? <CommentSection targetType="song" targetId={id} />
+        : <div style={{fontSize:'0.75rem',color:'var(--muted)',margin:'1rem 0'}}>เข้าสู่ระบบเพื่อแสดงความคิดเห็น</div>}
     </main>
   );
 }

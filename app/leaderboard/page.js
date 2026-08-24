@@ -1,4 +1,5 @@
 'use client';
+import { FeaturePage } from '../../components/Gate';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import Link from 'next/link';
@@ -17,6 +18,7 @@ export default function LeaderboardPage() {
   }, []);
 
   return (
+    <FeaturePage feature="page_leaderboard">
     <main className="container" style={{maxWidth:'760px'}}>
       <div className="section-title">ทำเนียบนักจดหมายเหตุ</div>
       <div className="section-subtitle">
@@ -79,5 +81,6 @@ export default function LeaderboardPage() {
         <b style={{color:'var(--cream)'}}>วิธีได้แต้ม:</b> วิดีโอเพลงได้รับอนุมัติ +10 · บันทึกจดหมายเหตุได้รับอนุมัติ +10 · โบนัสบันทึกที่มีทั้งรูปและพิกัด +5
       </div>
     </main>
+    </FeaturePage>
   );
 }
