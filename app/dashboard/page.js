@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import RankBadge from '../../components/RankBadge';
+import Avatar from '../../components/Avatar';
 import { getRank, getNextRank } from '../../lib/ranks';
 
 const Status = ({ ok }) => (
@@ -106,12 +107,15 @@ export default function DashboardPage() {
       {/* สรุปบรรดาศักดิ์ */}
       <div className="card" style={{borderColor:'rgba(201,168,76,0.35)'}}>
         <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'1rem'}}>
-          <div>
+          <div style={{display:'flex',gap:'1rem',alignItems:'center'}}>
+            <Avatar path={profile?.avatar_url} name={profile?.display_name} size={56} />
+            <div>
             <div style={{fontSize:'1.15rem',fontWeight:700}}>
               {profile?.display_name ?? 'สมาชิก'} <RankBadge points={pts} />
             </div>
             <div style={{fontSize:'0.78rem',color:'var(--muted)',marginTop:'4px'}}>
               ผลงานอนุมัติแล้ว {totalApproved} ชิ้น · {pts.toLocaleString()} แต้ม
+            </div>
             </div>
           </div>
           <Link href="/profile"><button className="btn btn-outline btn-sm">✏️ แก้โปรไฟล์</button></Link>

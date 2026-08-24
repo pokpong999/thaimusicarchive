@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import Avatar from '../../components/Avatar';
 import { getRank, getNextRank, RANKS } from '../../lib/ranks';
 import RankBadge from '../../components/RankBadge';
 
@@ -9,7 +10,7 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.from('profiles').select('id, display_name, points, role')
+    supabase.from('profiles').select('id, display_name, points, role, avatar_url')
       .order('points', { ascending: false, nullsFirst: false }).limit(100)
       .then(({ data }) => { setProfiles(data ?? []); setLoading(false); });
   }, []);
@@ -52,7 +53,12 @@ export default function LeaderboardPage() {
                     <td style={{fontFamily:'monospace',color: i<3 ? 'var(--gold)' : 'var(--muted)',fontWeight: i<3?700:400}}>
                       {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                     </td>
-                    <td style={{fontWeight:500}}>{p.display_name ?? 'ไม่ระบุชื่อ'}</td>
+                    <td style={{fontWeight:500}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                        <Avatar path={p.avatar_url} name={p.display_name} size={28} />
+                        {p.display_name ?? 'ไม่ระบุชื่อ'}
+                      </div>
+                    </td>
                     <td><RankBadge points={p.points} /></td>
                     <td style={{textAlign:'right',fontFamily:'monospace',color:'var(--jade)'}}>{(p.points ?? 0).toLocaleString()}</td>
                     <td style={{fontSize:'0.72rem',color:'var(--muted)'}}>

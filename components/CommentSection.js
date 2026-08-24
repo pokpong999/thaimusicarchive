@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import RankBadge from './RankBadge';
+import Avatar from './Avatar';
 
 export default function CommentSection({ targetType, targetId }) {
   const [user, setUser] = useState(null);
@@ -18,7 +19,7 @@ export default function CommentSection({ targetType, targetId }) {
 
   async function load() {
     const { data } = await supabase.from('comments')
-      .select('*, profiles(display_name, points, role)')
+      .select('*, profiles(display_name, points, role, avatar_url)')
       .eq('target_type', targetType).eq('target_id', String(targetId))
       .order('created_at', { ascending: false }).limit(100);
     setComments(data ?? []);
@@ -80,6 +81,7 @@ export default function CommentSection({ targetType, targetId }) {
           <div key={c.id} className="card" style={{padding:'0.9rem',marginBottom:'0.6rem'}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'8px'}}>
               <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
+                <Avatar path={c.profiles?.avatar_url} name={c.profiles?.display_name} size={26} />
                 <span style={{fontWeight:600,fontSize:'0.84rem'}}>{c.profiles?.display_name ?? 'สมาชิก'}</span>
                 <RankBadge points={c.profiles?.points} />
                 <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>

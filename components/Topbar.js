@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import RankBadge from './RankBadge';
+import Avatar from './Avatar';
 
 export default function Topbar() {
   const [user, setUser] = useState(null);
@@ -22,7 +23,7 @@ export default function Topbar() {
   }, []);
 
   async function loadProfile(uid) {
-    const { data } = await supabase.from('profiles').select('role, points, display_name').eq('id', uid).single();
+    const { data } = await supabase.from('profiles').select('role, points, display_name, avatar_url').eq('id', uid).single();
     setProfile(data);
   }
 
@@ -55,6 +56,7 @@ export default function Topbar() {
       <div className="topbar-right">
         {user ? (
           <>
+            <Avatar path={profile?.avatar_url} name={profile?.display_name} size={30} />
             <RankBadge points={profile?.points} showPoints />
             <Link href="/profile"><span style={{fontSize:'0.78rem',color:'var(--muted)',cursor:'pointer',textDecoration:'underline dotted'}}>
               {profile?.display_name ?? user.email}</span></Link>
