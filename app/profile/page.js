@@ -58,8 +58,10 @@ export default function ProfilePage() {
   );
   if (!p) return <main className="container">กำลังโหลด...</main>;
 
-  const F = ({ k, label, ph }) => (
-    <div className="form-group">
+  // เรียกเป็นฟังก์ชันธรรมดา ไม่ประกาศเป็นคอมโพเนนต์ใหม่ทุก render
+  // (ถ้าประกาศเป็นคอมโพเนนต์ในนี้ React จะสร้างช่องกรอกใหม่ทุกครั้งที่พิมพ์ → เคอร์เซอร์หลุด)
+  const F = (k, label, ph) => (
+    <div className="form-group" key={k}>
       <label className="form-label">{label}</label>
       <input className="form-input" value={p[k] ?? ''} onChange={e => set(k, e.target.value)} placeholder={ph} />
     </div>
@@ -83,11 +85,11 @@ export default function ProfilePage() {
             <div style={{fontSize:'0.68rem',color:'var(--muted)',marginTop:'4px'}}>JPG/PNG ไม่เกิน 3MB</div>
           </div>
         </div>
-        <F k="display_name" label="ชื่อที่แสดง *" ph="ชื่อ-นามสกุล หรือนามแฝง" />
-        <F k="phone" label="เบอร์โทร" ph="08x-xxx-xxxx" />
-        <F k="line_id" label="LINE ID" ph="" />
-        <F k="organization" label="สำนัก / วง / สถาบัน" ph="เช่น วิทยาลัยนาฏศิลป" />
-        <F k="province" label="จังหวัด" ph="" />
+        {F('display_name', 'ชื่อที่แสดง *', 'ชื่อ-นามสกุล หรือนามแฝง')}
+        {F('phone', 'เบอร์โทร', '08x-xxx-xxxx')}
+        {F('line_id', 'LINE ID', '')}
+        {F('organization', 'สำนัก / วง / สถาบัน', 'เช่น วิทยาลัยนาฏศิลป')}
+        {F('province', 'จังหวัด', '')}
         <div className="form-group">
           <label className="form-label">แนะนำตัว</label>
           <textarea className="form-input" rows="3" value={p.bio ?? ''}
