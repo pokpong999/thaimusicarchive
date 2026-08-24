@@ -423,7 +423,7 @@ export default function NotationPlayer({ verses, lyrics }) {
         <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>💡 กดที่ห้องใดก็ได้เพื่อเล่นจากตรงนั้น</span>
       </div>
 
-      {mode === 'staff' ? <StaffNotation verses={verses} /> :
+      {mode === 'staff' ? <StaffNotation verses={verses} cursor={cursor} /> :
       <div style={{background:'var(--navy3)',border:'1px solid var(--border)',borderRadius:'8px',
         padding:'1rem',overflowX:'auto',display:'flex',flexDirection:'column',gap:'0.7rem'}}>
         {lineGroups.map((group, gi) => {
