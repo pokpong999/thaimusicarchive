@@ -125,6 +125,21 @@ export default function NotationPlayer({ verses, lyrics }) {
   const [sampleCount, setSampleCount] = useState(null);
   const [cursor, setCursor] = useState(null);
   const ctxRef = useRef(null);
+  const stopRef = useRef(null);
+  // หยุดเสียงเมื่อสลับแท็บ/ย่อหน้าต่าง และเมื่อออกจากหน้านี้
+  useEffect(() => {
+    function onHide() {
+      if (document.hidden && playStateRef.current !== 'stopped') stopRef.current?.();
+    }
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('pagehide', onHide);
+      stopRef.current?.();          // ออกจากหน้าเพลง = หยุดเสียงเสมอ
+    };
+  }, []);
+
   const buffersRef = useRef(null);
   const rafRef = useRef(null);
   const playIdRef = useRef(0);
@@ -387,6 +402,7 @@ export default function NotationPlayer({ verses, lyrics }) {
 
   playStateRef.current = playState;
   playRef.current = () => startFrom(0);
+  stopRef.current = stop;
   togglePauseRef.current = togglePause;
 
   return (
