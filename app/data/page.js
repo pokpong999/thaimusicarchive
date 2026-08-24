@@ -4,10 +4,11 @@ import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
 const SETS = [
-  ['krasuan_catalog', 'กระสวนรายวรรค · Krasuan per verse (19,963 rows)'],
-  ['luktok_catalog', 'คู่ลูกตกรายประโยค · Cadence pairs (9,895 rows)'],
-  ['pattern_library', 'คลังกระสวน · Pattern library (1,451 rows)'],
-  ['songs', 'รายการเพลง · Song list'],
+  ['krasuan_catalog', 'กระสวนรายวรรค · Krasuan per verse (20,920 rows)'],
+  ['luktok_catalog', 'คู่ลูกตกรายประโยค · Cadence pairs (10,373 rows)'],
+  ['pattern_library', 'คลังกระสวน · Pattern library (1,494 rows)'],
+  ['song_melody', 'โน้ตรายวรรค สองมือ · Melody per verse (20,924 rows)'],
+  ['songs', 'รายการเพลง · Song list (300 เพลง)'],
 ];
 
 export default function DataPage() {
