@@ -2,7 +2,7 @@ import './globals.css';
 import Topbar from '../components/Topbar';
 import { LangProvider } from '../lib/i18n';
 import FooterNav from '../components/FooterNav';
-import { ContentProvider } from '../components/Editable';
+import { ContentProvider, EText } from '../components/Editable';
 
 export const metadata = {
   metadataBase: new URL('https://thaimusicarchive.com'),
@@ -33,8 +33,8 @@ export default function RootLayout({ children }) {
         {children}
         <footer className="footer" style={{lineHeight:2}}>
           <FooterNav />
-          <div style={{fontWeight:600,color:'var(--cream)'}}>หอจดหมายเหตุดนตรีไทย · Thai Music Archive (THMA)</div>
-          <div>ข้อมูลและลิขสิทธิ์ © ปกป้อง ขำประเสริฐ (Pokpong Khamprasert) — ผลงานที่สมาชิกเพิ่มแสดงเครดิตผู้เพิ่มกำกับไว้</div>
+          <EText k="footer.name" style={{fontWeight:600,color:'var(--cream)'}}>หอจดหมายเหตุดนตรีไทย · Thai Music Archive (THMA)</EText>
+          <EText k="footer.copyright">ข้อมูลและลิขสิทธิ์ © ปกป้อง ขำประเสริฐ (Pokpong Khamprasert) — ผลงานที่สมาชิกเพิ่มแสดงเครดิตผู้เพิ่มกำกับไว้</EText>
           <div style={{fontSize:'0.78rem'}}>
             ติดต่อผู้ดูแล: ✉️ <a href="mailto:tasanastudio@gmail.com" style={{color:'var(--gold2)'}}>tasanastudio@gmail.com</a>
             {' '}· 💬 LINE: p.khamprasert · ☎️ 097-220-5864

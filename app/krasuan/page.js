@@ -1,4 +1,5 @@
 'use client';
+import { EText, EImage } from '../../components/Editable';
 import { FeaturePage } from '../../components/Gate';
 import { useState } from 'react';
 import Link from 'next/link';
@@ -47,8 +48,8 @@ export default function KrasuanPage() {
   return (
     <FeaturePage feature="page_krasuan">
     <main className="container" style={{maxWidth:'760px'}}>
-      <div className="section-title" style={{fontSize:'1.2rem'}}>🥁 ค้นหากระสวน (Krasuan Code)</div>
-      <div className="section-subtitle">เลือกรหัส 4 ตัว (1 ตัว = 1 ห้อง) แล้วดูว่ากระสวนนี้ปรากฏในเพลงใดบ้าง · ฐานข้อมูล 19,963 วรรค</div>
+      <EText k="krasuan.title" className="section-title" style={{fontSize:'1.2rem'}}>🥁 ค้นหากระสวน (Krasuan Code)</EText>
+      <EText k="krasuan.sub" className="section-subtitle">เลือกรหัส 4 ตัว (1 ตัว = 1 ห้อง) แล้วดูว่ากระสวนนี้ปรากฏในเพลงใดบ้าง · ฐานข้อมูล 19,963 วรรค</EText>
 
       <div className="card" style={{marginTop:'1.2rem'}}>
         <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',marginBottom:'0.8rem'}}>

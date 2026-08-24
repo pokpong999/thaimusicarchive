@@ -1,4 +1,5 @@
 'use client';
+import { EText, EImage } from '../../components/Editable';
 import { FeaturePage } from '../../components/Gate';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
@@ -25,8 +26,8 @@ export default function PeoplePage() {
   return (
     <FeaturePage feature="page_people">
     <main className="container" style={{maxWidth:'760px'}}>
-      <div className="section-title" style={{fontSize:'1.2rem'}}>👥 ทำเนียบบุคคลในจดหมายเหตุ</div>
-      <div className="section-subtitle">ครูดนตรี ศิลปิน และบุคคลในประวัติศาสตร์ดนตรีไทย · รวบรวมอัตโนมัติจากบันทึกจดหมายเหตุ</div>
+      <EText k="people.title" className="section-title" style={{fontSize:'1.2rem'}}>👥 ทำเนียบบุคคลในจดหมายเหตุ</EText>
+      <EText k="people.sub" className="section-subtitle">ครูดนตรี ศิลปิน และบุคคลในประวัติศาสตร์ดนตรีไทย · รวบรวมอัตโนมัติจากบันทึกจดหมายเหตุ</EText>
       <input className="form-input" style={{margin:'1rem 0'}} value={q} onChange={e => setQ(e.target.value)}
         placeholder="ค้นหาชื่อ..." />
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:'0.7rem'}}>

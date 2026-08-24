@@ -1,4 +1,5 @@
 'use client';
+import { EText, EImage } from '../../components/Editable';
 import { FeaturePage } from '../../components/Gate';
 import { useState } from 'react';
 import Link from 'next/link';
@@ -32,7 +33,7 @@ export default function SearchPage() {
   return (
     <FeaturePage feature="page_search">
     <main className="container" style={{maxWidth:'760px'}}>
-      <div className="section-title" style={{fontSize:'1.2rem'}}>🔍 ค้นหาทั้งเว็บ</div>
+      <EText k="search.title" className="section-title" style={{fontSize:'1.2rem'}}>🔍 ค้นหาทั้งเว็บ</EText>
       <div style={{display:'flex',gap:'8px',margin:'1rem 0 1.5rem'}}>
         <input className="form-input" value={q} onChange={e => setQ(e.target.value)} autoFocus
           onKeyDown={e => e.key === 'Enter' && run()}

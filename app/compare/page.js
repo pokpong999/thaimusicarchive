@@ -1,4 +1,5 @@
 'use client';
+import { EText, EImage } from '../../components/Editable';
 import { FeaturePage } from '../../components/Gate';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -43,8 +44,8 @@ export default function ComparePage() {
   return (
     <FeaturePage feature="page_compare">
     <main className="container" style={{maxWidth:'1100px'}}>
-      <div className="section-title" style={{fontSize:'1.2rem'}}>⚖️ เปรียบเทียบเพลง</div>
-      <div className="section-subtitle">เปิดโน้ต 2 เพลงคู่กัน — เหมาะสำหรับเทียบอัตราจังหวะของเพลงเถา หรือทางต่างสำนัก</div>
+      <EText k="compare.title" className="section-title" style={{fontSize:'1.2rem'}}>⚖️ เปรียบเทียบเพลง</EText>
+      <EText k="compare.sub" className="section-subtitle">เปิดโน้ต 2 เพลงคู่กัน — เหมาะสำหรับเทียบอัตราจังหวะของเพลงเถา หรือทางต่างสำนัก</EText>
       <div style={{display:'flex',gap:'1.5rem',marginTop:'1.2rem',flexWrap:'wrap'}}>
         <SongCol side="ก" songs={songs} sel={a} setSel={setA} />
         <div style={{width:'1px',background:'var(--border)'}} />

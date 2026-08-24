@@ -1,4 +1,5 @@
 'use client';
+import { EText, EImage } from '../../components/Editable';
 import { FeaturePage } from '../../components/Gate';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
@@ -20,7 +21,7 @@ export default function LeaderboardPage() {
   return (
     <FeaturePage feature="page_leaderboard">
     <main className="container" style={{maxWidth:'760px'}}>
-      <div className="section-title">ทำเนียบนักจดหมายเหตุ</div>
+      <EText k="board.title" className="section-title">ทำเนียบนักจดหมายเหตุ</EText>
       <div className="section-subtitle">
         อันดับผู้ร่วมสร้างหอจดหมายเหตุดนตรีไทย · สะสมแต้มจากผลงานที่ได้รับอนุมัติ
       </div>

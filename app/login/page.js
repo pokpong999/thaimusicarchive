@@ -1,4 +1,5 @@
 'use client';
+import { EText, EImage } from '../../components/Editable';
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
@@ -29,6 +30,7 @@ export default function LoginPage() {
   return (
     <main className="container" style={{maxWidth:'420px'}}>
       <div className="card">
+        <EImage k="login.cover" height={160} style={{marginBottom:'1rem'}} />
         <div className="section-title" style={{fontSize:'1.1rem',marginBottom:'0.3rem'}}>
           {mode === 'login' ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
         </div>

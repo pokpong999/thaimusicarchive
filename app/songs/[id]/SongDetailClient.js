@@ -7,6 +7,7 @@ import NotationPlayer from '../../../components/NotationPlayer';
 import ExportBar from '../../../components/ExportBar';
 import CommentSection from '../../../components/CommentSection';
 import { usePermissions } from '../../../components/Gate';
+import { EText, EImage } from '../../../components/Editable';
 import ShareBar from '../../../components/ShareBar';
 
 export default function SongDetailClient() {
@@ -234,7 +235,7 @@ export default function SongDetailClient() {
       {tab === 'history' && (
         <div className="card">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.8rem'}}>
-            <div style={{fontWeight:600}}>ประวัติเพลง</div>
+            <EText k="song.history.label" style={{fontWeight:600}}>ประวัติเพลง</EText>
             {isAdmin && !editHistory &&
               <button className="btn btn-outline btn-sm" onClick={() => setEditHistory(true)}>✏️ แก้ไข</button>}
           </div>

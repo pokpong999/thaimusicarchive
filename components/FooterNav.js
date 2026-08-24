@@ -1,5 +1,6 @@
 'use client';
 import { usePermissions } from './Gate';
+import { EText } from './Editable';
 
 export default function FooterNav() {
   const { can } = usePermissions();

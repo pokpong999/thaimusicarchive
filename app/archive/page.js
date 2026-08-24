@@ -1,4 +1,5 @@
 'use client';
+import { EText, EImage } from '../../components/Editable';
 import { usePermissions } from '../../components/Gate';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -105,7 +106,8 @@ function eraColor(year, minY, maxY) {
     <main className="container">
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-end',flexWrap:'wrap',gap:'1rem'}}>
         <div>
-          <div className="section-title">หอจดหมายเหตุดนตรีไทย</div>
+          <EText k="archive.title" className="section-title">หอจดหมายเหตุดนตรีไทย</EText>
+      <EImage k="archive.cover" height={200} style={{margin:'0.6rem 0'}} />
           <div className="section-subtitle">บันทึกเหตุการณ์ อดีต ปัจจุบัน อนาคต · {records.length} รายการ</div>
         </div>
         {user
