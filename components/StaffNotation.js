@@ -69,7 +69,8 @@ function sliceEvents(positions, slice) {
 
 const UNIT_DUR = { 1: '8', 2: 'q', 3: 'qd', 4: 'h' };
 
-const MW_MIN = 105;      // ความกว้างห้องขั้นต่ำ
+const MW_MIN = 78;       // ความกว้างห้องแคบสุด
+const MW_MAX = 150;      // ความกว้างห้องกว้างสุด
 const CLEF_PAD = 52;     // พื้นที่กุญแจ+เครื่องหมายจังหวะ (ห้องแรกของบรรทัด)
 const ROW_H = 185;       // สูงพอสำหรับโน้ตต่ำ-สูงหลายเส้นน้อย
 const STAVE_Y = 48;
@@ -97,18 +98,17 @@ export default function StaffNotation({ verses, cursor = null }) {
 
   useEffect(() => {
     let cancelled = false;
-    loadVexFlow().then((Vex) => {
+    (async () => {
+      const Vex = await loadVexFlow();
+      {
       if (cancelled || !ref.current) return;
-      const VF = Vex.Flow;
+      const VF = (Vex && Vex.Flow) || window.VexFlow;
+      if (!VF) throw new Error('โหลดไลบรารีโน้ตสากลไม่สำเร็จ');
       ref.current.innerHTML = '';
       geomRef.current = [];
       // บีบความกว้างห้องให้ 8 ห้อง + กุญแจ พอดีความกว้างกล่อง (ไม่ล้น ไม่ต้องเลื่อนแนวนอน)
       const boxW = (ref.current.clientWidth || 1100) - 36;
-      const mw = Math.max(78, Math.min(MW, Math.floor((boxW - CLEF_PAD - 10) / PER_ROW)));
-      // ปรับความกว้างห้องให้ 8 ห้องพอดีกรอบ (แคบสุด 105px แล้วค่อยให้เลื่อนแนวนอน)
-      const availW = (ref.current.clientWidth || 1100) - 34; // padding
-      const MW = Math.max(MW_MIN, Math.floor((availW - CLEF_PAD - 20) / PER_ROW));
-
+      const mw = Math.max(MW_MIN, Math.min(MW_MAX, Math.floor((boxW - CLEF_PAD - 10) / PER_ROW)));
       // เตรียมข้อมูลทุกวรรคก่อน แล้วจัดเรียงเป็นบรรทัดละ ~8 ห้อง
       const prepared = verses.map((v, vi) => {
         let positions, handPos = null;
@@ -215,6 +215,12 @@ export default function StaffNotation({ verses, cursor = null }) {
           geomRef.current.push({ verseIdx: pv.vi, rowEl, rects, len: pv.positions.length });
         });
       });
+      }
+    })().catch(err => {
+      console.error('StaffNotation:', err);
+      if (ref.current) ref.current.innerHTML =
+        '<div style="color:#8A9BB5;font-size:0.85rem;padding:1rem">' +
+        'แสดงโน้ตสากลไม่สำเร็จ: ' + (err?.message ?? err) + '</div>';
     });
     return () => { cancelled = true; };
   }, [verses, source, beat, fitTick]);
