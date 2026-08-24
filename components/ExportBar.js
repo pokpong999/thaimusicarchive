@@ -120,6 +120,9 @@ export default function ExportBar({ song, instrument, verses, targetId }) {
   return (
     <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
       <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>ดาวน์โหลด:</span>
+      <a href={`/songs/${song?.id}/print`} className="btn btn-sm"
+        style={{background:'var(--gold)',color:'var(--navy)',fontWeight:600,fontSize:'0.72rem'}}>
+        🖨 ฉบับพิมพ์ / PDF สวย</a>
       <B id="docx" label="📄 DOCX" fn={exportDocx} />
       <B id="pdf" label="📕 PDF" fn={exportPdf} />
       <B id="jpg" label="🖼 JPG" fn={exportJpg} />

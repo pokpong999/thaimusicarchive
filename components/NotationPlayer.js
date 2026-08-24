@@ -3,6 +3,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadGongSamples, playSampleNote, samplesAvailable } from '../lib/sampler';
 import { CHING_PATTERNS, parsePattern, playPercussion } from '../lib/nathab';
+const TH_COLS = ['ด','ร','ม','ฟ','ซ','ล','ท'];
+const TH_ROWS = { '-1': 'zxcvbnm', '0': 'asdfghj', '1': 'qwertyu' };
+const noteKey = n => TH_ROWS[String(n.register ?? 0)]?.[TH_COLS.indexOf(n.ch)] ?? n.ch;
 import { supabase } from '../lib/supabase';
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
 
@@ -269,7 +272,8 @@ export default function NotationPlayer({ verses, lyrics }) {
     return (
       <span onClick={() => seek(vi, p)} title="กดเพื่อเล่นจากห้องนี้" style={{
         display:'inline-block', minWidth:'26px', textAlign:'center',
-        padding:'2px 1px', borderRadius:'3px', fontSize:'0.92rem',
+        padding:'2px 1px', borderRadius:'3px', fontSize:'1.05rem',
+        fontFamily:'THNotation', lineHeight:1.6,
         cursor:'pointer', position:'relative',
         background: active ? 'rgba(201,168,76,0.4)' : 'transparent',
         color: notes.length ? 'var(--cream)' : 'var(--border)',
@@ -280,9 +284,7 @@ export default function NotationPlayer({ verses, lyrics }) {
           borderRadius:'50% 50% 0 0',
           pointerEvents:'none',
         }} />}
-        {notes.length ? notes.map(n =>
-          n.ch + (n.register === -1 ? LOW_MARK : n.register === 1 ? HIGH_MARK : '')
-        ).join('') : '–'}
+        {notes.length ? notes.map(noteKey).join('') : '-'}
       </span>
     );
   }

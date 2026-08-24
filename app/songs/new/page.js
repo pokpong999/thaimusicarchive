@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabase';
+import { thaiToKeys } from '../../../lib/thnotation';
 
 const NOTES = ['ด','ร','ม','ฟ','ซ','ล','ท'];
 const LOW = '\u0E3A', HIGH = '\u0E4D';
@@ -133,6 +134,17 @@ export default function NewSongPage() {
           <textarea ref={taRef} className="form-input" rows="8" value={text}
             onChange={e => setText(e.target.value)}
             style={{resize:'vertical',fontFamily:'monospace',fontSize:'0.9rem',borderRadius:'0 0 8px 8px',borderTop:'none'}} />
+          {/* Preview ฟอนต์ TH Notation */}
+          <div style={{background:'#fff',color:'#000',borderRadius:'6px',padding:'0.7rem 0.9rem',
+            marginTop:'0.5rem',border:'1px solid var(--border)'}}>
+            <div style={{fontSize:'0.62rem',color:'#888',marginBottom:'3px',fontFamily:'var(--font-sans)'}}>
+              ตัวอย่างแบบพิมพ์ (ฟอนต์ TH Notation):</div>
+            {text.split('\n').map((l, i) => (
+              <div key={i} style={{fontFamily:'THNotation',fontSize:'1.15rem',lineHeight:1.8,whiteSpace:'nowrap',overflowX:'auto'}}>
+                {thaiToKeys(l) || '\u00A0'}
+              </div>
+            ))}
+          </div>
           <div style={{display:'flex',gap:'8px',marginTop:'0.5rem',flexWrap:'wrap'}}>
             <button className="btn btn-outline btn-sm" onClick={addVerseLine}>＋ เพิ่มวรรค 4 ห้อง</button>
             <button className="btn btn-outline btn-sm" onClick={addShortVerseLine}>＋ เพิ่มวรรค 2 ห้อง</button>

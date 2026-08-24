@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import { thaiToKeys } from '../../lib/thnotation';
 
 function SongCol({ side, songs, sel, setSel }) {
   const [verses, setVerses] = useState([]);
@@ -22,7 +23,7 @@ function SongCol({ side, songs, sel, setSel }) {
           <div key={v.verse_no} style={{display:'flex',gap:'8px',padding:'5px 0',
             borderBottom:'1px solid rgba(42,63,92,0.3)'}}>
             <span style={{color:'var(--muted)',fontSize:'0.7rem',width:'28px',flexShrink:0,textAlign:'right'}}>{v.verse_no}</span>
-            <span style={{fontFamily:'var(--font-notation, monospace)',fontSize:'0.85rem',whiteSpace:'nowrap',overflow:'auto'}}>{v.combined}</span>
+            <span style={{fontFamily:'THNotation',fontSize:'1rem',whiteSpace:'nowrap',overflow:'auto',lineHeight:1.7}}>{thaiToKeys(v.combined)}</span>
           </div>
         ))}
       </div>

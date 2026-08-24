@@ -90,3 +90,11 @@ tbody tr:hover td { background:rgba(255,255,255,0.02); }
   border: 1px solid #C9A84C !important;
   padding: 6px !important;
 }
+
+/* TH Notation — ฟอนต์โน้ตไทยโดย ปกป้อง ขำประเสริฐ */
+@font-face {
+  font-family: 'THNotation';
+  src: url('/fonts/THNotation.woff2') format('woff2'),
+       url('/fonts/THNotation.otf') format('opentype');
+  font-display: swap;
+}
