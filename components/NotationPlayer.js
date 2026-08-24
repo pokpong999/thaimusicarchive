@@ -86,10 +86,34 @@ export default function NotationPlayer({ verses, lyrics }) {
   const [drumInst, setDrumInst] = useState('ตะโพน');
   const [level, setLevel] = useState('สองชั้น');
   const [chingOn, setChingOn] = useState(false);
+  const playStateRef = useRef('stopped');
+  const playRef = useRef(null);
+  const togglePauseRef = useRef(null);
+  useEffect(() => {
+    function onKey(e) {
+      if (e.code !== 'Space' || e.repeat) return;
+      const t = e.target;
+      if (t && ['INPUT','SELECT','TEXTAREA','BUTTON'].includes(t.tagName)) return;
+      e.preventDefault();
+      if (playStateRef.current === 'stopped') playRef.current?.();
+      else togglePauseRef.current?.();
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  const defaultedRef = useRef(false);
+  useEffect(() => {
+    if (defaultedRef.current || !verses?.length) return;
+    defaultedRef.current = true;
+    const hasHands = verses.some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim());
+    if (hasHands && can('player_hands')) setMode('hands');
+  }, [verses, can]);
 
   useEffect(() => {
     if (!can('player_staff') && mode === 'staff') setMode('combined');
-    if (!can('player_hands') && ['hands','khim','vocal'].includes(mode)) setMode('combined');
+    if (!can('player_hands') && mode === 'hands') setMode('combined');
+    if (!can('player_khim') && mode === 'khim') setMode('combined');
+    if (!can('player_vocal') && mode === 'vocal') setMode('combined');
     if (!can('player_real') && sound === 'real') setSound('synth');
     if (!can('player_perc') && nathab !== 'none') setNathab('none');
   }, [can, mode, sound, nathab]);
@@ -359,6 +383,10 @@ export default function NotationPlayer({ verses, lyrics }) {
     return <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ยังไม่มีข้อมูลโน้ตสำหรับเพลงนี้</div>;
   }
 
+  playStateRef.current = playState;
+  playRef.current = () => startFrom(0);
+  togglePauseRef.current = togglePause;
+
   return (
     <div>
       <div style={{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',marginBottom:'1rem'}}>
@@ -382,8 +410,8 @@ export default function NotationPlayer({ verses, lyrics }) {
         <select className="filter-select" value={mode} onChange={e => setMode(e.target.value)}>
           <option value="combined">บรรทัดเดียว (ทำนองรวม)</option>
           {can('player_hands') && <option value="hands">สองบรรทัด (แยกมือ R/L)</option>}
-          {can('player_hands') && <option value="khim">สามบรรทัด (แบบขิม)</option>}
-          {can('player_hands') && <option value="vocal">โน้ตขับร้อง (มีเนื้อ)</option>}
+          {can('player_khim') && <option value="khim">สามบรรทัด (แบบขิม)</option>}
+          {can('player_vocal') && <option value="vocal">โน้ตขับร้อง (มีเนื้อ)</option>}
           {can('player_staff') && <option value="staff">โน้ตสากล 5 เส้น</option>}
         </select>
         <select className="filter-select" value={hand} onChange={e => setHand(e.target.value)} disabled={playState !== 'stopped'}>

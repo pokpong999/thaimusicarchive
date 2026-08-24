@@ -68,7 +68,7 @@ function sliceEvents(positions, slice) {
 
 const UNIT_DUR = { 1: '8', 2: 'q', 3: 'qd', 4: 'h' };
 
-const MW = 150;          // ความกว้างห้อง
+const MW_MIN = 105;      // ความกว้างห้องขั้นต่ำ
 const CLEF_PAD = 52;     // พื้นที่กุญแจ+เครื่องหมายจังหวะ (ห้องแรกของบรรทัด)
 const ROW_H = 185;       // สูงพอสำหรับโน้ตต่ำ-สูงหลายเส้นน้อย
 const STAVE_Y = 48;
@@ -80,6 +80,13 @@ export default function StaffNotation({ verses, cursor = null }) {
   const hasHands = verses.some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim());
   const [source, setSource] = useState('combined');
   const [beat, setBeat] = useState('thai'); // 'thai' ตกท้ายห้อง | 'western' ตกต้นห้อง
+  const [fitTick, setFitTick] = useState(0);
+  useEffect(() => {
+    let t;
+    const onR = () => { clearTimeout(t); t = setTimeout(() => setFitTick(x => x + 1), 250); };
+    window.addEventListener('resize', onR);
+    return () => { window.removeEventListener('resize', onR); clearTimeout(t); };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +95,12 @@ export default function StaffNotation({ verses, cursor = null }) {
       const VF = Vex.Flow;
       ref.current.innerHTML = '';
       geomRef.current = [];
+      // บีบความกว้างห้องให้ 8 ห้อง + กุญแจ พอดีความกว้างกล่อง (ไม่ล้น ไม่ต้องเลื่อนแนวนอน)
+      const boxW = (ref.current.clientWidth || 1100) - 36;
+      const mw = Math.max(78, Math.min(MW, Math.floor((boxW - CLEF_PAD - 10) / PER_ROW)));
+      // ปรับความกว้างห้องให้ 8 ห้องพอดีกรอบ (แคบสุด 105px แล้วค่อยให้เลื่อนแนวนอน)
+      const availW = (ref.current.clientWidth || 1100) - 34; // padding
+      const MW = Math.max(MW_MIN, Math.floor((availW - CLEF_PAD - 20) / PER_ROW));
 
       // เตรียมข้อมูลทุกวรรคก่อน แล้วจัดเรียงเป็นบรรทัดละ ~8 ห้อง
       const prepared = verses.map((v, vi) => {
@@ -117,7 +130,7 @@ export default function StaffNotation({ verses, cursor = null }) {
 
       rows.forEach(rowVerses => {
         const totalMeasures = rowVerses.reduce((s, pv) => s + pv.slices.length, 0);
-        const rowWidth = CLEF_PAD + totalMeasures * MW + 20;
+        const rowWidth = CLEF_PAD + totalMeasures * mw + 20;
 
         const label = document.createElement('div');
         label.textContent = 'วรรค ' + rowVerses.map(pv =>
@@ -141,7 +154,7 @@ export default function StaffNotation({ verses, cursor = null }) {
         rowVerses.forEach(pv => {
           const rects = [];
           pv.slices.forEach(slice => {
-            const w = MW + (first ? CLEF_PAD : 0);
+            const w = mw + (first ? CLEF_PAD : 0);
             const stave = new VF.Stave(x, STAVE_Y, w);
             if (first) stave.addClef('treble').addTimeSignature('2/4');
             stave.setContext(ctx).draw();
@@ -197,7 +210,7 @@ export default function StaffNotation({ verses, cursor = null }) {
       });
     });
     return () => { cancelled = true; };
-  }, [verses, source, beat]);
+  }, [verses, source, beat, fitTick]);
 
   // ── แถบไฮไลต์ + เส้นตำแหน่งที่กำลังเล่น ──
   useEffect(() => {
