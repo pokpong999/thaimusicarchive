@@ -143,6 +143,9 @@ export default function NotationPlayer({ verses, lyrics }) {
     const stepDur = 60 / bpm / 2;
     const t0 = ctx.currentTime + 0.15;
     const cursorTimeline = [];
+    // คิวเสียง: ทยอยนัดล่วงหน้าเป็นช่วงๆ แทนการนัดทั้งเพลงทีเดียว (เพลงยาวหมื่นโน้ตจะพัง)
+    const soundEvents = [];
+    const q = (t, fn) => { if (Number.isFinite(t)) soundEvents.push({ t, fn }); };
 
     function scheduleNote(n, noteTime) {
       let played = false;
@@ -193,9 +196,9 @@ export default function NotationPlayer({ verses, lyrics }) {
           const t = t0 + (pv.offset + p - startStep) * stepDur;
           const run = runMap[li + '-' + p];
           if (run) {
-            run.forEach((n, ni) => scheduleNote(n, t - (run.length - 1 - ni) * SABAT_GAP));
+            run.forEach((n, ni) => { const tt = t - (run.length - 1 - ni) * SABAT_GAP; q(tt, () => scheduleNote(n, tt)); });
           } else {
-            line[p].forEach(n => scheduleNote(n, t));
+            line[p].forEach(n => q(t, () => scheduleNote(n, t)));
           }
         }
       });
@@ -223,21 +226,32 @@ export default function NotationPlayer({ verses, lyrics }) {
         const t = t0 + (s - startStep) * stepDur;
         if (drumHits && drumLen > 0) {
           const pp = (s % drumLen) + 1;
-          drumHits.forEach(h => { if (h.pos === pp) playPercussion(ctx, h.syll, t, 0.75); });
+          drumHits.forEach(h => { if (h.pos === pp) q(t, () => playPercussion(ctx, h.syll, t, 0.75)); });
         }
         if (chingOn) {
           const cp = (s % chingLen) + 1;
           const syll = chingDef.hits[cp];
-          if (syll) playPercussion(ctx, syll, t, 0.7);
+          if (syll) q(t, () => playPercussion(ctx, syll, t, 0.7));
         }
       }
     }
 
     const endTime = t0 + (totalSteps - startStep) * stepDur;
+    soundEvents.sort((a, b) => a.t - b.t);
+    let evIdx = 0;
+    const LOOKAHEAD = 5; // วินาที
+    function pump(now) {
+      while (evIdx < soundEvents.length && soundEvents[evIdx].t < now + LOOKAHEAD) {
+        try { soundEvents[evIdx].fn(); } catch (e) {}
+        evIdx++;
+      }
+    }
+    pump(ctx.currentTime); // นัดช่วงเปิดเพลงทันที
     let idx = 0;
     function tick() {
       if (playIdRef.current !== myId) return;
       const now = ctx.currentTime;
+      pump(now);
       while (idx < cursorTimeline.length && cursorTimeline[idx].time <= now) {
         setCursor({ verseIdx: cursorTimeline[idx].verseIdx, pos: cursorTimeline[idx].pos });
         idx++;
