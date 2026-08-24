@@ -56,10 +56,31 @@ export default function ArchivePage() {
     return supabase.storage.from('archive-images').getPublicUrl(img.storage_path).data.publicUrl;
   }
 
+
+// ── สีหมุดตามยุค: แดงเข้ม (โบราณ) → เขียวอ่อน (ปัจจุบัน) ──
+function markerYear(r) {
+  if (r.when_date) return new Date(r.when_date).getFullYear() + 543;
+  const m = (r.when_text ?? '').match(/(\d{4})/);
+  if (m) { const y = parseInt(m[1]); return y < 2300 ? y + 543 : y; }
+  return null;
+}
+function eraColor(year, minY, maxY) {
+  if (year == null) return '#C9A84C'; // ไม่ระบุปี = ทอง
+  const t = Math.max(0, Math.min(1, (year - minY) / Math.max(1, maxY - minY)));
+  const hue = t * 120;                    // 0 แดง → 120 เขียว
+  const light = 32 + t * 26;              // เข้ม → อ่อน
+  return `hsl(${Math.round(hue)}, 72%, ${Math.round(light)}%)`;
+}
+
+  const yrs = records.map(markerYear).filter(y => y != null);
+  const minY = yrs.length ? Math.min(...yrs) : 2300;
+  const maxY = yrs.length ? Math.max(...yrs) : 2569;
+
   const markers = records.filter(r => r.lat != null && r.lng != null).map(r => {
     const thumb = thumbUrl(r);
     return ({
     lat: r.lat, lng: r.lng,
+    color: eraColor(markerYear(r), minY, maxY),
     tooltipHtml: `
       <div style="font-family:'Noto Sans Thai',sans-serif;max-width:200px;text-align:center">
         ${thumb ? `<img src="${thumb}" style="width:180px;height:110px;object-fit:cover;border-radius:6px;display:block;margin-bottom:5px"/>` : ''}
@@ -110,7 +131,16 @@ export default function ArchivePage() {
       {loading ? <div style={{color:'var(--muted)'}}>กำลังโหลด...</div>
       : view === 'map' ? (
         <>
-          <LeafletMap markers={markers} height="520px" />
+          <LeafletMap markers={markers} height="520px" legend={`
+            <div style="background:rgba(15,27,45,0.92);border:1px solid #C9A84C;border-radius:8px;padding:7px 11px;font-family:'Noto Sans Thai',sans-serif;color:#F5F0E8;font-size:0.68rem;line-height:1.5">
+              <div style="margin-bottom:3px">ยุคของเหตุการณ์</div>
+              <div style="display:flex;align-items:center;gap:6px">
+                <span>โบราณ</span>
+                <span style="width:90px;height:9px;border-radius:5px;background:linear-gradient(to right, hsl(0,72%,32%), hsl(40,72%,41%), hsl(80,72%,49%), hsl(120,72%,58%))"></span>
+                <span>ปัจจุบัน</span>
+              </div>
+              <div style="color:#8A9BB5;margin-top:3px">● ทอง = ไม่ระบุปี · ตัวเลข = กดเพื่อกางกลุ่มหมุด</div>
+            </div>`} />
           {markers.length < records.length && (
             <div style={{fontSize:'0.72rem',color:'var(--muted)',marginTop:'6px'}}>
               * {records.length - markers.length} รายการไม่มีพิกัด — ดูได้ในมุมมองรายการ
