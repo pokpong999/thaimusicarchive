@@ -2,9 +2,11 @@ import './globals.css';
 import Topbar from '../components/Topbar';
 import { LangProvider } from '../lib/i18n';
 import FooterNav from '../components/FooterNav';
+import PWA from '../components/PWA';
 import { ContentProvider, EText } from '../components/Editable';
 
 export const viewport = {
+  themeColor: '#0F1B2D',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -12,6 +14,9 @@ export const viewport = {
 };
 
 export const metadata = {
+  manifest: '/manifest.webmanifest',
+  appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'ดนตรีไทย' },
+  icons: { icon: '/icon-192.png', apple: '/apple-icon.png' },
   metadataBase: new URL('https://thaimusicarchive.com'),
   title: 'หอจดหมายเหตุดนตรีไทย — Thai Music Archive',
   description: 'ฐานข้อมูลเพลงไทย 300 เพลง โน้ตเล่นเสียงจริงระบบ 7 เสียงไทย หน้าทับกลอง-ฉิ่ง บันทึกเหตุการณ์ดนตรีไทยบนแผนที่ อดีต ปัจจุบัน อนาคต',
@@ -47,7 +52,7 @@ export default function RootLayout({ children }) {
             {' '}· 💬 LINE: p.khamprasert · ☎️ 097-220-5864
           </div>
         </footer>
-        </ContentProvider></LangProvider>
+        <PWA /></ContentProvider></LangProvider>
       </body>
     </html>
   );
