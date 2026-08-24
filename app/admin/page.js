@@ -2,6 +2,16 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../lib/supabase';
+import { textToVerses, versesToRows } from '../../lib/notation-core';
+
+// แปลงสิ่งที่ส่งมา (รูปแบบใหม่ notation_json หรือข้อความเก่า) เป็นแถว song_melody
+function submissionRows(sub) {
+  const j = sub.notation_json;
+  if (j && Array.isArray(j.rows) && j.rows.length) return j.rows;
+  const verses = textToVerses(sub.notation_text || '', { base: 4 });
+  const twoHands = verses.some(v => v.cells.some(c => c.l.length));
+  return versesToRows(verses, { twoHands });
+}
 
 export default function AdminPage() {
   const [user, setUser] = useState(null);
@@ -161,10 +171,29 @@ export default function AdminPage() {
     loadAll();
   }
 
+  // ── อนุมัติทางเครื่อง: แตกโน้ตลง song_melody จริง (เดิมแค่ติดธง ทางไม่เคยขึ้นหน้าเพลง) ──
   async function approveTang(id) {
+    const sub = pendingTang.find(t => t.id === id);
+    if (!sub) return;
+    const parsed = submissionRows(sub);
+    if (!parsed.length) { alert('อ่านโน้ตที่ส่งมาไม่ออก'); return; }
+    const inst = sub.instrument || 'ทำนองหลัก';
+    const { data: dup } = await supabase.from('song_melody').select('id').eq('song_id', sub.song_id).eq('instrument', inst).limit(1);
+    if (dup && dup.length && !confirm(`เพลงนี้มีทาง ${inst} อยู่แล้ว — แทนที่ด้วยชุดที่ส่งมาใหม่?`)) return;
+    if (dup && dup.length) await supabase.from('song_melody').delete().eq('song_id', sub.song_id).eq('instrument', inst);
+    const rows = parsed.map(r => ({
+      song_id: sub.song_id, verse_no: r.verse_no, instrument: inst,
+      section: r.section ?? null, line_no: r.line_no ?? null,
+      combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null,
+      krasuan: r.krasuan ?? null, luktok: r.luktok ?? null,
+      approved: true, submitted_by: sub.submitted_by,
+    }));
+    const { error } = await supabase.from('song_melody').insert(rows);
+    if (error) { alert('บันทึกโน้ตไม่สำเร็จ: ' + error.message); return; }
     await supabase.from('melody_submissions').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
     }).eq('id', id);
+    if (sub.submitted_by) await supabase.rpc('add_points', { uid: sub.submitted_by, pts: 10 });
     loadAll();
   }
   async function rejectTang(id) {
@@ -206,15 +235,20 @@ export default function AdminPage() {
   async function approveSong(sub) {
     const sid = (songIdInput[sub.id] ?? '').trim().toUpperCase();
     if (!sid) { alert('ใส่ Song ID ก่อน เช่น USR001'); return; }
-    const lines = sub.notation_text.split('\n').map(l => l.trim()).filter(l => l);
+    const parsed = submissionRows(sub);
+    if (!parsed.length) { alert('อ่านโน้ตที่ส่งมาไม่ออก'); return; }
     const { error: e1 } = await supabase.from('songs').insert({
       id: sid, name_th: sub.name_th, type: sub.song_type,
-      total_verses: lines.length, unique_patterns: 0, contributed_by: sub.submitted_by,
+      total_verses: parsed.length, unique_patterns: new Set(parsed.map(r => r.krasuan)).size,
+      contributed_by: sub.submitted_by,
     });
     if (e1) { alert('สร้างเพลงไม่สำเร็จ: ' + e1.message); return; }
-    const rows = lines.map((l, i) => ({
-      song_id: sid, verse_no: i + 1, instrument: sub.instrument || 'ทำนองหลัก',
-      combined: l, approved: true, submitted_by: sub.submitted_by,
+    const rows = parsed.map(r => ({
+      song_id: sid, verse_no: r.verse_no, instrument: sub.instrument || 'ทำนองหลัก',
+      section: r.section ?? null, line_no: r.line_no ?? null,
+      combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null,
+      krasuan: r.krasuan ?? null, luktok: r.luktok ?? null,
+      approved: true, submitted_by: sub.submitted_by,
     }));
     const { error: e2 } = await supabase.from('song_melody').insert(rows);
     if (e2) { alert('บันทึกโน้ตไม่สำเร็จ: ' + e2.message); return; }
@@ -448,7 +482,10 @@ export default function AdminPage() {
                     padding:'0.7rem',borderRadius:'5px',marginTop:'0.6rem',overflowX:'auto',
                     whiteSpace:'pre-wrap',fontFamily:'monospace'}}>{t.notation_text}</pre>
                   <div style={{fontSize:'0.7rem',color:'var(--muted)'}}>
-                    {t.notation_text.split('\n').filter(l => l.trim()).length} วรรค
+                    {submissionRows(t).length} วรรค
+                    {t.notation_json?.two_hands ? ' · สองมือ R/L' : ''}
+                    {t.notation_json?.line_hong && t.notation_json.line_hong !== 8 ? ` · บรรทัดละ ${t.notation_json.line_hong} ห้อง` : ''}
+                    {' · กระสวน: '}<span style={{fontFamily:'monospace',color:'var(--gold)'}}>{submissionRows(t).map(r => r.krasuan).join(' ')}</span>
                   </div>
                 </div>
                 <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>

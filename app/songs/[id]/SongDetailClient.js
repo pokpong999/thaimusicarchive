@@ -18,12 +18,9 @@ export default function SongDetailClient() {
   const [melody, setMelody] = useState([]);
   const [instruments, setInstruments] = useState(['ทำนองหลัก']);
   const [contributors, setContributors] = useState({});
+  const [instOwners, setInstOwners] = useState({});
   const [songOwner, setSongOwner] = useState(null);
   const [instrument, setInstrument] = useState('ทำนองหลัก');
-  const [showTangForm, setShowTangForm] = useState(false);
-  const [tangInstrument, setTangInstrument] = useState('ระนาดเอก');
-  const [tangText, setTangText] = useState('');
-  const [tangMsg, setTangMsg] = useState('');
   const [pdfs, setPdfs] = useState([]);
   const [pdfFile, setPdfFile] = useState(null);
   const [pdfTitle, setPdfTitle] = useState('');
@@ -75,6 +72,14 @@ export default function SongDetailClient() {
     // เครดิตผู้เพิ่มข้อมูล
     const byInst = {};
     (inst ?? []).forEach(r => { if (r.submitted_by && !byInst[r.instrument]) byInst[r.instrument] = r.submitted_by; });
+    // เจ้าของทาง = ทุกวรรคของทางนั้นส่งโดยคนเดียวกัน (ใช้ตัดสินปุ่ม "แก้โน้ต")
+    const owners = {};
+    (inst ?? []).forEach(r => {
+      const k = r.instrument ?? 'ทำนองหลัก';
+      if (!(k in owners)) owners[k] = r.submitted_by ?? null;
+      else if (owners[k] !== r.submitted_by) owners[k] = false;
+    });
+    setInstOwners(owners);
     const uids = [...new Set([...Object.values(byInst), s?.contributed_by].filter(Boolean))];
     if (uids.length) {
       const { data: profs } = await supabase.from('profiles').select('id, display_name').in('id', uids);
@@ -97,18 +102,6 @@ export default function SongDetailClient() {
       .order('verse_no')
       .then(({ data }) => setMelody(data ?? []));
   }, [id, instrument]);
-
-  async function submitTang() {
-    const lines = tangText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    if (lines.length === 0) { setTangMsg('⚠ กรอกโน้ตอย่างน้อย 1 วรรค'); return; }
-    const { error } = await supabase.from('melody_submissions').insert({
-      song_id: id, instrument: tangInstrument, notation_text: tangText,
-      submitted_by: user.id,
-    });
-    if (error) { setTangMsg('⚠ ' + error.message); return; }
-    setTangMsg('✓ ส่งทาง' + tangInstrument + ' แล้ว (' + lines.length + ' วรรค) — รอ Admin อนุมัติ');
-    setTangText(''); setShowTangForm(false);
-  }
 
   async function uploadPdf() {
     if (!pdfFile) { setPdfMsg('⚠ เลือกไฟล์ PDF ก่อน'); return; }
@@ -289,37 +282,15 @@ export default function SongDetailClient() {
             <select className="filter-select" value={instrument} onChange={e => setInstrument(e.target.value)}>
               {instruments.map(i => <option key={i} value={i}>{i}</option>)}
             </select>
-            {user && <button className="btn btn-outline btn-sm" onClick={() => setShowTangForm(!showTangForm)}>
-              {showTangForm ? 'ยกเลิก' : '＋ เสนอทางเครื่องอื่น'}</button>}
+            {user && (isAdmin || (instOwners[instrument] && instOwners[instrument] === user.id)) && (
+              <Link href={`/songs/${id}/edit?inst=${encodeURIComponent(instrument)}`}>
+                <button className="btn btn-primary btn-sm">✎ แก้โน้ตทางนี้</button></Link>)}
+            {user && <Link href={`/songs/${id}/edit?inst=${encodeURIComponent(instrument === 'ทำนองหลัก' ? 'ระนาดเอก' : instrument)}&new=1`}>
+              <button className="btn btn-outline btn-sm">＋ เสนอทางเครื่องอื่น</button></Link>}
             {contributors[instrument] && (
               <span style={{fontSize:'0.7rem',color:'var(--jade)'}}>✍️ ทางนี้บันทึกโดย: {contributors[instrument]}</span>
             )}
           </div>
-
-          {showTangForm && (
-            <div className="card" style={{borderColor:'rgba(201,168,76,0.3)'}}>
-              <div style={{fontSize:'0.9rem',fontWeight:600,marginBottom:'0.8rem'}}>เสนอทางเครื่องดนตรี</div>
-              <div className="form-group">
-                <label className="form-label">เครื่องดนตรี</label>
-                <select className="form-input" value={tangInstrument} onChange={e => setTangInstrument(e.target.value)}>
-                  {['ระนาดเอก','ระนาดทุ้ม','ฆ้องวงเล็ก','ปี่ใน','ขลุ่ยเพียงออ','ซอด้วง','ซออู้','ซอสามสาย','จะเข้','ขิม','อื่น ๆ'].map(i =>
-                    <option key={i} value={i}>{i}</option>)}
-                </select>
-              </div>
-              <div className="form-group">
-                <label className="form-label">โน้ต — 1 บรรทัด = 1 วรรค (รูปแบบ: - - - ล | - - ด รม | - ซ - ล | - ท - ซ)</label>
-                <textarea className="form-input" rows="8" value={tangText}
-                  onChange={e => setTangText(e.target.value)}
-                  placeholder={'- - - ล | - - - ร | - - - ทฺ | - - - ม\n- ลฺ - ทฺ | - - ด รม | - ซ ซ ซ | - ล - ซ'}
-                  style={{resize:'vertical',fontFamily:'monospace',fontSize:'0.85rem'}} />
-                <div style={{fontSize:'0.7rem',color:'var(--muted)',marginTop:'4px'}}>
-                  เสียงต่ำใช้จุดล่าง (ทฺ) เสียงสูงใช้วงกลมบน (ซํ) · สะบัดเขียนติดกัน (รม)
-                </div>
-              </div>
-              <button className="btn btn-jade" onClick={submitTang}>✓ ส่ง — รอ Admin อนุมัติ (+10 แต้มเมื่อผ่าน)</button>
-              {tangMsg && <div style={{marginTop:'0.6rem',fontSize:'0.8rem',color:'var(--jade)'}}>{tangMsg}</div>}
-            </div>
-          )}
 
           <div style={{marginBottom:'0.8rem'}}>
             <ExportBar song={song} instrument={instrument} verses={melody} targetId="notation-export-area" />

@@ -14,7 +14,8 @@ const NOTE_STEP = { 'ด':0, 'ร':1, 'ม':2, 'ฟ':3, 'ซ':4, 'ล':5, 'ท':
 const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
-const SABAT_DEFAULT = 0.06; // ช่องไฟสะบัดเริ่มต้น (วินาที)
+import { buildVoices, SABAT_GAP_DEFAULT } from '../lib/notation-core';
+const SABAT_DEFAULT = SABAT_GAP_DEFAULT; // 80 ms — ค่าเดียวกับกระดานโน้ต (Pk เคาะ 2026-08-24)
 
 function noteFreq(ch, register) {
   const step = NOTE_STEP[ch];
@@ -226,28 +227,8 @@ export default function NotationPlayer({ verses, lyrics }) {
       }
     });
 
-    // ── สะบัด (คู่โน้ตในช่องเดียว + ตัวนำจากช่องก่อนหน้า, ข้ามมือได้) ──
-    // กฎ: คู่สะบัดยึดตำแหน่งท้าย ตัวนำ = โน้ตเดี่ยวในช่องก่อนหน้าของมือเดียวกัน
-    //      ถ้ามือเดียวกันไม่มี ให้ดูอีกมือ (ต้องว่างในช่องของคู่สะบัด) — ตัวนำที่ถูกใช้แล้วไม่เล่นซ้ำที่จังหวะเดิม
-    const consumed = [new Array(totalSteps).fill(false), new Array(totalSteps).fill(false)];
-    const runs = new Map();
-    for (let s = 0; s < totalSteps; s++) {
-      for (let li = 0; li < 2; li++) {
-        const cell = G[li][s];
-        if (cell.length < 2) continue;
-        let lead = [];
-        if (s > 0) {
-          const lj = 1 - li;
-          if (G[li][s - 1].length === 1 && !consumed[li][s - 1]) {
-            lead = G[li][s - 1]; consumed[li][s - 1] = true;
-          } else if (G[lj][s].length === 0 && G[lj][s - 1].length === 1 && !consumed[lj][s - 1]) {
-            lead = G[lj][s - 1]; consumed[lj][s - 1] = true;
-          }
-        }
-        runs.set(li * totalSteps + s, [...lead, ...cell]);
-      }
-    }
-
+    // ── สะบัด + สองมือ: กฎอยู่ที่ lib/notation-core.js (ที่เดียวกับกระดานโน้ต) ──
+    const { runs, consumed } = buildVoices(G);
     for (let s = startStep; s < totalSteps; s++) {
       const t = t0 + (s - startStep) * stepDur;
       for (let li = 0; li < 2; li++) {
@@ -255,8 +236,8 @@ export default function NotationPlayer({ verses, lyrics }) {
         const run = runs.get(li * totalSteps + s);
         if (run) {
           // ตัวสุดท้ายลงตรงจังหวะ ตัวก่อนหน้าถอยหลังทีละ sabatGap · น้ำหนัก 0.6 → 0.8 → 1.0
-          run.forEach((n, ni) => {
-            const back = run.length - 1 - ni;
+          run.notes.forEach((n, ni) => {
+            const back = run.notes.length - 1 - ni;
             const tt = t - back * sabatGap;
             const vel = back === 0 ? 1 : back === 1 ? 0.8 : 0.6;
             q(tt, () => scheduleNote(n, tt, vel));
@@ -440,11 +421,11 @@ export default function NotationPlayer({ verses, lyrics }) {
         {/* ค่า option ต้องเท่ากับ String(ตัวเลข) เป๊ะ ("0.06" ไม่ใช่ "0.060") ไม่งั้น dropdown แสดงค่าผิด */}
         <select className="filter-select" value={String(sabatGap)} onChange={e => setSabatGap(parseFloat(e.target.value))}
           disabled={playState !== 'stopped'} title="ช่องไฟระหว่างเสียงสะบัด (วินาที)">
-          <option value="0.03">สะบัดรัวเร็ว (30 ms)</option>
-          <option value="0.045">สะบัดค่อนข้างเร็ว (45 ms)</option>
-          <option value="0.06">สะบัดปกติ (60 ms)</option>
-          <option value="0.08">สะบัดหนืด (80 ms)</option>
-          <option value="0.1">สะบัดช้า (100 ms)</option>
+          <option value="0.04">สะบัดรัวเร็ว (40 ms)</option>
+          <option value="0.06">สะบัดค่อนข้างเร็ว (60 ms)</option>
+          <option value="0.08">สะบัดปกติ (80 ms)</option>
+          <option value="0.1">สะบัดหนืด (100 ms)</option>
+          <option value="0.12">สะบัดช้า (120 ms)</option>
         </select>
         <select className="filter-select" value={ensemble} onChange={e => setEnsemble(e.target.value)} disabled={playState !== 'stopped'}>
           <option value="khrueangsai">🎻 ระบบเครื่องสาย</option>
