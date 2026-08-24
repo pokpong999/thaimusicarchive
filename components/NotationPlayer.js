@@ -80,6 +80,7 @@ export default function NotationPlayer({ verses, lyrics }) {
   const [mode, setMode] = useState('combined');
   const [hand, setHand] = useState('both');
   const [sound, setSound] = useState('real');
+  const [ensemble, setEnsemble] = useState('khrueangsai'); // khrueangsai | piphat
   const [bpm, setBpm] = useState(120);
   const [hongsPerLine, setHongsPerLine] = useState(8);
   const [nathab, setNathab] = useState('none');       // none | ปรบไก่ | สองไม้
@@ -154,6 +155,7 @@ export default function NotationPlayer({ verses, lyrics }) {
   }, []);
 
   async function startFrom(startStep) {
+    const pitchShift = ensemble === 'piphat' ? 1 : 0;
     playIdRef.current++;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (ctxRef.current) { ctxRef.current.close().catch(() => {}); }
@@ -183,10 +185,10 @@ export default function NotationPlayer({ verses, lyrics }) {
 
     function scheduleNote(n, noteTime) {
       let played = false;
-      if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85);
+      if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85, pitchShift);
       if (!played) {
         const f = noteFreq(n.ch, n.register);
-        if (f) synthNote(ctx, f, noteTime, stepDur * 2.2);
+        if (f) synthNote(ctx, f * Math.pow(2, pitchShift / 7), noteTime, stepDur * 2.2);
       }
     }
 
@@ -406,6 +408,10 @@ export default function NotationPlayer({ verses, lyrics }) {
         <select className="filter-select" value={sound} onChange={e => setSound(e.target.value)} disabled={playState !== 'stopped'}>
           {can('player_real') && <option value="real">🎵 เสียงฆ้องวงใหญ่จริง</option>}
           <option value="synth">〰 เสียงสังเคราะห์</option>
+        </select>
+        <select className="filter-select" value={ensemble} onChange={e => setEnsemble(e.target.value)} disabled={playState !== 'stopped'}>
+          <option value="khrueangsai">🎻 ระบบเครื่องสาย</option>
+          <option value="piphat">🥁 ระบบปี่พาทย์ (สูงขึ้น 1 เสียง)</option>
         </select>
         <select className="filter-select" value={mode} onChange={e => setMode(e.target.value)}>
           <option value="combined">บรรทัดเดียว (ทำนองรวม)</option>
