@@ -32,6 +32,18 @@ export default function AdminPage() {
   const [memberMsg, setMemberMsg] = useState('');
   const [permRows, setPermRows] = useState([]);
   const [permMsg, setPermMsg] = useState('');
+  const [scRows, setScRows] = useState([]);
+  const [scMsg, setScMsg] = useState('');
+  async function loadSC() {
+    const { data } = await supabase.from('site_content').select('*').order('key');
+    setScRows(data ?? []);
+  }
+  async function clearSC(key) {
+    if (!confirm('คืนค่าเดิมของ ' + key + ' ?')) return;
+    await supabase.from('site_content').delete().eq('key', key);
+    setScMsg('✓ คืนค่าเดิม ' + key); await loadSC();
+    setTimeout(() => setScMsg(''), 2500);
+  }
   async function loadPerms() {
     const { data } = await supabase.from('feature_permissions').select('*').order('sort');
     setPermRows(data ?? []);
@@ -353,7 +365,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์'],['content','🖼 เนื้อหาเว็บ']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -622,6 +634,31 @@ export default function AdminPage() {
         </>
       )}
 
+      {tab === 'content' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🖼 เนื้อหาเว็บที่ถูกแก้ไข</div>
+          <div style={{fontSize:'0.74rem',color:'var(--muted)',lineHeight:1.9,marginBottom:'0.8rem'}}>
+            วิธีแก้ข้อความ/รูป: เข้าหน้านั้นๆ ขณะล็อกอินเป็น Admin แล้วกดปุ่ม ✏️ ข้างข้อความ หรือปุ่ม ＋ เพิ่มรูป บนกรอบรูป<br/>
+            ตารางนี้แสดงรายการที่แก้ไปแล้ว กด "คืนค่าเดิม" เพื่อกลับไปใช้ข้อความต้นฉบับในโค้ด
+            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadSC}>โหลดรายการ</button>
+          </div>
+          {scMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{scMsg}</div>}
+          {scRows.map(r => (
+            <div key={r.key} style={{display:'flex',gap:'10px',alignItems:'flex-start',
+              padding:'8px 0',borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:'0.72rem',color:'var(--gold)'}}>{r.key}</div>
+                <div style={{fontSize:'0.8rem',color:'var(--cream)',whiteSpace:'pre-wrap',
+                  maxHeight:'60px',overflow:'hidden'}}>{r.text_value ?? (r.image_path ? '🖼 ' + r.image_path : '—')}</div>
+              </div>
+              <button className="btn btn-outline btn-sm" onClick={() => clearSC(r.key)}
+                style={{fontSize:'0.68rem'}}>↺ คืนค่าเดิม</button>
+            </div>
+          ))}
+          {scRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>ยังไม่มีการแก้ไข (หรือกดโหลดรายการ)</div>}
+        </div>
+      )}
+
       {tab === 'perm' && (
         <div className="card">
           <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🔐 ตารางสิทธิ์การมองเห็น</div>
@@ -719,6 +756,31 @@ export default function AdminPage() {
               <button className="btn btn-jade btn-sm" style={{marginTop:'0.4rem'}} onClick={() => saveNathab(row)}>💾 บันทึก</button>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'content' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🖼 เนื้อหาเว็บที่ถูกแก้ไข</div>
+          <div style={{fontSize:'0.74rem',color:'var(--muted)',lineHeight:1.9,marginBottom:'0.8rem'}}>
+            วิธีแก้ข้อความ/รูป: เข้าหน้านั้นๆ ขณะล็อกอินเป็น Admin แล้วกดปุ่ม ✏️ ข้างข้อความ หรือปุ่ม ＋ เพิ่มรูป บนกรอบรูป<br/>
+            ตารางนี้แสดงรายการที่แก้ไปแล้ว กด "คืนค่าเดิม" เพื่อกลับไปใช้ข้อความต้นฉบับในโค้ด
+            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadSC}>โหลดรายการ</button>
+          </div>
+          {scMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{scMsg}</div>}
+          {scRows.map(r => (
+            <div key={r.key} style={{display:'flex',gap:'10px',alignItems:'flex-start',
+              padding:'8px 0',borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:'0.72rem',color:'var(--gold)'}}>{r.key}</div>
+                <div style={{fontSize:'0.8rem',color:'var(--cream)',whiteSpace:'pre-wrap',
+                  maxHeight:'60px',overflow:'hidden'}}>{r.text_value ?? (r.image_path ? '🖼 ' + r.image_path : '—')}</div>
+              </div>
+              <button className="btn btn-outline btn-sm" onClick={() => clearSC(r.key)}
+                style={{fontSize:'0.68rem'}}>↺ คืนค่าเดิม</button>
+            </div>
+          ))}
+          {scRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>ยังไม่มีการแก้ไข (หรือกดโหลดรายการ)</div>}
         </div>
       )}
 

@@ -1,12 +1,13 @@
-export const metadata = { title: 'สมาชิกอุปถัมภ์ — หอจดหมายเหตุดนตรีไทย' };
-
+'use client';
+import { EText, EImage } from '../../components/Editable';
 export default function PremiumPage() {
   return (
     <main className="container" style={{maxWidth:'640px'}}>
       <div style={{textAlign:'center',marginTop:'1.5rem'}}>
         <div style={{fontSize:'2.2rem'}}>💎</div>
-        <div className="section-title" style={{fontSize:'1.35rem',margin:'0.5rem 0'}}>สมาชิกอุปถัมภ์</div>
-        <div className="section-subtitle">ร่วมเป็นผู้อุปถัมภ์การอนุรักษ์ดนตรีไทย</div>
+        <EText k="premium.title" className="section-title" style={{fontSize:'1.35rem',margin:'0.5rem 0'}}>สมาชิกอุปถัมภ์</EText>
+        <EText k="premium.sub" className="section-subtitle">ร่วมเป็นผู้อุปถัมภ์การอนุรักษ์ดนตรีไทย</EText>
+      <EImage k="premium.cover" height={200} style={{margin:'1rem 0'}} />
       </div>
       <div className="card" style={{marginTop:'1.5rem',lineHeight:2,fontSize:'0.9rem'}}>
         <div style={{fontWeight:700,marginBottom:'0.5rem'}}>สิทธิพิเศษ</div>

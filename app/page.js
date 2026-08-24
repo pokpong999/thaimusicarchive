@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import AnniversaryBanner from '../components/AnniversaryBanner';
+import { EText, EImage } from '../components/Editable';
 
 const PAGE_SIZE = 25;
 
@@ -89,25 +90,29 @@ export default function HomePage() {
           <a href="#songs" className="hero-card hero-songs">
             <div className="hero-glyphs" aria-hidden>ด ร ม ฟ ซ ล ท<br/>― ― ๐ ― ― ๐ ―<br/>ซ ล ดํ รํ มํ<br/>๐ ― ― ๐</div>
             <div className="hero-inner">
-              <div className="hero-kicker">SONG ARCHIVE</div>
-              <div className="hero-title">หอจดหมายเหตุ<br/>เพลงไทย</div>
-              <div className="hero-sub">โน้ต 300 เพลง · 20,000+ วรรค · รหัสกระสวน · เล่นเสียงฆ้องวงจริง</div>
-              <span className="hero-cta">เข้าชมคลังเพลง →</span>
+              <EText k="home.songs.kicker" className="hero-kicker">SONG ARCHIVE</EText>
+              <EText k="home.songs.title" className="hero-title">{"หอจดหมายเหตุ\nเพลงไทย"}</EText>
+              <EText k="home.songs.sub" className="hero-sub">โน้ต 300 เพลง · 20,000+ วรรค · รหัสกระสวน · เล่นเสียงฆ้องวงจริง</EText>
+              <EText k="home.songs.cta" as="span" className="hero-cta" multiline={false}>เข้าชมคลังเพลง →</EText>
             </div>
           </a>
           <a href="/archive" className="hero-card hero-history">
             <div className="hero-glyphs" aria-hidden>๒๓๑๐ · ๒๔๔๓<br/>๛ ๏ ๛<br/>๒๔๖๖ · ๒๕๖๙</div>
             <div className="hero-inner">
-              <div className="hero-kicker">HISTORY ARCHIVE</div>
-              <div className="hero-title">หอจดหมายเหตุ<br/>ดนตรีไทย</div>
-              <div className="hero-sub">เหตุการณ์ 270+ รายการ · แผนที่ · เส้นเวลา 700 ปี · ครูดนตรี</div>
-              <span className="hero-cta">เข้าชมหอประวัติศาสตร์ →</span>
+              <EText k="home.hist.kicker" className="hero-kicker">HISTORY ARCHIVE</EText>
+              <EText k="home.hist.title" className="hero-title">{"หอจดหมายเหตุ\nดนตรีไทย"}</EText>
+              <EText k="home.hist.sub" className="hero-sub">เหตุการณ์ 270+ รายการ · แผนที่ · เส้นเวลา 700 ปี · ครูดนตรี</EText>
+              <EText k="home.hist.cta" as="span" className="hero-cta" multiline={false}>เข้าชมหอประวัติศาสตร์ →</EText>
             </div>
           </a>
         </section>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px',margin:'0 0 1.2rem'}}>
+          <EImage k="home.banner.left" height={200} />
+          <EImage k="home.banner.right" height={200} />
+        </div>
         <HeroAuth />
 
-        <div id="songs" className="section-title">รายการเพลงทั้งหมด</div>
+        <EText k="home.list.title" as="div" className="section-title" style={{}}>รายการเพลงทั้งหมด</EText>
         <div className="section-subtitle">Thai Classical Music Catalog · {count} songs</div>
         <div className="search-bar">
           <input className="search-input" placeholder="ค้นหาชื่อเพลง หรือ Song ID..."
