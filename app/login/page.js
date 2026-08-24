@@ -18,13 +18,25 @@ export default function LoginPage() {
   }
 
   async function doRegister() {
+    if (!name.trim()) { setMsg('⚠ กรอกชื่อที่แสดงก่อน'); return; }
+    if (!email.trim() || password.length < 6) { setMsg('⚠ กรอกอีเมล และรหัสผ่านอย่างน้อย 6 ตัวอักษร'); return; }
     setMsg('กำลังสมัคร...');
-    const { error } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { display_name: name } },
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(), password,
+      options: { data: { display_name: name.trim() } },
     });
     if (error) { setMsg('⚠ ' + error.message); return; }
-    setMsg('✓ สมัครสำเร็จ! กรุณาตรวจสอบ email เพื่อยืนยัน แล้วกลับมา login');
+    // อีเมลนี้มีบัญชีอยู่แล้ว — Supabase ไม่บอกตรงๆ แต่คืน user ที่ไม่มี identities
+    if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+      setMsg('⚠ อีเมลนี้มีบัญชีอยู่แล้ว — กดเข้าสู่ระบบแทน'); return;
+    }
+    // ปิดยืนยันอีเมลใน Supabase แล้ว (Authentication → Providers → Email → Confirm email = off)
+    // → สมัครเสร็จได้ session ทันที เข้าเว็บได้เลย
+    if (data.session) { window.location.href = '/'; return; }
+    // เผื่อยังเปิดยืนยันอีเมลอยู่: ลอง login ต่อทันที ถ้าไม่ผ่านค่อยบอกให้ไปตรวจอีเมล
+    const { error: e2 } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    if (!e2) { window.location.href = '/'; return; }
+    setMsg('✓ สมัครสำเร็จ — ระบบยังเปิดการยืนยันอีเมลอยู่ กรุณาตรวจอีเมลแล้วกลับมาเข้าสู่ระบบ');
   }
 
   return (
