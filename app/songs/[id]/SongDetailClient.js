@@ -256,8 +256,20 @@ export default function SongDetailClient() {
                 <button className="btn btn-outline" onClick={() => setEditHistory(false)}>ยกเลิก</button>
               </div>
             </>
-          ) : song.history ? (
-            <div style={{fontSize:'0.9rem',lineHeight:1.9,whiteSpace:'pre-wrap'}}>{song.history}</div>
+          ) : (song.history || song.lyrics) ? (
+            <>
+              {song.history
+                ? <div style={{fontSize:'0.9rem',lineHeight:1.9,whiteSpace:'pre-wrap'}}>{song.history}</div>
+                : <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ยังไม่มีประวัติเพลงนี้</div>}
+              {song.lyrics && (
+                <div style={{marginTop:'1.6rem',paddingTop:'1.2rem',borderTop:'1px solid var(--border)'}}>
+                  <div style={{fontWeight:600,color:'var(--gold)',marginBottom:'0.7rem',
+                    fontFamily:"'Noto Serif Thai',serif"}}>✒️ บทร้อง</div>
+                  <div style={{fontSize:'0.9rem',lineHeight:2.05,whiteSpace:'pre-wrap',
+                    fontFamily:"'Noto Serif Thai',serif"}}>{song.lyrics}</div>
+                </div>
+              )}
+            </>
           ) : (
             <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ยังไม่มีประวัติเพลงนี้</div>
           )}
