@@ -8,6 +8,14 @@ export const contentType = 'image/png';
 
 const SB = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+// ดึงข้อมูลแบบมีเวลาจำกัด — ถ้าช้าเกินให้ปล่อยผ่าน จะได้สร้างภาพทันก่อนตัวดึงข้อมูลหมดเวลา
+async function fetchT(url, opts = {}, ms = 2500) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: c.signal }); }
+  finally { clearTimeout(t); }
+}
+
 const D = (style, ...children) =>
   h('div', { style: { display: 'flex', ...style } }, ...children);
 
@@ -16,7 +24,7 @@ export default async function OgImage({ params }) {
   let photo = null;
 
   try {
-    const res = await fetch(
+    const res = await fetchT(
       `${SB}/rest/v1/archive_records?id=eq.${encodeURIComponent(params.id)}&select=what_text,who_text,when_text,where_text`,
       { headers: { apikey: KEY } }
     );
@@ -25,7 +33,7 @@ export default async function OgImage({ params }) {
       what = rows[0].what_text || what; who = rows[0].who_text || '';
       when = rows[0].when_text || ''; where = rows[0].where_text || '';
     }
-    const mres = await fetch(
+    const mres = await fetchT(
       `${SB}/rest/v1/archive_media?record_id=eq.${encodeURIComponent(params.id)}&media_type=eq.image&select=id,storage_path&order=id.asc&limit=4`,
       { headers: { apikey: KEY } }
     );
@@ -34,7 +42,7 @@ export default async function OgImage({ params }) {
     for (const m of (Array.isArray(media) ? media : [])) {
       if (!m?.storage_path) continue;
       try {
-        const imgRes = await fetch(`${SB}/storage/v1/object/public/archive-images/${m.storage_path}`);
+        const imgRes = await fetchT(`${SB}/storage/v1/object/public/archive-images/${m.storage_path}`, {}, 3500);
         if (!imgRes.ok) continue;
         const buf = Buffer.from(await imgRes.arrayBuffer());
         if (buf.length > 1.6 * 1024 * 1024) continue;   // ใหญ่ไป ข้ามไปรูปถัดไป
@@ -87,6 +95,7 @@ export default async function OgImage({ params }) {
 
   const opts = {
     ...size,
+    headers: { 'cache-control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=604800' },
     fonts: [
       { name: 'NotoThai', data: thaiFont, weight: 700, style: 'normal' },
       { name: 'Latin', data: latinFont, weight: 700, style: 'normal' },

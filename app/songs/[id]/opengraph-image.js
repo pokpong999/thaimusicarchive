@@ -6,13 +6,20 @@ export const runtime = 'nodejs';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
+async function fetchT(url, opts = {}, ms = 2500) {
+  const c = new AbortController();
+  const t = setTimeout(() => c.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: c.signal }); }
+  finally { clearTimeout(t); }
+}
+
 const D = (style, ...children) =>
   h('div', { style: { display: 'flex', ...style } }, ...children);
 
 export default async function OgImage({ params }) {
   let name = 'หอจดหมายเหตุดนตรีไทย';
   try {
-    const res = await fetch(
+    const res = await fetchT(
       `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/songs?id=eq.${encodeURIComponent(params.id)}&select=name_th`,
       { headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY } }
     );
@@ -42,6 +49,7 @@ export default async function OgImage({ params }) {
 
   return new ImageResponse(tree, {
     ...size,
+    headers: { 'cache-control': 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=604800' },
     fonts: [
       { name: 'NotoThai', data: thaiFont, weight: 700, style: 'normal' },
       { name: 'Latin', data: latinFont, weight: 700, style: 'normal' },
