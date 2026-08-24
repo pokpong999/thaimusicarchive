@@ -7,6 +7,7 @@ import LeafletMap from '../../../components/LeafletMap';
 import CommentSection from '../../../components/CommentSection';
 import ShareBar from '../../../components/ShareBar';
 import { useMe } from '../../../components/Gate';
+import StatBadge from '../../../components/StatBadge';
 
 const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future: 'อนาคต' };
 
@@ -33,7 +34,7 @@ export default function ArchiveDetailClient() {
   const images = (rec.archive_media ?? []).filter(m => m.media_type === 'image');
   const videos = (rec.archive_media ?? []).filter(m => m.media_type === 'youtube');
   const hasPos = rec.lat != null && rec.lng != null;
-  const canEditMedia = isAdmin || (user && rec.created_by === user.id);
+  const canEditMedia = isAdmin || (user && rec.submitted_by === user.id);
 
   async function addImages(files) {
     if (!files?.length) return;
@@ -51,6 +52,18 @@ export default function ArchiveDetailClient() {
     await load(); setBusy(false);
     setMsg(m => m || '✓ เพิ่มรูปแล้ว');
     setTimeout(() => setMsg(''), 3500);
+  }
+
+  async function delRecord() {
+    if (!confirm('ลบเหตุการณ์นี้ถาวร? รูปประกอบทั้งหมดจะถูกลบด้วย')) return;
+    setBusy(true);
+    const paths = images.map(m => m.storage_path).filter(Boolean);
+    if (paths.length) await supabase.storage.from('archive-images').remove(paths);
+    await supabase.from('archive_media').delete().eq('record_id', id);
+    const { error } = await supabase.from('archive_records').delete().eq('id', id);
+    setBusy(false);
+    if (error) { setMsg('⚠ ลบไม่สำเร็จ: ' + error.message); return; }
+    window.location.href = '/archive';
   }
 
   async function delImage(m) {
@@ -75,7 +88,17 @@ export default function ArchiveDetailClient() {
           <div className="meta-pill"><span className="meta-label">ใคร</span><span className="meta-value">{rec.who_text}</span></div>
           <div className="meta-pill"><span className="meta-label">ที่ไหน</span><span className="meta-value">{rec.where_text}</span></div>
         </div>
-        <div style={{marginTop:'0.8rem'}}><ShareBar title={rec.what_text + ' — หอจดหมายเหตุดนตรีไทย'} /></div>
+        <div style={{marginTop:'0.6rem'}}><StatBadge type="archive" id={id} /></div>
+        {canEditMedia && (
+          <div style={{display:'flex',gap:'8px',marginTop:'0.7rem'}}>
+            <a href={`/archive/${id}/edit`}><button className="btn btn-outline btn-sm"
+              style={{fontSize:'0.72rem'}}>✏️ แก้ไขข้อมูล</button></a>
+            <button className="btn btn-sm" onClick={delRecord} disabled={busy}
+              style={{fontSize:'0.72rem',background:'transparent',border:'1px solid #C0574B',color:'#E08878'}}>
+              🗑 ลบเหตุการณ์นี้</button>
+          </div>
+        )}
+        <div style={{marginTop:'0.8rem'}}><ShareBar statType="archive" statId={id} title={rec.what_text + ' — หอจดหมายเหตุดนตรีไทย'} /></div>
         {rec.description && (
           <div style={{marginTop:'1.2rem',fontSize:'0.88rem',lineHeight:1.8,whiteSpace:'pre-wrap'}}>{rec.description}</div>
         )}

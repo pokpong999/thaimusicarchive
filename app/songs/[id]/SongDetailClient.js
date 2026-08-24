@@ -8,6 +8,7 @@ import ExportBar from '../../../components/ExportBar';
 import CommentSection from '../../../components/CommentSection';
 import { usePermissions } from '../../../components/Gate';
 import { EText, EImage } from '../../../components/Editable';
+import StatBadge from '../../../components/StatBadge';
 import ShareBar from '../../../components/ShareBar';
 
 export default function SongDetailClient() {
@@ -208,10 +209,12 @@ export default function SongDetailClient() {
         {songOwner && <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
           ✍️ เพิ่มข้อมูลโดย: {songOwner}</div>}
         <div style={{marginTop:'0.8rem',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}}>
-          <ShareBar title={song.name_th + ' — หอจดหมายเหตุดนตรีไทย'} />
+          <ShareBar statType="song" statId={id} title={song.name_th + ' — หอจดหมายเหตุดนตรีไทย'} />
           {can('cite') && <button className="btn btn-outline btn-sm" style={{fontSize:'0.7rem'}} onClick={copyCitation}>
             {copied ? '✓ คัดลอกแล้ว' : '📚 คัดลอกการอ้างอิง'}</button>}
         </div>
+        <EImage k={`song.cover.${id}`} height={220} style={{margin:'1rem 0 0.4rem'}} />
+        <div style={{margin:'0.5rem 0'}}><StatBadge type="song" id={id} /></div>
         <div className="detail-meta">
           <div className="meta-pill"><span className="meta-label">วรรค</span>
             <span className="meta-value" style={{fontFamily:'monospace',color:'var(--jade)'}}>{song.total_verses}</span></div>

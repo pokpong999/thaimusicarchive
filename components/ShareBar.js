@@ -1,18 +1,22 @@
 'use client';
 import { useState } from 'react';
+import { countShare } from '../lib/stats';
 
-export default function ShareBar({ title }) {
+export default function ShareBar({ title, statType, statId }) {
   const [copied, setCopied] = useState(false);
   const url = typeof window !== 'undefined' ? window.location.href : '';
   const enc = encodeURIComponent(url);
   const encTitle = encodeURIComponent(title ?? 'หอจดหมายเหตุดนตรีไทย');
 
-  function open(link) { window.open(link, '_blank', 'width=600,height=500'); }
+  function bump() { if (statType && statId) countShare(statType, statId); }
+  function open(link) { bump(); window.open(link, '_blank', 'width=600,height=500'); }
   async function copy() {
+    bump();
     await navigator.clipboard.writeText(url);
     setCopied(true); setTimeout(() => setCopied(false), 2000);
   }
   async function nativeShare() {
+    bump();
     if (navigator.share) {
       try { await navigator.share({ title: title, url }); } catch {}
     } else copy();

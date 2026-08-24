@@ -34,6 +34,19 @@ export default function AdminPage() {
   const [permMsg, setPermMsg] = useState('');
   const [scRows, setScRows] = useState([]);
   const [scMsg, setScMsg] = useState('');
+  const [statTop, setStatTop] = useState({ song: [], archive: [] });
+  const [statSum, setStatSum] = useState([]);
+  async function loadStats() {
+    const { data: ov } = await supabase.from('stats_overview').select('*');
+    setStatSum(ov ?? []);
+    const out = {};
+    for (const t of ['song','archive']) {
+      const { data } = await supabase.from('content_stats').select('*')
+        .eq('target_type', t).order('views', { ascending: false }).limit(15);
+      out[t] = data ?? [];
+    }
+    setStatTop(out);
+  }
   async function loadSC() {
     const { data } = await supabase.from('site_content').select('*').order('key');
     setScRows(data ?? []);
@@ -365,7 +378,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์'],['content','🖼 เนื้อหาเว็บ']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์'],['content','🖼 เนื้อหาเว็บ'],['stats','📈 สถิติ']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -634,6 +647,46 @@ export default function AdminPage() {
         </>
       )}
 
+      {tab === 'stats' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>📈 สถิติการเข้าชมและการแชร์</div>
+          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
+            นับ 1 วิวต่อผู้ชม 1 คนต่อชิ้นงาน ทุก 6 ชั่วโมง · ยอดแชร์นับเมื่อกดปุ่มแชร์
+            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadStats}>โหลดสถิติ</button>
+          </div>
+          {statSum.length > 0 && (
+            <div style={{display:'flex',gap:'12px',flexWrap:'wrap',marginBottom:'1rem'}}>
+              {statSum.map(r => (
+                <div key={r.target_type} className="card" style={{flex:'1 1 190px',margin:0,padding:'0.8rem'}}>
+                  <div style={{fontSize:'0.72rem',color:'var(--muted)'}}>
+                    {r.target_type === 'song' ? '🎵 เพลง' : r.target_type === 'archive' ? '📜 เหตุการณ์' : r.target_type}</div>
+                  <div style={{fontSize:'1.3rem',fontWeight:700,color:'var(--gold)'}}>
+                    👁 {Number(r.total_views ?? 0).toLocaleString('th-TH')}</div>
+                  <div style={{fontSize:'0.78rem',color:'var(--jade)'}}>
+                    ↗ แชร์ {Number(r.total_shares ?? 0).toLocaleString('th-TH')} · {r.items} รายการ</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {['song','archive'].map(t => (statTop[t]?.length > 0 && (
+            <div key={t} style={{marginBottom:'1rem'}}>
+              <div style={{fontWeight:600,fontSize:'0.85rem',marginBottom:'0.4rem'}}>
+                {t === 'song' ? '🎵 เพลงยอดนิยม 15 อันดับ' : '📜 เหตุการณ์ยอดนิยม 15 อันดับ'}</div>
+              {statTop[t].map((r, i) => (
+                <div key={r.target_id} style={{display:'flex',gap:'10px',fontSize:'0.8rem',
+                  padding:'5px 0',borderBottom:'1px solid rgba(42,63,92,0.3)'}}>
+                  <span style={{color:'var(--muted)',width:'22px'}}>{i+1}.</span>
+                  <a href={`/${t === 'song' ? 'songs' : 'archive'}/${r.target_id}`}
+                    style={{flex:1,color:'var(--gold2)',overflow:'hidden',textOverflow:'ellipsis'}}>{r.target_id}</a>
+                  <span>👁 {r.views}</span><span style={{color:'var(--jade)'}}>↗ {r.shares}</span>
+                </div>
+              ))}
+            </div>
+          )))}
+          {statSum.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดสถิติ" (ต้องรัน thma_stats.sql ก่อน)</div>}
+        </div>
+      )}
+
       {tab === 'content' && (
         <div className="card">
           <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🖼 เนื้อหาเว็บที่ถูกแก้ไข</div>
@@ -756,6 +809,46 @@ export default function AdminPage() {
               <button className="btn btn-jade btn-sm" style={{marginTop:'0.4rem'}} onClick={() => saveNathab(row)}>💾 บันทึก</button>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'stats' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>📈 สถิติการเข้าชมและการแชร์</div>
+          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
+            นับ 1 วิวต่อผู้ชม 1 คนต่อชิ้นงาน ทุก 6 ชั่วโมง · ยอดแชร์นับเมื่อกดปุ่มแชร์
+            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadStats}>โหลดสถิติ</button>
+          </div>
+          {statSum.length > 0 && (
+            <div style={{display:'flex',gap:'12px',flexWrap:'wrap',marginBottom:'1rem'}}>
+              {statSum.map(r => (
+                <div key={r.target_type} className="card" style={{flex:'1 1 190px',margin:0,padding:'0.8rem'}}>
+                  <div style={{fontSize:'0.72rem',color:'var(--muted)'}}>
+                    {r.target_type === 'song' ? '🎵 เพลง' : r.target_type === 'archive' ? '📜 เหตุการณ์' : r.target_type}</div>
+                  <div style={{fontSize:'1.3rem',fontWeight:700,color:'var(--gold)'}}>
+                    👁 {Number(r.total_views ?? 0).toLocaleString('th-TH')}</div>
+                  <div style={{fontSize:'0.78rem',color:'var(--jade)'}}>
+                    ↗ แชร์ {Number(r.total_shares ?? 0).toLocaleString('th-TH')} · {r.items} รายการ</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {['song','archive'].map(t => (statTop[t]?.length > 0 && (
+            <div key={t} style={{marginBottom:'1rem'}}>
+              <div style={{fontWeight:600,fontSize:'0.85rem',marginBottom:'0.4rem'}}>
+                {t === 'song' ? '🎵 เพลงยอดนิยม 15 อันดับ' : '📜 เหตุการณ์ยอดนิยม 15 อันดับ'}</div>
+              {statTop[t].map((r, i) => (
+                <div key={r.target_id} style={{display:'flex',gap:'10px',fontSize:'0.8rem',
+                  padding:'5px 0',borderBottom:'1px solid rgba(42,63,92,0.3)'}}>
+                  <span style={{color:'var(--muted)',width:'22px'}}>{i+1}.</span>
+                  <a href={`/${t === 'song' ? 'songs' : 'archive'}/${r.target_id}`}
+                    style={{flex:1,color:'var(--gold2)',overflow:'hidden',textOverflow:'ellipsis'}}>{r.target_id}</a>
+                  <span>👁 {r.views}</span><span style={{color:'var(--jade)'}}>↗ {r.shares}</span>
+                </div>
+              ))}
+            </div>
+          )))}
+          {statSum.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดสถิติ" (ต้องรัน thma_stats.sql ก่อน)</div>}
         </div>
       )}
 
