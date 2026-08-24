@@ -2,7 +2,18 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../lib/supabase';
-import { textToVerses, versesToRows } from '../../lib/notation-core';
+import { textToVerses, versesToRows, rowsToVerses } from '../../lib/notation-core';
+import NotationInput from '../../components/NotationInput';
+
+// กระดานอ่านอย่างเดียวสำหรับดู/ฟังโน้ตที่ส่งมาก่อนอนุมัติ
+function SubmissionBoard({ sub }) {
+  const rows = submissionRows(sub);
+  const j = sub.notation_json || {};
+  if (!rows.length) return <div style={{fontSize:'0.8rem',color:'var(--muted)'}}>อ่านโน้ตไม่ออก</div>;
+  return <NotationInput initialVerses={rowsToVerses(rows)}
+    options={{ readOnly: true, staff: true, base: j.base || 4, lineHong: j.line_hong || 8,
+               twoHands: !!j.two_hands, level: j.level || 'สองชั้น', ensemble: j.ensemble || 'sai' }} />;
+}
 
 // แปลงสิ่งที่ส่งมา (รูปแบบใหม่ notation_json หรือข้อความเก่า) เป็นแถว song_melody
 function submissionRows(sub) {
@@ -20,6 +31,7 @@ export default function AdminPage() {
   const [pendingVideos, setPendingVideos] = useState([]);
   const [pendingRecords, setPendingRecords] = useState([]);
   const [pendingTang, setPendingTang] = useState([]);
+  const [boardOpen, setBoardOpen] = useState({});   // id → เปิดกระดานดูโน้ตที่ส่งมา
   const [pendingFiles, setPendingFiles] = useState([]);
   const [sampleFiles, setSampleFiles] = useState([]);
   const [sampleList, setSampleList] = useState([]);
@@ -478,9 +490,14 @@ export default function AdminPage() {
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontWeight:600}}>{t.songs?.name_th} <span className="song-id">({t.song_id})</span>
                     <span className="badge badge-fixed" style={{marginLeft:'8px'}}>{t.instrument}</span></div>
-                  <pre style={{fontSize:'0.78rem',color:'var(--cream)',background:'var(--navy3)',
-                    padding:'0.7rem',borderRadius:'5px',marginTop:'0.6rem',overflowX:'auto',
-                    whiteSpace:'pre-wrap',fontFamily:'monospace'}}>{t.notation_text}</pre>
+                  {boardOpen[t.id]
+                    ? <div style={{marginTop:'0.6rem'}}><SubmissionBoard sub={t} /></div>
+                    : <pre style={{fontSize:'0.78rem',color:'var(--cream)',background:'var(--navy3)',
+                        padding:'0.7rem',borderRadius:'5px',marginTop:'0.6rem',overflowX:'auto',
+                        whiteSpace:'pre-wrap',fontFamily:'monospace'}}>{t.notation_text}</pre>}
+                  <button className="btn btn-outline btn-sm" style={{marginTop:'0.4rem'}}
+                    onClick={() => setBoardOpen({...boardOpen, [t.id]: !boardOpen[t.id]})}>
+                    {boardOpen[t.id] ? 'ดูเป็นข้อความ' : '🎼 ดูบนกระดาน / ฟัง'}</button>
                   <div style={{fontSize:'0.7rem',color:'var(--muted)'}}>
                     {submissionRows(t).length} วรรค
                     {t.notation_json?.two_hands ? ' · สองมือ R/L' : ''}
@@ -559,9 +576,16 @@ export default function AdminPage() {
                 <span className="badge badge-fixed" style={{marginLeft:'8px'}}>{s.song_type}</span>
                 <span className="badge badge-mixed" style={{marginLeft:'4px'}}>{s.instrument}</span></div>
               {s.note && <div style={{fontSize:'0.75rem',color:'var(--muted)',marginTop:'4px'}}>📝 {s.note}</div>}
-              <pre style={{fontSize:'0.8rem',background:'var(--navy3)',padding:'0.7rem',borderRadius:'5px',
-                marginTop:'0.6rem',overflowX:'auto',whiteSpace:'pre-wrap',fontFamily:'monospace'}}>{s.notation_text}</pre>
+              {boardOpen[s.id]
+                ? <div style={{marginTop:'0.6rem'}}><SubmissionBoard sub={s} /></div>
+                : <pre style={{fontSize:'0.8rem',background:'var(--navy3)',padding:'0.7rem',borderRadius:'5px',
+                    marginTop:'0.6rem',overflowX:'auto',whiteSpace:'pre-wrap',fontFamily:'monospace'}}>{s.notation_text}</pre>}
+              <div style={{fontSize:'0.7rem',color:'var(--muted)',marginTop:'4px'}}>
+                {submissionRows(s).length} วรรค · กระสวน: <span style={{fontFamily:'monospace',color:'var(--gold)'}}>{submissionRows(s).map(r => r.krasuan).join(' ')}</span>
+              </div>
               <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',marginTop:'0.6rem'}}>
+                <button className="btn btn-outline btn-sm" onClick={() => setBoardOpen({...boardOpen, [s.id]: !boardOpen[s.id]})}>
+                  {boardOpen[s.id] ? 'ดูเป็นข้อความ' : '🎼 ดูบนกระดาน / ฟัง'}</button>
                 <input className="form-input" style={{width:'140px'}} placeholder="Song ID เช่น USR001"
                   value={songIdInput[s.id] ?? ''} onChange={e => setSongIdInput({...songIdInput, [s.id]: e.target.value})} />
                 <button className="btn btn-jade btn-sm" onClick={() => approveSong(s)}>✓ อนุมัติ + สร้างเพลง</button>

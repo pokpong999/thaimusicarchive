@@ -45,6 +45,7 @@ export default function NewSongPage() {
     setBusy(false);
     if (error) { setMsg('⚠ ' + error.message); return; }
     setMsg(`✓ ส่งเพลง "${name}" (${rows.length} วรรค) แล้ว — รอผู้ดูแลตรวจสอบและอนุมัติ (+10 แต้มเมื่อผ่าน)`);
+    padRef.current.clearDraft();
     setName(''); setNote('');
   }
 
@@ -85,7 +86,7 @@ export default function NewSongPage() {
           </div>
         </div>
 
-        <NotationInput ref={padRef} onChange={onChange} options={{ base: 4, lineHong: 8 }} />
+        <NotationInput ref={padRef} onChange={onChange} options={{ base: 4, lineHong: 8, draftKey: 'new' }} />
 
         <div className="form-group" style={{marginTop:'1rem'}}>
           <label className="form-label">ที่มาโน้ต / หมายเหตุถึงผู้ดูแล</label>

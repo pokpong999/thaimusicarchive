@@ -77,7 +77,7 @@ export default function EditMelodyPage() {
       });
       setBusy(false);
       if (error) { setMsg('⚠ ' + error.message); return; }
-      setDirty(false); setMsg('✓ ส่งทาง' + instrument + ' แล้ว (' + newRows.length + ' วรรค) — รอผู้ดูแลอนุมัติ (+10 แต้มเมื่อผ่าน)');
+      setDirty(false); padRef.current.clearDraft(); setMsg('✓ ส่งทาง' + instrument + ' แล้ว (' + newRows.length + ' วรรค) — รอผู้ดูแลอนุมัติ (+10 แต้มเมื่อผ่าน)');
       return;
     }
 
@@ -106,7 +106,7 @@ export default function EditMelodyPage() {
     }
     setBusy(false);
     if (errs.length) { setMsg('⚠ บันทึกไม่ครบ — ' + errs.slice(0, 3).join(' · ') + (errs.length > 3 ? ' …' : '')); return; }
-    setDirty(false);
+    setDirty(false); padRef.current.clearDraft();
     setMsg('✓ บันทึกแล้ว ' + newRows.length + ' วรรค' + (approved ? '' : ' (รอผู้ดูแลอนุมัติ)'));
     const { data: r2 } = await supabase.from('song_melody').select('*').eq('song_id', id).eq('instrument', instrument).order('verse_no');
     setRows(r2 || []);
@@ -151,7 +151,7 @@ export default function EditMelodyPage() {
         </div>
 
         <NotationInput ref={padRef} initialVerses={initialVerses} onChange={onChange}
-          options={{ base: 4, lineHong: 8, twoHands }} />
+          options={{ base: 4, lineHong: 8, twoHands, draftKey: `edit:${id}:${instrument}${isNew ? ':new' : ''}` }} />
 
         <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',marginTop:'1rem'}}>
           <button className="btn btn-jade" onClick={save} disabled={busy || (!dirty && !isNew)}>
