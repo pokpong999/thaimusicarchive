@@ -320,7 +320,10 @@ export default function AdminPage() {
   }
 
   async function setMemberRole(uid, newRole) {
-    await supabase.from('profiles').update({ role: newRole }).eq('id', uid); loadAll();
+    // ผ่านฟังก์ชันที่เช็คสิทธิ์ (คอลัมน์ role อัปเดตตรงไม่ได้แล้วหลังปิดช่องแอดมิน)
+    const { error } = await supabase.rpc('set_user_role', { target: uid, new_role: newRole });
+    if (error) { alert('เปลี่ยนสิทธิ์ไม่สำเร็จ: ' + error.message); return; }
+    loadAll();
   }
   async function saveNathab(row) {
     const { error } = await supabase.from('nathab_patterns')
@@ -337,8 +340,9 @@ export default function AdminPage() {
     setMemberList(data ?? []);
   }
   async function saveMember(m) {
-    const { error } = await supabase.from('profiles')
-      .update({ role: m.role, tier: m.tier }).eq('id', m.id);
+    const r = await supabase.rpc('set_user_role', { target: m.id, new_role: m.role });
+    const t = r.error ? r : await supabase.rpc('set_user_tier', { target: m.id, new_tier: m.tier });
+    const error = r.error || t.error;
     setMemberMsg(error ? '⚠ ' + error.message : `✓ บันทึก ${m.display_name} แล้ว`);
     setTimeout(() => setMemberMsg(''), 3000);
   }
