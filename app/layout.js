@@ -28,6 +28,14 @@ export default function RootLayout({ children }) {
         <Topbar />
         {children}
         <footer className="footer" style={{lineHeight:2}}>
+          <div style={{display:'flex',gap:'1.2rem',justifyContent:'center',flexWrap:'wrap',marginBottom:'0.6rem',fontSize:'0.8rem'}}>
+            <a href="/krasuan" style={{color:'var(--gold2)'}}>ค้นกระสวน</a>
+            <a href="/people" style={{color:'var(--gold2)'}}>ครูดนตรี</a>
+            <a href="/timeline" style={{color:'var(--gold2)'}}>เส้นเวลา</a>
+            <a href="/compare" style={{color:'var(--gold2)'}}>เปรียบเทียบเพลง</a>
+            <a href="/search" style={{color:'var(--gold2)'}}>ค้นหา</a>
+            <a href="/about" style={{color:'var(--gold2)'}}>เกี่ยวกับโครงการ</a>
+          </div>
           <div style={{fontWeight:600,color:'var(--cream)'}}>หอจดหมายเหตุดนตรีไทย · Thai Music Archive (THMA)</div>
           <div>ข้อมูลและลิขสิทธิ์ © ปกป้อง ขำประเสริฐ (Pokpong Khamprasert) — ผลงานที่สมาชิกเพิ่มแสดงเครดิตผู้เพิ่มกำกับไว้</div>
           <div style={{fontSize:'0.78rem'}}>

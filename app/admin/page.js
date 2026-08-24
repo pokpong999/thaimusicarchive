@@ -234,6 +234,38 @@ export default function AdminPage() {
     setMgMsg(error ? '⚠ ' + error.message : `✓ บันทึกหน้าทับ ${row.nathab} ${row.level} ${row.instrument}`);
   }
 
+  const [backupMsg, setBackupMsg] = useState('');
+  async function backupAll() {
+    setBackupMsg('⏳ กำลังดึงข้อมูล...');
+    await new Promise((res) => {
+      if (window.XLSX) return res();
+      const js = document.createElement('script');
+      js.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+      js.onload = res; document.head.appendChild(js);
+    });
+    const tables = ['songs','song_melody','archive_records','song_videos','song_files',
+      'comments','profiles','nathab_patterns','melody_submissions','song_submissions'];
+    const wb = window.XLSX.utils.book_new();
+    for (const t of tables) {
+      setBackupMsg(`⏳ ${t}...`);
+      let all = [], from = 0;
+      while (true) {
+        const { data, error } = await supabase.from(t).select('*').range(from, from + 999);
+        if (error || !data?.length) break;
+        all = all.concat(data);
+        if (data.length < 1000) break;
+        from += 1000;
+      }
+      if (all.length) {
+        const ws = window.XLSX.utils.json_to_sheet(all);
+        window.XLSX.utils.book_append_sheet(wb, ws, t.slice(0, 31));
+      }
+    }
+    const d = new Date().toISOString().slice(0, 10);
+    window.XLSX.writeFile(wb, `THMA_backup_${d}.xlsx`);
+    setBackupMsg('✓ ดาวน์โหลดไฟล์สำรองแล้ว — เก็บไว้ในที่ปลอดภัย');
+  }
+
   async function exportMembers() {
     await new Promise((res) => {
       if (window.XLSX) return res();
@@ -287,7 +319,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -580,6 +612,19 @@ export default function AdminPage() {
               <button className="btn btn-jade btn-sm" style={{marginTop:'0.4rem'}} onClick={() => saveNathab(row)}>💾 บันทึก</button>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'backup' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.6rem'}}>💾 สำรองข้อมูลทั้งเว็บ</div>
+          <div style={{fontSize:'0.8rem',color:'var(--muted)',lineHeight:1.8,marginBottom:'1rem'}}>
+            ดาวน์โหลดข้อมูลทุกตาราง (เพลง โน้ต จดหมายเหตุ วิดีโอ สมาชิก คอมเมนต์ หน้าทับ ฯลฯ)
+            เป็น Excel ไฟล์เดียว — แนะนำสำรองสม่ำเสมอ เดือนละครั้งเป็นอย่างน้อย
+            และเก็บไฟล์ไว้หลายที่ (คอมพิวเตอร์ + Google Drive)
+          </div>
+          <button className="btn btn-jade" onClick={backupAll}>📦 ดาวน์โหลดไฟล์สำรองทั้งหมด</button>
+          {backupMsg && <div style={{marginTop:'0.8rem',fontSize:'0.82rem',color:'var(--jade)'}}>{backupMsg}</div>}
         </div>
       )}
 

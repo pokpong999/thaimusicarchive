@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
+import Link from 'next/link';
 import Avatar from '../../components/Avatar';
 import { getRank, getNextRank, RANKS } from '../../lib/ranks';
 import RankBadge from '../../components/RankBadge';
@@ -54,10 +55,12 @@ export default function LeaderboardPage() {
                       {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                     </td>
                     <td style={{fontWeight:500}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
+                      <Link href={`/members/${p.id}`}>
+                      <div style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer'}}>
                         <Avatar path={p.avatar_url} name={p.display_name} size={28} />
                         {p.display_name ?? 'ไม่ระบุชื่อ'}
                       </div>
+                      </Link>
                     </td>
                     <td><RankBadge points={p.points} /></td>
                     <td style={{textAlign:'right',fontFamily:'monospace',color:'var(--jade)'}}>{(p.points ?? 0).toLocaleString()}</td>

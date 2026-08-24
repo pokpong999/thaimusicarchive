@@ -14,6 +14,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [videoCounts, setVideoCounts] = useState({});
   const [isAdmin, setIsAdmin] = useState(false);
+  const [stats, setStats] = useState(null);
 
   useEffect(() => { load(); }, [page, q]);
   useEffect(() => {
@@ -22,6 +23,20 @@ export default function HomePage() {
       const { data: p } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
       setIsAdmin(p?.role === 'admin');
     });
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      const [sc, ac, mc, pc, kc] = await Promise.all([
+        supabase.from('songs').select('id', { count: 'exact', head: true }),
+        supabase.from('archive_records').select('id', { count: 'exact', head: true }).eq('approved', true),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+        supabase.from('pattern_library').select('pattern_id', { count: 'exact', head: true }),
+        supabase.from('krasuan_catalog').select('id', { count: 'exact', head: true }),
+      ]);
+      setStats({ songs: sc.count ?? 0, records: ac.count ?? 0, members: mc.count ?? 0,
+        patterns: pc.count ?? 0, verses: kc.count ?? 0 });
+    })();
   }, []);
 
   async function adminDeleteSong(s) {

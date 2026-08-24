@@ -29,6 +29,8 @@ export default function SongDetailClient() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [tab, setTab] = useState('history');
+  const [krasuan, setKrasuan] = useState(null);
+  const [luktok, setLuktok] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [url, setUrl] = useState('');
   const [title, setTitle] = useState('');
@@ -135,10 +137,21 @@ export default function SongDetailClient() {
 
   if (!song) return <main className="container">กำลังโหลด...</main>;
 
+  useEffect(() => {
+    if (tab !== 'analysis' || krasuan !== null) return;
+    supabase.from('krasuan_catalog').select('section, verse_no, code, pattern')
+      .eq('song_id', id).order('verse_no').limit(500)
+      .then(({ data }) => setKrasuan(data ?? []));
+    supabase.from('luktok_catalog').select('section, sentence_no, luktok_id, pair')
+      .eq('song_id', id).order('sentence_no').limit(300)
+      .then(({ data }) => setLuktok(data ?? []));
+  }, [tab]);
+
   const TABS = [
     ['history', '📜 ประวัติเพลง'],
     ['notation', '♪ โน้ตเพลง'],
     ['videos', `🎬 วิดีโอ (${videos.length})`],
+    ['analysis', '📊 วิเคราะห์'],
   ];
 
   return (
@@ -299,6 +312,55 @@ export default function SongDetailClient() {
       )}
 
       {/* ── วิดีโอ ── */}
+      {tab === 'analysis' && (
+        <div>
+          {krasuan === null ? <div style={{color:'var(--muted)'}}>กำลังโหลด...</div> : (
+            <>
+              {krasuan.length === 0 && (luktok ?? []).length === 0 && (
+                <div className="card" style={{textAlign:'center',color:'var(--muted)'}}>
+                  ยังไม่มีข้อมูลวิเคราะห์สำหรับเพลงนี้</div>
+              )}
+              {krasuan.length > 0 && (
+                <div className="card">
+                  <div style={{fontWeight:600,marginBottom:'0.7rem'}}>🥁 กระสวนรายวรรค ({krasuan.length} วรรค)</div>
+                  <div className="table-wrap" style={{maxHeight:'400px',overflowY:'auto'}}>
+                    <table>
+                      <thead><tr><th>วรรค</th><th>ท่อน</th><th>รหัส</th><th>กระสวน</th></tr></thead>
+                      <tbody>
+                        {krasuan.map((k, i) => (
+                          <tr key={i}>
+                            <td style={{fontFamily:'monospace'}}>{k.verse_no}</td>
+                            <td style={{fontSize:'0.75rem',color:'var(--muted)'}}>{k.section}</td>
+                            <td style={{fontFamily:'monospace',color:'var(--gold)',fontWeight:700}}>{k.code}</td>
+                            <td style={{fontFamily:'monospace',fontSize:'0.78rem',whiteSpace:'nowrap'}}>{k.pattern}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {(luktok ?? []).length > 0 && (
+                <div className="card">
+                  <div style={{fontWeight:600,marginBottom:'0.7rem'}}>🎯 คู่ลูกตกรายประโยค ({luktok.length} ประโยค)</div>
+                  <div style={{display:'flex',gap:'6px',flexWrap:'wrap'}}>
+                    {luktok.map((l, i) => (
+                      <div key={i} title={`${l.section} ประโยค ${l.sentence_no}`}
+                        style={{background:'var(--navy3)',border:'1px solid var(--border)',borderRadius:'6px',
+                          padding:'4px 10px',fontSize:'0.8rem',fontFamily:'monospace'}}>
+                        <span style={{color:'var(--muted)',fontSize:'0.66rem'}}>{l.sentence_no}·</span>
+                        <span style={{color:'var(--jade)',fontWeight:700}}> {l.pair}</span>
+                        <span style={{color:'var(--muted)',fontSize:'0.66rem'}}> {l.luktok_id}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {tab === 'videos' && (
         <>
           <div style={{display:'flex',justifyContent:'flex-end',marginBottom:'0.8rem'}}>

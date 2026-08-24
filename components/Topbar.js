@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import RankBadge from './RankBadge';
 import Avatar from './Avatar';
+import NotificationBell from './NotificationBell';
 
 export default function Topbar() {
   const [user, setUser] = useState(null);
@@ -51,11 +52,13 @@ export default function Topbar() {
         <Link href="/leaderboard">ทำเนียบ</Link>
         {user && <Link href="/songs/new">➕ เพิ่มเพลง</Link>}
         {user && <Link href="/dashboard">ของฉัน</Link>}
+        <Link href="/search" title="ค้นหา">🔍</Link>
         {profile?.role === 'admin' && <Link href="/admin">Admin</Link>}
       </nav>
       <div className="topbar-right">
         {user ? (
           <>
+            <NotificationBell userId={user.id} />
             <Avatar path={profile?.avatar_url} name={profile?.display_name} size={30} />
             <RankBadge points={profile?.points} showPoints />
             <Link href="/profile"><span style={{fontSize:'0.78rem',color:'var(--muted)',cursor:'pointer',textDecoration:'underline dotted'}}>
