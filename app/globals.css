@@ -98,3 +98,15 @@ tbody tr:hover td { background:rgba(255,255,255,0.02); }
        url('/fonts/THNotation.otf') format('opentype');
   font-display: swap;
 }
+
+/* Tooltip บนแผนที่: ให้ตัดบรรทัดและกรอบขยายตามเนื้อหา */
+.thma-tooltip {
+  white-space: normal !important;
+  width: max-content;
+  max-width: 230px !important;
+  padding: 8px 10px !important;
+  border-radius: 10px !important;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.35) !important;
+  line-height: 1.55 !important;
+}
+.thma-tooltip > div { max-width: 210px !important; }
