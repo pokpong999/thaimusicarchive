@@ -78,12 +78,6 @@ const REG_LABEL = { '-1': 'ต่ำ', '0': 'กลาง', '1': 'สูง' };
 export default function NotationPlayer({ verses, lyrics }) {
   const { can } = usePermissions();
   const [mode, setMode] = useState('combined');
-  useEffect(() => {
-    if (!can('player_staff') && mode === 'staff') setMode('combined');
-    if (!can('player_hands') && ['hands','khim','vocal'].includes(mode)) setMode('combined');
-    if (!can('player_real') && sound === 'real') setSound('synth');
-    if (!can('player_perc') && nathab !== 'none') setNathab('none');
-  }, [can, mode, sound, nathab]);
   const [hand, setHand] = useState('both');
   const [sound, setSound] = useState('real');
   const [bpm, setBpm] = useState(120);
@@ -92,6 +86,14 @@ export default function NotationPlayer({ verses, lyrics }) {
   const [drumInst, setDrumInst] = useState('ตะโพน');
   const [level, setLevel] = useState('สองชั้น');
   const [chingOn, setChingOn] = useState(false);
+
+  useEffect(() => {
+    if (!can('player_staff') && mode === 'staff') setMode('combined');
+    if (!can('player_hands') && ['hands','khim','vocal'].includes(mode)) setMode('combined');
+    if (!can('player_real') && sound === 'real') setSound('synth');
+    if (!can('player_perc') && nathab !== 'none') setNathab('none');
+  }, [can, mode, sound, nathab]);
+
   const nathabRowsRef = useRef(null);
   const [playState, setPlayState] = useState('stopped');
   const [loadingSamples, setLoadingSamples] = useState(false);
