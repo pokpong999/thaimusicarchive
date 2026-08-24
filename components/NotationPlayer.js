@@ -193,68 +193,79 @@ export default function NotationPlayer({ verses, lyrics }) {
     setPlayState('playing');
 
     const stepDur = 60 / bpm / 2;
-    const t0 = ctx.currentTime + 0.15;
+    // เผื่อเวลาเปิดเพลง 0.25 วิ — ตัวนำของสะบัดในตำแหน่งแรกต้องนัดก่อน t0 ได้ (เพลงยาวใช้เวลานัดหลายสิบ ms)
+    const t0 = ctx.currentTime + 0.25;
     const cursorTimeline = [];
     // คิวเสียง: ทยอยนัดล่วงหน้าเป็นช่วงๆ แทนการนัดทั้งเพลงทีเดียว (เพลงยาวหมื่นโน้ตจะพัง)
     const soundEvents = [];
     const q = (t, fn) => { if (Number.isFinite(t)) soundEvents.push({ t, fn }); };
 
-    function scheduleNote(n, noteTime) {
+    // vel = น้ำหนักมือ (สะบัดตัวนำเบากว่าตัวลง)
+    function scheduleNote(n, noteTime, vel = 1) {
       let played = false;
-      if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85, pitchShift);
+      if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85 * vel, pitchShift);
       if (!played) {
         const f = noteFreq(n.ch, n.register);
-        if (f) synthNote(ctx, f * Math.pow(2, pitchShift / 7), noteTime, stepDur * 2.2);
+        if (f) synthNote(ctx, f * Math.pow(2, pitchShift / 7), noteTime, stepDur * 2.2, 0.45 * vel);
       }
     }
 
+    // ── เรียงโน้ตทุกวรรคเป็นแถวเดียวยาวตลอดเพลง (2 แถว = 2 มือ) ──
+    // ทำให้สะบัดที่อยู่ตำแหน่งแรกของวรรค ดึงตัวนำจากตำแหน่งสุดท้ายของวรรคก่อนได้
+    // และสะบัดตรงจุดที่กดเล่น (seek) ยังได้ตัวนำจากห้องก่อนหน้า แม้ห้องนั้นไม่ถูกเล่น
+    const G = [[], []];
     parsed.forEach((pv, vi) => {
-      if (pv.offset + pv.len <= startStep) return;
-      const pStart = Math.max(0, startStep - pv.offset);
-      const lines = !pv.useHands ? [pv.cb]
-        : hand === 'R' ? [pv.rh] : hand === 'L' ? [pv.lh] : [pv.rh, pv.lh];
-
-      for (let p = pStart; p < pv.len; p++) {
-        cursorTimeline.push({ time: t0 + (pv.offset + p - startStep) * stepDur, verseIdx: vi, pos: p });
+      const ls = !pv.useHands ? [pv.cb, null]
+        : hand === 'R' ? [pv.rh, null] : hand === 'L' ? [pv.lh, null] : [pv.rh, pv.lh];
+      for (let p = 0; p < pv.len; p++) {
+        G[0].push(ls[0][p]);
+        G[1].push(ls[1] ? ls[1][p] : []);
+        if (pv.offset + p >= startStep) {
+          cursorTimeline.push({ time: t0 + (pv.offset + p - startStep) * stepDur, verseIdx: vi, pos: p });
+        }
       }
+    });
 
-      // ── สะบัดข้ามมือ ──
-      const consumed = lines.map(() => new Array(pv.len).fill(false));
-      const runMap = {};
-      for (let p = pStart; p < pv.len; p++) {
-        lines.forEach((line, li) => {
-          if (line[p].length > 1) {
-            let lead = [];
-            if (p > pStart) {
-              if (line[p - 1].length === 1 && !consumed[li][p - 1]) {
-                lead = line[p - 1]; consumed[li][p - 1] = true;
-              } else {
-                for (let lj = 0; lj < lines.length; lj++) {
-                  if (lj !== li && lines[lj][p].length === 0
-                      && lines[lj][p - 1].length === 1 && !consumed[lj][p - 1]) {
-                    lead = lines[lj][p - 1]; consumed[lj][p - 1] = true; break;
-                  }
-                }
-              }
-            }
-            runMap[li + '-' + p] = [...lead, ...line[p]];
-          }
-        });
-      }
-
-      lines.forEach((line, li) => {
-        for (let p = pStart; p < pv.len; p++) {
-          if (consumed[li][p]) continue;
-          const t = t0 + (pv.offset + p - startStep) * stepDur;
-          const run = runMap[li + '-' + p];
-          if (run) {
-            run.forEach((n, ni) => { const tt = t - (run.length - 1 - ni) * sabatGap; q(tt, () => scheduleNote(n, tt)); });
-          } else {
-            line[p].forEach(n => q(t, () => scheduleNote(n, t)));
+    // ── สะบัด (คู่โน้ตในช่องเดียว + ตัวนำจากช่องก่อนหน้า, ข้ามมือได้) ──
+    // กฎ: คู่สะบัดยึดตำแหน่งท้าย ตัวนำ = โน้ตเดี่ยวในช่องก่อนหน้าของมือเดียวกัน
+    //      ถ้ามือเดียวกันไม่มี ให้ดูอีกมือ (ต้องว่างในช่องของคู่สะบัด) — ตัวนำที่ถูกใช้แล้วไม่เล่นซ้ำที่จังหวะเดิม
+    const consumed = [new Array(totalSteps).fill(false), new Array(totalSteps).fill(false)];
+    const runs = new Map();
+    for (let s = 0; s < totalSteps; s++) {
+      for (let li = 0; li < 2; li++) {
+        const cell = G[li][s];
+        if (cell.length < 2) continue;
+        let lead = [];
+        if (s > 0) {
+          const lj = 1 - li;
+          if (G[li][s - 1].length === 1 && !consumed[li][s - 1]) {
+            lead = G[li][s - 1]; consumed[li][s - 1] = true;
+          } else if (G[lj][s].length === 0 && G[lj][s - 1].length === 1 && !consumed[lj][s - 1]) {
+            lead = G[lj][s - 1]; consumed[lj][s - 1] = true;
           }
         }
-      });
-    });
+        runs.set(li * totalSteps + s, [...lead, ...cell]);
+      }
+    }
+
+    for (let s = startStep; s < totalSteps; s++) {
+      const t = t0 + (s - startStep) * stepDur;
+      for (let li = 0; li < 2; li++) {
+        if (consumed[li][s]) continue;
+        const run = runs.get(li * totalSteps + s);
+        if (run) {
+          // ตัวสุดท้ายลงตรงจังหวะ ตัวก่อนหน้าถอยหลังทีละ sabatGap · น้ำหนัก 0.6 → 0.8 → 1.0
+          run.forEach((n, ni) => {
+            const back = run.length - 1 - ni;
+            const tt = t - back * sabatGap;
+            const vel = back === 0 ? 1 : back === 1 ? 0.8 : 0.6;
+            q(tt, () => scheduleNote(n, tt, vel));
+          });
+        } else {
+          G[li][s].forEach(n => q(t, () => scheduleNote(n, t)));
+        }
+      }
+    }
 
     // ── หน้าทับกลอง + ฉิ่ง ──
     if (nathab !== 'none' || chingOn) {
@@ -426,13 +437,14 @@ export default function NotationPlayer({ verses, lyrics }) {
           {can('player_real') && <option value="real">🎵 เสียงฆ้องวงใหญ่จริง</option>}
           <option value="synth">〰 เสียงสังเคราะห์</option>
         </select>
-        <select className="filter-select" value={sabatGap} onChange={e => setSabatGap(+e.target.value)}
-          disabled={playState !== 'stopped'} title="ช่องไฟระหว่างเสียงสะบัด">
-          <option value="0.030">สะบัดรัวเร็ว</option>
-          <option value="0.045">สะบัดค่อนข้างเร็ว</option>
-          <option value="0.060">สะบัดปกติ</option>
-          <option value="0.080">สะบัดหนืด</option>
-          <option value="0.100">สะบัดช้า</option>
+        {/* ค่า option ต้องเท่ากับ String(ตัวเลข) เป๊ะ ("0.06" ไม่ใช่ "0.060") ไม่งั้น dropdown แสดงค่าผิด */}
+        <select className="filter-select" value={String(sabatGap)} onChange={e => setSabatGap(parseFloat(e.target.value))}
+          disabled={playState !== 'stopped'} title="ช่องไฟระหว่างเสียงสะบัด (วินาที)">
+          <option value="0.03">สะบัดรัวเร็ว (30 ms)</option>
+          <option value="0.045">สะบัดค่อนข้างเร็ว (45 ms)</option>
+          <option value="0.06">สะบัดปกติ (60 ms)</option>
+          <option value="0.08">สะบัดหนืด (80 ms)</option>
+          <option value="0.1">สะบัดช้า (100 ms)</option>
         </select>
         <select className="filter-select" value={ensemble} onChange={e => setEnsemble(e.target.value)} disabled={playState !== 'stopped'}>
           <option value="khrueangsai">🎻 ระบบเครื่องสาย</option>

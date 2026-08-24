@@ -69,12 +69,18 @@ function sliceEvents(positions, slice) {
 
 const UNIT_DUR = { 1: '8', 2: 'q', 3: 'qd', 4: 'h' };
 
-const MW_MIN = 78;       // ความกว้างห้องแคบสุด
+const MW_MIN = 64;       // ความกว้างห้องเต็ม (4 ตำแหน่ง) แคบสุด — ต่ำกว่านี้ยอมให้เลื่อนแนวนอน
 const MW_MAX = 150;      // ความกว้างห้องกว้างสุด
 const CLEF_PAD = 52;     // พื้นที่กุญแจ+เครื่องหมายจังหวะ (ห้องแรกของบรรทัด)
+const ROW_PAD = 30;      // ขอบซ้าย 10 + ขอบขวา 20
 const ROW_H = 185;       // สูงพอสำหรับโน้ตต่ำ-สูงหลายเส้นน้อย
 const STAVE_Y = 48;
-const PER_ROW = 8;       // 8 ห้องต่อบรรทัด
+const PER_ROW = 8;       // 8 ห้องต่อบรรทัด (นับเป็นหน่วยห้องเต็ม 4 ตำแหน่ง)
+
+// น้ำหนักความกว้างของห้องตามจำนวนตำแหน่ง — ห้องยก 3 ตำแหน่ง / ห้องเศษ 1 ตำแหน่ง ไม่ควรกว้างเท่าห้องเต็ม
+function sliceWeight(size) {
+  return size >= 4 ? 1 : size === 3 ? 0.8 : size === 2 ? 0.6 : 0.42;
+}
 
 export default function StaffNotation({ verses, cursor = null }) {
   const ref = useRef(null);
@@ -106,10 +112,13 @@ export default function StaffNotation({ verses, cursor = null }) {
       if (!VF) throw new Error('โหลดไลบรารีโน้ตสากลไม่สำเร็จ');
       ref.current.innerHTML = '';
       geomRef.current = [];
-      // บีบความกว้างห้องให้ 8 ห้อง + กุญแจ พอดีความกว้างกล่อง (ไม่ล้น ไม่ต้องเลื่อนแนวนอน)
-      const boxW = (ref.current.clientWidth || 1100) - 36;
-      const mw = Math.max(MW_MIN, Math.min(MW_MAX, Math.floor((boxW - CLEF_PAD - 10) / PER_ROW)));
-      // เตรียมข้อมูลทุกวรรคก่อน แล้วจัดเรียงเป็นบรรทัดละ ~8 ห้อง
+      // ความกว้างที่ใช้วางห้องได้จริง = กล่อง − padding 1rem สองข้าง − กุญแจ − ขอบ
+      const boxW = (ref.current.clientWidth || 1100) - 34;
+      const avail = boxW - CLEF_PAD - ROW_PAD;
+      // จำนวนห้องเต็มต่อบรรทัดที่พอดีจอ: ปกติ 8 · จอแคบลดลงตามจริง (อย่างน้อยเท่ากับ 1 วรรค)
+      const fitMeasures = Math.max(1, Math.min(PER_ROW, Math.floor(avail / MW_MIN)));
+
+      // เตรียมข้อมูลทุกวรรค
       const prepared = verses.map((v, vi) => {
         let positions, handPos = null;
         if (source === 'hands' && ((v.right_hand ?? '').trim() || (v.left_hand ?? '').trim())) {
@@ -121,23 +130,35 @@ export default function StaffNotation({ verses, cursor = null }) {
         } else {
           positions = parseVerse(v.combined);
         }
-        return { vi, v, positions, handPos, slices: makeSlices(positions.length, beat) };
+        return { vi, v, positions, handPos, measures: positions.length / 4 };
       });
 
-      // จัดกลุ่มวรรคลงบรรทัด: เติมจนครบ ~8 ห้อง (ปกติ = 2 วรรค/บรรทัด)
+      // จัดกลุ่มวรรคลงบรรทัด: นับเป็นห้องเต็ม (4 ตำแหน่ง) ไม่เกิน fitMeasures — ปกติ 2 วรรค/บรรทัด
       const rows = [];
       let cur = [], curCount = 0;
       prepared.forEach(pv => {
-        if (curCount > 0 && curCount + pv.slices.length > PER_ROW + 1) {
+        if (curCount > 0 && curCount + pv.measures > fitMeasures) {
           rows.push(cur); cur = []; curCount = 0;
         }
-        cur.push(pv); curCount += pv.slices.length;
+        cur.push(pv); curCount += pv.measures;
       });
       if (cur.length) rows.push(cur);
 
       rows.forEach(rowVerses => {
-        const totalMeasures = rowVerses.reduce((s, pv) => s + pv.slices.length, 0);
-        const rowWidth = CLEF_PAD + totalMeasures * mw + 20;
+        // ต่อวรรคในบรรทัดเป็นสายเดียว แล้วค่อยแบ่งห้อง — แบบสากล ห้องยกท้ายวรรคจะรวมกับห้องต้นวรรคถัดไป
+        // (เดิมแบ่งทีละวรรค เกิดห้องเศษ 1 ตำแหน่ง + ห้องยก 3 ตำแหน่งติดกันกลางบรรทัด และกว้างเท่าห้องเต็ม)
+        const stream = [], handStream = [], verseMap = [];
+        rowVerses.forEach(pv => {
+          verseMap.push({ verseIdx: pv.vi, offset: stream.length, len: pv.positions.length });
+          stream.push(...pv.positions);
+          pv.positions.forEach((_, i) => handStream.push(pv.handPos ? pv.handPos[i] : null));
+        });
+        const slices = makeSlices(stream.length, beat);
+        const totalWeight = slices.reduce((s, sl) => s + sliceWeight(sl.size), 0);
+        // บีบ/ขยายให้พอดีความกว้างกล่อง — ล้นได้เฉพาะเมื่อแม้แต่วรรคเดียวก็ยังแคบกว่า MW_MIN (แล้วค่อยเลื่อนแนวนอน)
+        const unit = Math.max(MW_MIN, Math.min(MW_MAX, Math.floor(avail / totalWeight)));
+        const widths = slices.map(sl => Math.floor(unit * sliceWeight(sl.size)));
+        const rowWidth = CLEF_PAD + widths.reduce((a, b) => a + b, 0) + ROW_PAD;
 
         const label = document.createElement('div');
         label.textContent = 'วรรค ' + rowVerses.map(pv =>
@@ -146,7 +167,7 @@ export default function StaffNotation({ verses, cursor = null }) {
         ref.current.appendChild(label);
 
         const rowEl = document.createElement('div');
-        rowEl.style.cssText = 'position:relative;width:max-content';
+        rowEl.style.cssText = 'position:relative;width:max-content;max-width:100%';
         ref.current.appendChild(rowEl);
         const div = document.createElement('div');
         rowEl.appendChild(div);
@@ -156,64 +177,61 @@ export default function StaffNotation({ verses, cursor = null }) {
         const ctx = renderer.getContext();
         ctx.setFillStyle('#F5F0E8'); ctx.setStrokeStyle('#F5F0E8');
 
+        const rects = [];
         let x = 10;
-        let first = true;
-        rowVerses.forEach(pv => {
-          const rects = [];
-          pv.slices.forEach(slice => {
-            const w = mw + (first ? CLEF_PAD : 0);
-            const stave = new VF.Stave(x, STAVE_Y, w);
-            if (first) stave.addClef('treble').addTimeSignature('2/4');
-            stave.setContext(ctx).draw();
+        slices.forEach((slice, si) => {
+          const first = si === 0;
+          const w = widths[si] + (first ? CLEF_PAD : 0);
+          const stave = new VF.Stave(x, STAVE_Y, w);
+          if (first) stave.addClef('treble').addTimeSignature('2/4');
+          stave.setContext(ctx).draw();
 
-            const events = sliceEvents(pv.positions, slice);
-            const vexNotes = [];
-            events.forEach(ev => {
-              let dur = UNIT_DUR[ev.units] ?? '8';
-              const dotted = dur.endsWith('d');
-              if (dotted) dur = dur[0];
-              if (ev.rest) {
-                const n = new VF.StaveNote({ keys: ['b/4'], duration: dur + 'r' });
-                if (dotted) VF.Dot.buildAndAttach([n], { all: true });
-                vexNotes.push(n);
-              } else if (pv.handPos
-                  && pv.handPos[ev.pos].rh.length <= 1 && pv.handPos[ev.pos].lh.length <= 1) {
-                const keys = mergeHands(pv.handPos[ev.pos].rh, pv.handPos[ev.pos].lh);
-                const n = new VF.StaveNote({ keys, duration: dur });
-                if (dotted) VF.Dot.buildAndAttach([n], { all: true });
-                vexNotes.push(n);
-              } else if (ev.notes.length === 1) {
-                const n = new VF.StaveNote({ keys: [noteKey(ev.notes[0])], duration: dur });
-                if (dotted) VF.Dot.buildAndAttach([n], { all: true });
-                vexNotes.push(n);
-              } else {
-                const subNotes = ev.notes.slice(0, 2).map(n =>
-                  new VF.StaveNote({ keys: [noteKey(n)], duration: '16' }));
-                vexNotes.push(...subNotes);
-                if (ev.units >= 2) {
-                  vexNotes.push(new VF.StaveNote({
-                    keys: [noteKey(ev.notes[ev.notes.length - 1])],
-                    duration: ev.units === 2 ? '8' : 'q',
-                  }));
-                }
+          const events = sliceEvents(stream, slice);
+          const vexNotes = [];
+          events.forEach(ev => {
+            let dur = UNIT_DUR[ev.units] ?? '8';
+            const dotted = dur.endsWith('d');
+            if (dotted) dur = dur[0];
+            const hp = handStream[ev.pos];
+            if (ev.rest) {
+              const n = new VF.StaveNote({ keys: ['b/4'], duration: dur + 'r' });
+              if (dotted) VF.Dot.buildAndAttach([n], { all: true });
+              vexNotes.push(n);
+            } else if (hp && hp.rh.length <= 1 && hp.lh.length <= 1) {
+              const keys = mergeHands(hp.rh, hp.lh);
+              const n = new VF.StaveNote({ keys, duration: dur });
+              if (dotted) VF.Dot.buildAndAttach([n], { all: true });
+              vexNotes.push(n);
+            } else if (ev.notes.length === 1) {
+              const n = new VF.StaveNote({ keys: [noteKey(ev.notes[0])], duration: dur });
+              if (dotted) VF.Dot.buildAndAttach([n], { all: true });
+              vexNotes.push(n);
+            } else {
+              const subNotes = ev.notes.slice(0, 2).map(n =>
+                new VF.StaveNote({ keys: [noteKey(n)], duration: '16' }));
+              vexNotes.push(...subNotes);
+              if (ev.units >= 2) {
+                vexNotes.push(new VF.StaveNote({
+                  keys: [noteKey(ev.notes[ev.notes.length - 1])],
+                  duration: ev.units === 2 ? '8' : 'q',
+                }));
               }
-            });
-
-            try {
-              const voice = new VF.Voice({ num_beats: 2, beat_value: 4 }).setStrict(false);
-              voice.addTickables(vexNotes);
-              new VF.Formatter().joinVoices([voice]).format([voice], w - (first ? CLEF_PAD : 0) - 26);
-              const beams = VF.Beam.generateBeams(vexNotes.filter(n => !n.isRest()));
-              voice.draw(ctx, stave);
-              beams.forEach(b => b.setContext(ctx).draw());
-            } catch (e) { /* ห้องที่ format ไม่ได้ ข้าม */ }
-
-            rects.push({ x: x + (first ? CLEF_PAD : 0), w: w - (first ? CLEF_PAD : 0), start: slice.start, size: slice.size });
-            x += w;
-            first = false;
+            }
           });
-          geomRef.current.push({ verseIdx: pv.vi, rowEl, rects, len: pv.positions.length });
+
+          try {
+            const voice = new VF.Voice({ num_beats: 2, beat_value: 4 }).setStrict(false);
+            voice.addTickables(vexNotes);
+            new VF.Formatter().joinVoices([voice]).format([voice], Math.max(20, widths[si] - 26));
+            const beams = VF.Beam.generateBeams(vexNotes.filter(n => !n.isRest()));
+            voice.draw(ctx, stave);
+            beams.forEach(b => b.setContext(ctx).draw());
+          } catch (e) { /* ห้องที่ format ไม่ได้ ข้าม */ }
+
+          rects.push({ x: x + (first ? CLEF_PAD : 0), w: widths[si], start: slice.start, size: slice.size });
+          x += w;
         });
+        geomRef.current.push({ rowEl, rects, verses: verseMap });
       });
       }
     })().catch(err => {
@@ -230,9 +248,15 @@ export default function StaffNotation({ verses, cursor = null }) {
     // ล้างของเก่า
     document.querySelectorAll('.staff-cursor-line, .staff-cursor-band').forEach(el => el.remove());
     if (!cursor) return;
-    const g = geomRef.current.find(x => x.verseIdx === cursor.verseIdx);
+    // หาบรรทัดที่มีวรรคนี้ แล้วแปลงตำแหน่งในวรรคเป็นตำแหน่งในสายของบรรทัด
+    let g = null, vm = null;
+    for (const row of geomRef.current) {
+      vm = row.verses.find(v => v.verseIdx === cursor.verseIdx);
+      if (vm) { g = row; break; }
+    }
     if (!g) return;
-    const rect = g.rects.find(r => cursor.pos >= r.start && cursor.pos < r.start + r.size);
+    const gpos = vm.offset + cursor.pos;
+    const rect = g.rects.find(r => gpos >= r.start && gpos < r.start + r.size);
     if (!rect) return;
 
     // แถบไฮไลต์ทั้งห้อง
@@ -243,7 +267,7 @@ export default function StaffNotation({ verses, cursor = null }) {
     g.rowEl.appendChild(band);
 
     // เส้นวิ่งตามตำแหน่ง
-    const frac = (cursor.pos - rect.start + 0.5) / rect.size;
+    const frac = (gpos - rect.start + 0.5) / rect.size;
     const lx = rect.x + 6 + frac * (rect.w - 22);
     const line = document.createElement('div');
     line.className = 'staff-cursor-line';
