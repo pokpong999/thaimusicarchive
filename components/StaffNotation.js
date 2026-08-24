@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { parseVerse } from './NotationPlayer';
+import { usePermissions } from './Gate';
 
 // ด ร ม ฟ ซ ล ท → C D E F G A B (การปริวรรตโดยอนุโลม)
 const THAI_TO_WESTERN = { 'ด':'c', 'ร':'d', 'ม':'e', 'ฟ':'f', 'ซ':'g', 'ล':'a', 'ท':'b' };
@@ -78,7 +79,12 @@ export default function StaffNotation({ verses, cursor = null }) {
   const ref = useRef(null);
   const geomRef = useRef([]);   // [{verseIdx, rowEl, rects:[{x,w,start,size}], len}]
   const hasHands = verses.some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim());
+  const { can } = usePermissions();
   const [source, setSource] = useState('combined');
+  useEffect(() => {
+    if (!can('staff_chord') && source === 'hands') setSource('combined');
+    if (!can('staff_beat') && beat === 'western') setBeat('thai');
+  }, [can, source, beat]);
   const [beat, setBeat] = useState('thai'); // 'thai' ตกท้ายห้อง | 'western' ตกต้นห้อง
   const [fitTick, setFitTick] = useState(0);
   useEffect(() => {
@@ -248,13 +254,13 @@ export default function StaffNotation({ verses, cursor = null }) {
         <select className="form-input" style={{width:'auto',fontSize:'0.78rem',padding:'4px 8px'}}
           value={source} onChange={e => setSource(e.target.value)}>
           <option value="combined">บรรทัดเดียว — ทำนองรวม (โน้ตหัวเดียว)</option>
-          {hasHands && <option value="hands">สองบรรทัด — รวมมือ R+L (บันทึกคู่เสียง)</option>}
+          {hasHands && can('staff_chord') && <option value="hands">สองบรรทัด — รวมมือ R+L (บันทึกคู่เสียง)</option>}
         </select>
         <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>จังหวะตก:</span>
         <select className="form-input" style={{width:'auto',fontSize:'0.78rem',padding:'4px 8px'}}
           value={beat} onChange={e => setBeat(e.target.value)}>
           <option value="thai">แบบไทย — ตกท้ายห้อง</option>
-          <option value="western">แบบสากล — ตกต้นห้อง (ยกเข้าห้องถัดไป)</option>
+          {can('staff_beat') && <option value="western">แบบสากล — ตกต้นห้อง (ยกเข้าห้องถัดไป)</option>}
         </select>
       </div>
       <div style={{fontSize:'0.68rem',color:'var(--muted)',marginBottom:'6px'}}>

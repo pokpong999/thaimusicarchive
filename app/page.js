@@ -6,6 +6,19 @@ import AnniversaryBanner from '../components/AnniversaryBanner';
 
 const PAGE_SIZE = 25;
 
+
+function HeroAuth() {
+  const [user, setUser] = useState(undefined);
+  useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null)); }, []);
+  if (user !== null) return null;
+  return (
+    <div style={{display:'flex',gap:'12px',justifyContent:'center',margin:'-0.2rem 0 1.8rem',flexWrap:'wrap'}}>
+      <a href="/login"><button className="btn btn-primary" style={{padding:'0.7rem 2rem',fontSize:'0.95rem'}}>✦ สมัครสมาชิก</button></a>
+      <a href="/login"><button className="btn btn-outline" style={{padding:'0.7rem 2rem',fontSize:'0.95rem'}}>เข้าสู่ระบบ</button></a>
+    </div>
+  );
+}
+
 export default function HomePage() {
   const [songs, setSongs] = useState([]);
   const [count, setCount] = useState(0);
@@ -70,7 +83,31 @@ export default function HomePage() {
     <>
       <AnniversaryBanner />
       <main className="container">
-        <div className="section-title">รายการเพลงทั้งหมด</div>
+
+        {/* ── Hero: สองหอ ── */}
+        <section className="hero2">
+          <a href="#songs" className="hero-card hero-songs">
+            <div className="hero-glyphs" aria-hidden>ด ร ม ฟ ซ ล ท<br/>― ― ๐ ― ― ๐ ―<br/>ซ ล ดํ รํ มํ<br/>๐ ― ― ๐</div>
+            <div className="hero-inner">
+              <div className="hero-kicker">SONG ARCHIVE</div>
+              <div className="hero-title">หอจดหมายเหตุ<br/>เพลงไทย</div>
+              <div className="hero-sub">โน้ต 300 เพลง · 20,000+ วรรค · รหัสกระสวน · เล่นเสียงฆ้องวงจริง</div>
+              <span className="hero-cta">เข้าชมคลังเพลง →</span>
+            </div>
+          </a>
+          <a href="/archive" className="hero-card hero-history">
+            <div className="hero-glyphs" aria-hidden>๒๓๑๐ · ๒๔๔๓<br/>๛ ๏ ๛<br/>๒๔๖๖ · ๒๕๖๙</div>
+            <div className="hero-inner">
+              <div className="hero-kicker">HISTORY ARCHIVE</div>
+              <div className="hero-title">หอจดหมายเหตุ<br/>ดนตรีไทย</div>
+              <div className="hero-sub">เหตุการณ์ 270+ รายการ · แผนที่ · เส้นเวลา 700 ปี · ครูดนตรี</div>
+              <span className="hero-cta">เข้าชมหอประวัติศาสตร์ →</span>
+            </div>
+          </a>
+        </section>
+        <HeroAuth />
+
+        <div id="songs" className="section-title">รายการเพลงทั้งหมด</div>
         <div className="section-subtitle">Thai Classical Music Catalog · {count} songs</div>
         <div className="search-bar">
           <input className="search-input" placeholder="ค้นหาชื่อเพลง หรือ Song ID..."
