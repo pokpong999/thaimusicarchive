@@ -81,12 +81,13 @@ export default function StaffNotation({ verses, cursor = null }) {
   const hasHands = verses.some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim());
   const { can } = usePermissions();
   const [source, setSource] = useState('combined');
+  const [beat, setBeat] = useState('thai'); // 'thai' ตกท้ายห้อง | 'western' ตกต้นห้อง
+  const [fitTick, setFitTick] = useState(0);
   useEffect(() => {
     if (!can('staff_chord') && source === 'hands') setSource('combined');
     if (!can('staff_beat') && beat === 'western') setBeat('thai');
   }, [can, source, beat]);
-  const [beat, setBeat] = useState('thai'); // 'thai' ตกท้ายห้อง | 'western' ตกต้นห้อง
-  const [fitTick, setFitTick] = useState(0);
+
   useEffect(() => {
     let t;
     const onR = () => { clearTimeout(t); t = setTimeout(() => setFitTick(x => x + 1), 250); };
