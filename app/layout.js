@@ -4,6 +4,13 @@ import { LangProvider } from '../lib/i18n';
 import FooterNav from '../components/FooterNav';
 import { ContentProvider, EText } from '../components/Editable';
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+};
+
 export const metadata = {
   metadataBase: new URL('https://thaimusicarchive.com'),
   title: 'หอจดหมายเหตุดนตรีไทย — Thai Music Archive',
