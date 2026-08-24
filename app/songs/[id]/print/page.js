@@ -4,6 +4,7 @@ import { useParams } from 'next/navigation';
 import { supabase } from '../../../../lib/supabase';
 
 import { thaiToKeys } from '../../../../lib/thnotation';
+import { useMe, PremiumLock } from '../../../../components/Gate';
 const COLS = ['ด','ร','ม','ฟ','ซ','ล','ท'];
 
 // แยกวรรค → ห้อง → ตำแหน่ง
@@ -21,6 +22,7 @@ const toThai = n => String(n).split('').map(d => THAI_NUM[+d] ?? d).join('');
 
 export default function PrintPage() {
   const { id } = useParams();
+  const { loading: meLoading, isPremium } = useMe();
   const [song, setSong] = useState(null);
   const [verses, setVerses] = useState([]);
   const [sections, setSections] = useState({});
@@ -90,6 +92,13 @@ export default function PrintPage() {
     return out;
   }, [verses, sections, hongsPerLine, showSections]);
 
+  if (meLoading) return <div style={{padding:'2rem',color:'#333'}}>กำลังโหลด...</div>;
+  if (!isPremium) return (
+    <main className="container" style={{maxWidth:'520px',paddingTop:'3rem'}}>
+      <PremiumLock feature="ฉบับพิมพ์และการบันทึก PDF" />
+      <a href={`/songs/${id}`}><button className="btn btn-outline btn-sm">← กลับหน้าเพลง</button></a>
+    </main>
+  );
   if (!song) return <div style={{padding:'2rem',color:'#333'}}>กำลังโหลด...</div>;
 
   const today = new Date().toLocaleDateString('th-TH', { day:'numeric', month:'long', year:'numeric' });

@@ -1,4 +1,5 @@
 'use client';
+import { AdminOnlyPage } from '../../components/Gate';
 import { useState } from 'react';
 import { supabase } from '../../lib/supabase';
 
@@ -40,6 +41,7 @@ export default function DataPage() {
   }
 
   return (
+    <AdminOnlyPage>
     <main className="container" style={{maxWidth:'760px'}}>
       <div className="section-title" style={{fontSize:'1.3rem'}}>📦 ข้อมูลเปิด · Open Data & API</div>
       <div className="section-subtitle">ดาวน์โหลดชุดข้อมูลเพื่อการวิจัย · Download research datasets</div>
@@ -79,5 +81,6 @@ Header: apikey: sb_publishable_9vCU3UdNKhuWwueo_tfKgg_Rd4qYzgE
         <p style={{fontSize:'0.72rem',color:'var(--muted)'}}>อ่านได้อย่างเดียว ปลอดภัยด้วย Row Level Security · Read-only, protected by RLS</p>
       </div>
     </main>
+    </AdminOnlyPage>
   );
 }

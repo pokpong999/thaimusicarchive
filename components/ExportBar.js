@@ -26,7 +26,10 @@ function dl(blob, filename) {
   URL.revokeObjectURL(a.href);
 }
 
+import { useMe } from './Gate';
+
 export default function ExportBar({ song, instrument, verses, targetId }) {
+  const { loading: meLoading, isPremium } = useMe();
   const [busy, setBusy] = useState('');
   const base = `${song.id}_${song.name_th}_${instrument}`.replace(/\s+/g, '_');
 
@@ -116,6 +119,17 @@ export default function ExportBar({ song, instrument, verses, targetId }) {
       {busy === id ? '⏳...' : label}
     </button>
   );
+
+  if (!meLoading && !isPremium) {
+    return (
+      <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
+        <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>🖨 พิมพ์/ดาวน์โหลดโน้ต:</span>
+        <a href="/premium" className="btn btn-sm"
+          style={{background:'var(--navy3)',border:'1px solid var(--gold)',color:'var(--gold)',fontSize:'0.72rem'}}>
+          💎 สำหรับสมาชิกอุปถัมภ์ — ดูรายละเอียด</a>
+      </div>
+    );
+  }
 
   return (
     <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>

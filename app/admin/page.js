@@ -27,6 +27,9 @@ export default function AdminPage() {
   const [mgTangs, setMgTangs] = useState([]);
   const [mgFiles, setMgFiles] = useState([]);
   const [pendingAudio, setPendingAudio] = useState([]);
+  const [memberQ, setMemberQ] = useState('');
+  const [memberList, setMemberList] = useState([]);
+  const [memberMsg, setMemberMsg] = useState('');
   const [songs, setSongs] = useState([]);
   const [selSong, setSelSong] = useState('');
   const [url, setUrl] = useState('');
@@ -239,6 +242,19 @@ export default function AdminPage() {
   }
 
   const [backupMsg, setBackupMsg] = useState('');
+  async function searchMembers() {
+    let q = supabase.from('profiles').select('id, display_name, province, points, role, tier')
+      .order('points', { ascending: false }).limit(30);
+    if (memberQ.trim()) q = q.ilike('display_name', `%${memberQ.trim()}%`);
+    const { data } = await q;
+    setMemberList(data ?? []);
+  }
+  async function saveMember(m) {
+    const { error } = await supabase.from('profiles')
+      .update({ role: m.role, tier: m.tier }).eq('id', m.id);
+    setMemberMsg(error ? '⚠ ' + error.message : `✓ บันทึก ${m.display_name} แล้ว`);
+    setTimeout(() => setMemberMsg(''), 3000);
+  }
   async function backupAll() {
     setBackupMsg('⏳ กำลังดึงข้อมูล...');
     await new Promise((res) => {
@@ -323,7 +339,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['members','👥 สมาชิก']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -643,6 +659,42 @@ export default function AdminPage() {
               <button className="btn btn-jade btn-sm" style={{marginTop:'0.4rem'}} onClick={() => saveNathab(row)}>💾 บันทึก</button>
             </div>
           ))}
+        </div>
+      )}
+
+      {tab === 'members' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.7rem'}}>👥 จัดการสมาชิก — ตั้ง Admin / สมาชิกอุปถัมภ์</div>
+          <div style={{display:'flex',gap:'8px',marginBottom:'1rem'}}>
+            <input className="form-input" placeholder="ค้นหาชื่อสมาชิก... (เว้นว่าง = 30 อันดับแต้มสูงสุด)"
+              value={memberQ} onChange={e => setMemberQ(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && searchMembers()} />
+            <button className="btn btn-primary btn-sm" onClick={searchMembers}>ค้นหา</button>
+          </div>
+          {memberMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.6rem'}}>{memberMsg}</div>}
+          {memberList.map((m, i) => (
+            <div key={m.id} style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',
+              padding:'8px 0',borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
+              <span style={{flex:1,minWidth:'160px',fontSize:'0.86rem'}}>
+                {m.display_name ?? 'ไม่ระบุชื่อ'}
+                <span style={{color:'var(--muted)',fontSize:'0.7rem'}}> · {m.province ?? '-'} · {m.points ?? 0} แต้ม</span>
+              </span>
+              <select className="form-input" style={{width:'120px'}} value={m.role ?? 'member'}
+                onChange={e => setMemberList(memberList.map((x,j) => j===i ? {...x, role: e.target.value} : x))}>
+                <option value="member">สมาชิก</option>
+                <option value="admin">Admin</option>
+              </select>
+              <select className="form-input" style={{width:'150px'}} value={m.tier ?? 'free'}
+                onChange={e => setMemberList(memberList.map((x,j) => j===i ? {...x, tier: e.target.value} : x))}>
+                <option value="free">ฟรี</option>
+                <option value="premium">💎 อุปถัมภ์</option>
+              </select>
+              <button className="btn btn-jade btn-sm" onClick={() => saveMember(m)}>💾</button>
+            </div>
+          ))}
+          {memberList.length === 0 && <div style={{color:'var(--muted)',fontSize:'0.8rem'}}>กดค้นหาเพื่อแสดงรายชื่อ</div>}
+          <div style={{fontSize:'0.68rem',color:'var(--muted)',marginTop:'0.8rem'}}>
+            ⚠ Admin มีสิทธิ์เต็มทุกอย่าง โปรดตั้งเฉพาะคนที่ไว้ใจ · สมาชิกอุปถัมภ์ = พิมพ์/ดาวน์โหลดโน้ตและข้อมูลได้</div>
         </div>
       )}
 
