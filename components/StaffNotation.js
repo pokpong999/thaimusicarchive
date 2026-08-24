@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { parseVerse } from './NotationPlayer';
 
 // ด ร ม ฟ ซ ล ท → C D E F G A B (การปริวรรตโดยอนุโลม)
@@ -35,7 +35,7 @@ function verseToMeasures(positions) {
         // โน้ต — นับช่องว่างตามหลัง (เสียงลาก)
         let span = 1;
         while (p + span < 4 && slice[p + span].length === 0) span++;
-        events.push({ notes, units: span });
+        events.push({ notes, units: span, pos: m * 4 + p });
         p += span;
       }
     }
@@ -52,8 +52,23 @@ function noteKey(n) {
   return `${base}/${octave}`;
 }
 
+// ค่าความสูงเสียงไว้เรียงคอร์ดต่ำ→สูง
+const PITCH_ORDER = { c:0, d:1, e:2, f:3, g:4, a:5, b:6 };
+function keyPitch(k) {
+  const [b, o] = k.split('/');
+  return parseInt(o) * 7 + (PITCH_ORDER[b] ?? 0);
+}
+// รวมโน้ตสองมือที่ตำแหน่งเดียวกัน → คีย์คอร์ด (ตัดซ้ำ, เรียงต่ำ→สูง)
+function mergeHands(rhNotes, lhNotes) {
+  const keys = [...new Set([...(lhNotes ?? []), ...(rhNotes ?? [])].map(noteKey))];
+  keys.sort((a, b) => keyPitch(a) - keyPitch(b));
+  return keys;
+}
+
 export default function StaffNotation({ verses }) {
   const ref = useRef(null);
+  const hasHands = verses.some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim());
+  const [source, setSource] = useState('combined'); // 'combined' | 'hands'
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +88,16 @@ export default function StaffNotation({ verses }) {
         ref.current.appendChild(label);
         ref.current.appendChild(div);
 
-        const positions = parseVerse(v.combined);
+        let positions, handPos = null;
+        if (source === 'hands' && ((v.right_hand ?? '').trim() || (v.left_hand ?? '').trim())) {
+          const rh = parseVerse(v.right_hand);
+          const lh = parseVerse(v.left_hand);
+          const len = Math.max(rh.length, lh.length);
+          handPos = Array.from({ length: len }, (_, i) => ({ rh: rh[i] ?? [], lh: lh[i] ?? [] }));
+          positions = handPos.map(hp => [...hp.rh, ...hp.lh]); // สำหรับนับ rest/span
+        } else {
+          positions = parseVerse(v.combined);
+        }
         const measures = verseToMeasures(positions);
         const rowWidth = measureWidth * measures.length + 60;
 
@@ -95,6 +119,13 @@ export default function StaffNotation({ verses }) {
             if (dotted) dur = dur[0];
             if (ev.rest) {
               const n = new VF.StaveNote({ keys: ['b/4'], duration: dur + 'r' });
+              if (dotted) VF.Dot.buildAndAttach([n], { all: true });
+              vexNotes.push(n);
+            } else if (handPos && ev.pos != null
+                && (handPos[ev.pos].rh.length <= 1 && handPos[ev.pos].lh.length <= 1)) {
+              // สองมือ: ตำแหน่งปกติ → คอร์ดคู่เสียง (คู่ 4 5 6 8 ตามจริง)
+              const keys = mergeHands(handPos[ev.pos].rh, handPos[ev.pos].lh);
+              const n = new VF.StaveNote({ keys, duration: dur });
               if (dotted) VF.Dot.buildAndAttach([n], { all: true });
               vexNotes.push(n);
             } else if (ev.notes.length === 1) {
@@ -131,12 +162,22 @@ export default function StaffNotation({ verses }) {
       });
     });
     return () => { cancelled = true; };
-  }, [verses]);
+  }, [verses, source]);
 
   return (
     <div>
+      <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',marginBottom:'8px'}}>
+        <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>แหล่งทำนอง:</span>
+        <select className="form-input" style={{width:'auto',fontSize:'0.78rem',padding:'4px 8px'}}
+          value={source} onChange={e => setSource(e.target.value)}>
+          <option value="combined">บรรทัดเดียว — ทำนองรวม (โน้ตหัวเดียว)</option>
+          {hasHands && <option value="hands">สองบรรทัด — รวมมือ R+L (บันทึกคู่เสียง)</option>}
+        </select>
+        {!hasHands && <span style={{fontSize:'0.66rem',color:'var(--muted)'}}>* เพลงนี้มีข้อมูลบรรทัดเดียว</span>}
+      </div>
       <div style={{fontSize:'0.68rem',color:'var(--muted)',marginBottom:'6px'}}>
         * การปริวรรตเป็นโน้ตสากลใช้การเทียบโดยอนุโลม (ด→C) — ระดับเสียงจริงเป็นระบบ 7 เท่าไทย
+        {source === 'hands' && ' · ตำแหน่งที่สองมือบรรเลงพร้อมกันบันทึกเป็นคู่เสียง (คู่ 4 · 5 · 6 · 8 ตามข้อมูลจริง)'}
       </div>
       <div ref={ref} style={{background:'var(--navy3)',border:'1px solid var(--border)',
         borderRadius:'8px',padding:'1rem',overflowX:'auto'}} />
