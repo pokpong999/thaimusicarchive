@@ -1,5 +1,6 @@
 import './globals.css';
 import Topbar from '../components/Topbar';
+import { LangProvider } from '../lib/i18n';
 
 export const metadata = {
   metadataBase: new URL('https://thaimusicarchive.com'),
@@ -25,6 +26,7 @@ export default function RootLayout({ children }) {
         <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600;700&family=Noto+Sans+Thai:wght@300;400;500;600&display=swap" rel="stylesheet" />
       </head>
       <body>
+        <LangProvider>
         <Topbar />
         {children}
         <footer className="footer" style={{lineHeight:2}}>
@@ -35,6 +37,10 @@ export default function RootLayout({ children }) {
             <a href="/compare" style={{color:'var(--gold2)'}}>เปรียบเทียบเพลง</a>
             <a href="/search" style={{color:'var(--gold2)'}}>ค้นหา</a>
             <a href="/about" style={{color:'var(--gold2)'}}>เกี่ยวกับโครงการ</a>
+            <a href="/spec" style={{color:'var(--gold2)'}}>Krasuan Code</a>
+            <a href="/data" style={{color:'var(--gold2)'}}>Open Data</a>
+            <a href="/glossary" style={{color:'var(--gold2)'}}>อภิธานศัพท์</a>
+            <a href="/learn" style={{color:'var(--gold2)'}}>เรียนรู้</a>
           </div>
           <div style={{fontWeight:600,color:'var(--cream)'}}>หอจดหมายเหตุดนตรีไทย · Thai Music Archive (THMA)</div>
           <div>ข้อมูลและลิขสิทธิ์ © ปกป้อง ขำประเสริฐ (Pokpong Khamprasert) — ผลงานที่สมาชิกเพิ่มแสดงเครดิตผู้เพิ่มกำกับไว้</div>
@@ -43,6 +49,7 @@ export default function RootLayout({ children }) {
             {' '}· 💬 LINE: p.khamprasert · ☎️ 097-220-5864
           </div>
         </footer>
+        </LangProvider>
       </body>
     </html>
   );

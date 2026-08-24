@@ -5,8 +5,10 @@ import { supabase } from '../lib/supabase';
 import RankBadge from './RankBadge';
 import Avatar from './Avatar';
 import NotificationBell from './NotificationBell';
+import { useLang } from '../lib/i18n';
 
 export default function Topbar() {
+  const { lang, setLang, t } = useLang();
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
 
@@ -47,12 +49,16 @@ export default function Topbar() {
         </div>
       </div></Link>
       <nav className="nav">
-        <Link href="/">จดหมายเหตุเพลงไทย</Link>
-        <Link href="/archive">จดหมายเหตุดนตรีไทย</Link>
-        <Link href="/leaderboard">ทำเนียบ</Link>
-        {user && <Link href="/songs/new">➕ เพิ่มเพลง</Link>}
-        {user && <Link href="/dashboard">ของฉัน</Link>}
-        <Link href="/search" title="ค้นหา">🔍</Link>
+        <Link href="/">{t("nav_songs")}</Link>
+        <Link href="/archive">{t("nav_archive")}</Link>
+        <Link href="/leaderboard">{t("nav_board")}</Link>
+        {user && <Link href="/songs/new">{t("nav_add")}</Link>}
+        {user && <Link href="/dashboard">{t("nav_mine")}</Link>}
+        <Link href="/search" title="search">🔍</Link>
+        <span onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
+          style={{cursor:'pointer',fontSize:'0.72rem',border:'1px solid var(--border)',
+            borderRadius:'4px',padding:'2px 7px',color:'var(--muted)'}}>
+          {lang === 'th' ? 'EN' : 'ไทย'}</span>
         {profile?.role === 'admin' && <Link href="/admin">Admin</Link>}
       </nav>
       <div className="topbar-right">

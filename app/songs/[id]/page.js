@@ -21,6 +21,27 @@ export async function generateMetadata({ params }) {
   };
 }
 
-export default function Page() {
-  return <SongDetailClient />;
+export default async function Page({ params }) {
+  let name = null, nameEn = null;
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/songs?id=eq.${encodeURIComponent(params.id)}&select=name_th,name_en`,
+      { headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY }, next: { revalidate: 3600 } });
+    const rows = await res.json();
+    name = rows?.[0]?.name_th; nameEn = rows?.[0]?.name_en;
+  } catch {}
+  const jsonLd = name ? {
+    '@context': 'https://schema.org', '@type': 'MusicComposition',
+    name, alternateName: nameEn ?? undefined, inLanguage: 'th',
+    genre: 'Thai classical music',
+    url: `https://thaimusicarchive.com/songs/${params.id}`,
+    isPartOf: { '@type': 'Collection', name: 'Thai Music Archive', url: 'https://thaimusicarchive.com' },
+  } : null;
+  return (
+    <>
+      {jsonLd && <script type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />}
+      <SongDetailClient />
+    </>
+  );
 }

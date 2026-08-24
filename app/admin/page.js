@@ -26,6 +26,7 @@ export default function AdminPage() {
   const [mgVideos, setMgVideos] = useState([]);
   const [mgTangs, setMgTangs] = useState([]);
   const [mgFiles, setMgFiles] = useState([]);
+  const [pendingAudio, setPendingAudio] = useState([]);
   const [songs, setSongs] = useState([]);
   const [selSong, setSelSong] = useState('');
   const [url, setUrl] = useState('');
@@ -88,6 +89,9 @@ export default function AdminPage() {
       if (!seen[k]) { seen[k] = true; tangList.push(r); }
     });
     setMgTangs(tangList);
+    const { data: pa } = await supabase.from('song_audio')
+      .select('*, songs(name_th)').eq('approved', false).order('created_at');
+    setPendingAudio(pa ?? []);
     const { data: mf } = await supabase.from('song_files')
       .select('id, song_id, title, storage_path, songs(name_th)').eq('approved', true)
       .order('created_at', { ascending: false }).limit(50);
@@ -186,13 +190,13 @@ export default function AdminPage() {
 
   // ── จัดการข้อมูล ──
   async function searchSongs() {
-    let q = supabase.from('songs').select('id, name_th, type').order('name_th').limit(30);
+    let q = supabase.from('songs').select('id, name_th, name_en, type').order('name_th').limit(30);
     if (mgQ) q = q.or(`name_th.ilike.%${mgQ}%,id.ilike.%${mgQ}%`);
     const { data } = await q;
     setMgSongs(data ?? []);
   }
   async function saveSong(s) {
-    const { error } = await supabase.from('songs').update({ name_th: s.name_th, type: s.type }).eq('id', s.id);
+    const { error } = await supabase.from('songs').update({ name_th: s.name_th, name_en: s.name_en || null, type: s.type }).eq('id', s.id);
     setMgMsg(error ? '⚠ ' + error.message : '✓ บันทึก ' + s.id);
   }
   async function deleteSong(id) {
@@ -319,7 +323,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -475,6 +479,31 @@ export default function AdminPage() {
           ))
       )}
 
+      {tab === 'audio' && (
+        pendingAudio.length === 0
+          ? <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ไม่มีไฟล์เสียงรอตรวจ</div>
+          : pendingAudio.map(a => {
+            const url = supabase.storage.from('song-audio').getPublicUrl(a.storage_path).data.publicUrl;
+            return (
+              <div className="card" key={a.id}>
+                <div style={{fontWeight:600}}>{a.songs?.name_th}
+                  <span style={{color:'var(--muted)',fontSize:'0.78rem'}}> · {a.title ?? '-'} · {a.performer ?? '-'} · {a.year_recorded ?? '-'}</span></div>
+                <audio controls preload="none" src={url} style={{width:'100%',margin:'0.6rem 0'}} />
+                <div style={{display:'flex',gap:'8px'}}>
+                  <button className="btn btn-jade btn-sm" onClick={async () => {
+                    await supabase.from('song_audio').update({ approved: true }).eq('id', a.id); loadAll();
+                  }}>✓ อนุมัติ (+10 แต้ม)</button>
+                  <button className="btn btn-danger btn-sm" onClick={async () => {
+                    if (!confirm('ปฏิเสธและลบไฟล์เสียงนี้?')) return;
+                    await supabase.storage.from('song-audio').remove([a.storage_path]);
+                    await supabase.from('song_audio').delete().eq('id', a.id); loadAll();
+                  }}>✕ ปฏิเสธ</button>
+                </div>
+              </div>
+            );
+          })
+      )}
+
       {tab === 'manage' && (
         <>
           {mgMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.6rem'}}>{mgMsg}</div>}
@@ -492,6 +521,8 @@ export default function AdminPage() {
                   onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, name_th: e.target.value} : x))} />
                 <input className="form-input" style={{width:'130px'}} value={s.type ?? ''}
                   onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, type: e.target.value} : x))} />
+                <input className="form-input" style={{width:'150px'}} placeholder="English name" value={s.name_en ?? ''}
+                  onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, name_en: e.target.value} : x))} />
                 <button className="btn btn-jade btn-sm" onClick={() => saveSong(s)}>💾</button>
                 <button className="btn btn-danger btn-sm" onClick={() => deleteSong(s.id)}>🗑</button>
               </div>

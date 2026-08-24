@@ -30,6 +30,11 @@ export default function SongDetailClient() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [tab, setTab] = useState('history');
   const [krasuan, setKrasuan] = useState(null);
+  const [audios, setAudios] = useState([]);
+  const [audioFile, setAudioFile] = useState(null);
+  const [audioMeta, setAudioMeta] = useState({ title:'', performer:'', year:'' });
+  const [audioMsg, setAudioMsg] = useState('');
+  const [copied, setCopied] = useState(false);
   const [luktok, setLuktok] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [url, setUrl] = useState('');
@@ -56,6 +61,9 @@ export default function SongDetailClient() {
     setSong(s);
     setHistoryDraft(s?.history ?? '');
     setLyricsDraft(s?.lyrics ?? '');
+    const { data: au } = await supabase.from('song_audio').select('*')
+      .eq('song_id', id).eq('approved', true).order('created_at');
+    setAudios(au ?? []);
     const { data: inst } = await supabase.from('song_melody')
       .select('instrument, submitted_by').eq('song_id', id).eq('approved', true);
     const uniq = [...new Set((inst ?? []).map(r => r.instrument ?? 'ทำนองหลัก'))];
@@ -147,11 +155,35 @@ export default function SongDetailClient() {
       .then(({ data }) => setLuktok(data ?? []));
   }, [tab]);
 
+  async function uploadAudio() {
+    if (!audioFile) { setAudioMsg('⚠ เลือกไฟล์เสียงก่อน'); return; }
+    if (audioFile.size > 25 * 1024 * 1024) { setAudioMsg('⚠ ไฟล์ใหญ่เกิน 25MB'); return; }
+    setAudioMsg('⏳ กำลังอัปโหลด...');
+    const ext = audioFile.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp3';
+    const pathName = `${id}/${Date.now()}.${ext}`;
+    const { error: e1 } = await supabase.storage.from('song-audio').upload(pathName, audioFile);
+    if (e1) { setAudioMsg('⚠ ' + e1.message); return; }
+    const { error: e2 } = await supabase.from('song_audio').insert({
+      song_id: id, title: audioMeta.title || null, performer: audioMeta.performer || null,
+      year_recorded: audioMeta.year || null, storage_path: pathName, submitted_by: user.id,
+    });
+    setAudioMsg(e2 ? '⚠ ' + e2.message : '✓ ส่งแล้ว รอ Admin ตรวจสอบ (+10 แต้มเมื่อผ่าน)');
+    setAudioFile(null);
+  }
+
+  function copyCitation() {
+    const y = new Date().getFullYear() + 543;
+    const cite = `ปกป้อง ขำประเสริฐ. (${y}). ${song?.name_th} [โน้ตเพลง]. หอจดหมายเหตุดนตรีไทย. https://thaimusicarchive.com/songs/${id}`;
+    navigator.clipboard.writeText(cite);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
+  }
+
   const TABS = [
     ['history', '📜 ประวัติเพลง'],
     ['notation', '♪ โน้ตเพลง'],
     ['videos', `🎬 วิดีโอ (${videos.length})`],
     ['analysis', '📊 วิเคราะห์'],
+    ['audio', `🔊 เสียง (${audios.length})`],
   ];
 
   return (
@@ -167,7 +199,11 @@ export default function SongDetailClient() {
         </div>
         {songOwner && <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
           ✍️ เพิ่มข้อมูลโดย: {songOwner}</div>}
-        <div style={{marginTop:'0.8rem'}}><ShareBar title={song.name_th + ' — หอจดหมายเหตุดนตรีไทย'} /></div>
+        <div style={{marginTop:'0.8rem',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}}>
+          <ShareBar title={song.name_th + ' — หอจดหมายเหตุดนตรีไทย'} />
+          <button className="btn btn-outline btn-sm" style={{fontSize:'0.7rem'}} onClick={copyCitation}>
+            {copied ? '✓ คัดลอกแล้ว' : '📚 คัดลอกการอ้างอิง'}</button>
+        </div>
         <div className="detail-meta">
           <div className="meta-pill"><span className="meta-label">วรรค</span>
             <span className="meta-value" style={{fontFamily:'monospace',color:'var(--jade)'}}>{song.total_verses}</span></div>
@@ -357,6 +393,45 @@ export default function SongDetailClient() {
                 </div>
               )}
             </>
+          )}
+        </div>
+      )}
+
+      {tab === 'audio' && (
+        <div>
+          {audios.length === 0 && <div className="card" style={{color:'var(--muted)',textAlign:'center'}}>
+            ยังไม่มีบันทึกเสียงของเพลงนี้ — ร่วมเป็นผู้อนุรักษ์ อัปโหลดเสียงบรรเลงด้านล่าง</div>}
+          {audios.map(a => {
+            const url = supabase.storage.from('song-audio').getPublicUrl(a.storage_path).data.publicUrl;
+            return (
+              <div key={a.id} className="card" style={{padding:'0.9rem 1.1rem'}}>
+                <div style={{fontWeight:600,fontSize:'0.9rem'}}>{a.title ?? song.name_th}</div>
+                <div style={{fontSize:'0.74rem',color:'var(--muted)',margin:'3px 0 8px'}}>
+                  {[a.performer && `บรรเลงโดย ${a.performer}`, a.year_recorded && `บันทึกปี ${a.year_recorded}`, a.license]
+                    .filter(Boolean).join(' · ')}
+                </div>
+                <audio controls preload="none" src={url} style={{width:'100%'}} />
+              </div>
+            );
+          })}
+          {user && (
+            <div className="card">
+              <div style={{fontWeight:600,marginBottom:'0.7rem'}}>🎙 อัปโหลดบันทึกเสียง (MP3/M4A ≤25MB)</div>
+              <input type="file" accept="audio/*" onChange={e => setAudioFile(e.target.files[0])}
+                style={{fontSize:'0.78rem',marginBottom:'0.6rem',color:'var(--muted)'}} />
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'0.6rem'}}>
+                <input className="form-input" placeholder="ชื่อชุด/รายการ" value={audioMeta.title}
+                  onChange={e => setAudioMeta({...audioMeta, title: e.target.value})} />
+                <input className="form-input" placeholder="ผู้บรรเลง/วง" value={audioMeta.performer}
+                  onChange={e => setAudioMeta({...audioMeta, performer: e.target.value})} />
+                <input className="form-input" placeholder="ปีที่บันทึก" value={audioMeta.year}
+                  onChange={e => setAudioMeta({...audioMeta, year: e.target.value})} />
+              </div>
+              <div style={{fontSize:'0.68rem',color:'var(--muted)',margin:'0.5rem 0'}}>
+                ⚠ อัปโหลดเฉพาะเสียงที่คุณมีสิทธิ์เผยแพร่ (บันทึกเอง หรือได้รับอนุญาตจากเจ้าของ)</div>
+              <button className="btn btn-jade btn-sm" onClick={uploadAudio}>✓ ส่งไฟล์เสียง</button>
+              {audioMsg && <div style={{marginTop:'0.5rem',fontSize:'0.78rem',color:'var(--jade)'}}>{audioMsg}</div>}
+            </div>
           )}
         </div>
       )}
