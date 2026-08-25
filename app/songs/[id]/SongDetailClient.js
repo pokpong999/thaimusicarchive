@@ -10,12 +10,14 @@ import { usePermissions } from '../../../components/Gate';
 import { EText, EImage } from '../../../components/Editable';
 import StatBadge from '../../../components/StatBadge';
 import ShareBar from '../../../components/ShareBar';
+import SongNathab from '../../../components/SongNathab';
 
 export default function SongDetailClient() {
   const { can } = usePermissions();
   const { id } = useParams();
   const [song, setSong] = useState(null);
   const [melody, setMelody] = useState([]);
+  const [nathabRules, setNathabRules] = useState([]);   // หน้าทับที่เพลงนี้ผูกไว้ (song_nathab)
   const [instruments, setInstruments] = useState(['ทำนองหลัก']);
   const [contributors, setContributors] = useState({});
   const [instOwners, setInstOwners] = useState({});
@@ -295,8 +297,9 @@ export default function SongDetailClient() {
           <div style={{marginBottom:'0.8rem'}}>
             <ExportBar song={song} instrument={instrument} verses={melody} targetId="notation-export-area" />
           </div>
+          <SongNathab song={song} verses={melody} onRules={setNathabRules} />
           <div id="notation-export-area">
-            <NotationPlayer verses={melody} lyrics={song.lyrics} />
+            <NotationPlayer verses={melody} lyrics={song.lyrics} nathabRules={nathabRules} />
           </div>
 
           <div style={{marginTop:'1.4rem'}}>
