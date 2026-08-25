@@ -564,6 +564,15 @@ export default function AdminPage() {
       )}
 
       {tab === 'samples' && (
+        <div className="card" style={{borderColor:'rgba(201,168,76,0.5)',display:'flex',gap:12,alignItems:'center',flexWrap:'wrap'}}>
+          <div style={{flex:'1 1 320px',fontSize:'0.8rem',lineHeight:1.8}}>
+            <b>🥁 คลังเสียงกลอง ฉิ่ง และเครื่องอื่น</b><br/>
+            <span style={{color:'var(--muted)'}}>ตะโพน กลองแขก กลองสองหน้า โทนรำมะนา กลองทัด ฉิ่ง — โฟลเดอร์ = เครื่อง · ชื่อไฟล์ = พยางค์ (theng.mp3 = เท่ง) อัปแล้วหน้าทับใช้เสียงจริงทันที</span>
+          </div>
+          <Link href="/admin/samples"><button className="btn btn-primary btn-sm">เปิดคลังเสียงเครื่องดนตรี →</button></Link>
+        </div>
+      )}
+      {tab === 'samples' && (
         <div className="card" style={{borderColor:'rgba(76,154,132,0.3)'}}>
           <div style={{fontSize:'0.95rem',fontWeight:600,marginBottom:'0.4rem'}}>🎵 ไฟล์เสียงฆ้องวงใหญ่ (16 ลูก)</div>
           <div style={{fontSize:'0.75rem',color:'var(--muted)',marginBottom:'1rem',lineHeight:1.7}}>
