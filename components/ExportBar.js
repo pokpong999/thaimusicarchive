@@ -27,10 +27,12 @@ function dl(blob, filename) {
 }
 
 import { usePermissions } from './Gate';
+import SheetExport from './SheetExport';
 
 export default function ExportBar({ song, instrument, verses, targetId }) {
   const { loading: meLoading, can } = usePermissions();
   const [busy, setBusy] = useState('');
+  const [sheetOpen, setSheetOpen] = useState(false);
   const base = `${song.id}_${song.name_th}_${instrument}`.replace(/\s+/g, '_');
 
   async function exportExcel() {
@@ -120,7 +122,8 @@ export default function ExportBar({ song, instrument, verses, targetId }) {
     </button>
   );
 
-  if (!meLoading && !can('export') && !can('print')) {
+  if (meLoading) return null;
+  if (!can('export') && !can('print')) {
     return (
       <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
         <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>🖨 พิมพ์/ดาวน์โหลดโน้ต:</span>
@@ -137,13 +140,17 @@ export default function ExportBar({ song, instrument, verses, targetId }) {
       {!can('export') && <a href="/premium" style={{fontSize:'0.7rem',color:'var(--gold)'}}>💎 ดาวน์โหลดไฟล์สำหรับสมาชิกอุปถัมภ์</a>}
       {can('export') && <>
       </>}
-      {can('print') && <a href={`/songs/${song?.id}/print`} className="btn btn-sm"
-        style={{background:'var(--gold)',color:'var(--navy)',fontWeight:600,fontSize:'0.72rem'}}>
-        🖨 ฉบับพิมพ์ / PDF สวย</a>}
-      <B id="docx" label="📄 DOCX" fn={exportDocx} />
-      <B id="pdf" label="📕 PDF" fn={exportPdf} />
-      <B id="jpg" label="🖼 JPG" fn={exportJpg} />
-      <B id="excel" label="📊 Excel" fn={exportExcel} />
+      {can('export') && (
+        <button className="btn btn-sm" onClick={() => setSheetOpen(true)}
+          style={{background:'var(--gold)',color:'var(--navy)',fontWeight:600,fontSize:'0.72rem'}}>
+          🖨 ส่งออก Music Sheet (PDF · PNG · DOCX · Excel)</button>
+      )}
+      {can('print') && <a href={`/songs/${song?.id}/print`} className="btn btn-outline btn-sm"
+        style={{fontSize:'0.72rem'}}>ฉบับพิมพ์ในเบราว์เซอร์</a>}
+      {sheetOpen && (
+        <SheetExport song={song} instrument={instrument} verses={verses}
+          onClose={() => setSheetOpen(false)} />
+      )}
     </div>
   );
 }
