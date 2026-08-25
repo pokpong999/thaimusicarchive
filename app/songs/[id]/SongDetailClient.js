@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../../lib/supabase';
@@ -24,7 +24,14 @@ export default function SongDetailClient() {
   const [instOwners, setInstOwners] = useState({});
   const [songOwner, setSongOwner] = useState(null);
   const [instAt, setInstAt] = useState({});   // ทาง → created_at
-  const [instrument, setInstrument] = useState('ทำนองหลัก');
+  const [instrument, setInstrumentState] = useState(() => {
+    if (typeof window === 'undefined') return 'ทำนองหลัก';
+    return new URLSearchParams(window.location.search).get('inst') || 'ทำนองหลัก';
+  });
+  const setInstrument = v => {
+    setInstrumentState(v);
+    try { const u = new URL(window.location.href); if (v === 'ทำนองหลัก') u.searchParams.delete('inst'); else u.searchParams.set('inst', v); window.history.replaceState(null, '', u.toString()); } catch (e) {}
+  };
   const [pdfs, setPdfs] = useState([]);
   const [pdfFile, setPdfFile] = useState(null);
   const [pdfTitle, setPdfTitle] = useState('');
@@ -33,7 +40,23 @@ export default function SongDetailClient() {
   const [videos, setVideos] = useState([]);
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [tab, setTab] = useState('history');
+  // แท็บจำไว้ใน #hash (รีเฟรชแล้วกลับมาแท็บเดิม — Pk 2026-08-25) · ทางเครื่องใน ?inst= · ตำแหน่งเลื่อนใน sessionStorage
+  const TAB_KEYS = ['history', 'notation', 'analysis', 'audio', 'videos'];
+  const [tab, setTabState] = useState(() => {
+    if (typeof window === 'undefined') return 'history';
+    const h = window.location.hash.replace('#', '');
+    return TAB_KEYS.includes(h) ? h : 'history';
+  });
+  const setTab = k => { setTabState(k); try { window.history.replaceState(null, '', window.location.pathname + window.location.search + '#' + k); } catch (e) {} };
+  const scrollKey = typeof window !== 'undefined' ? 'thma-scroll:' + window.location.pathname : '';
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    // จำตำแหน่งเลื่อนหน้า
+    let t = null;
+    const onScroll = () => { clearTimeout(t); t = setTimeout(() => { try { sessionStorage.setItem(scrollKey, String(window.scrollY)); } catch (e) {} }, 150); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => { window.removeEventListener('scroll', onScroll); clearTimeout(t); };
+  }, [scrollKey]);
   const [krasuan, setKrasuan] = useState(null);
   const [audios, setAudios] = useState([]);
   const [audioFile, setAudioFile] = useState(null);
@@ -77,6 +100,8 @@ export default function SongDetailClient() {
     setInstAt(at);
     const uniq = [...new Set((inst ?? []).map(r => r.instrument ?? 'ทำนองหลัก'))];
     setInstruments(uniq.length ? uniq : ['ทำนองหลัก']);
+    // ทางที่จำไว้ใน URL ไม่มีในเพลงนี้ → กลับไปทางแรก
+    if (uniq.length && !uniq.includes(instrument)) setInstrument(uniq[0]);
     // เครดิตผู้เพิ่มข้อมูล
     const byInst = {};
     (inst ?? []).forEach(r => { if (r.submitted_by && !byInst[r.instrument]) byInst[r.instrument] = r.submitted_by; });
@@ -108,7 +133,14 @@ export default function SongDetailClient() {
     supabase.from('song_melody')
       .select('*').eq('song_id', id).eq('instrument', instrument).eq('approved', true)
       .order('verse_no')
-      .then(({ data }) => setMelody(data ?? []));
+      .then(({ data }) => {
+        setMelody(data ?? []);
+        // โน้ตโหลดแล้วค่อยเลื่อนกลับตำแหน่งเดิม (ครั้งแรกครั้งเดียว)
+        if (!restoredRef.current) {
+          restoredRef.current = true;
+          try { const y = +sessionStorage.getItem(scrollKey); if (y > 0) setTimeout(() => window.scrollTo(0, y), 80); } catch (e) {}
+        }
+      });
   }, [id, instrument]);
 
   async function uploadPdf() {
