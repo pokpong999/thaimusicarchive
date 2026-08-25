@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
 import { useMe } from './Gate';
-import { DRUMS, loadNathabLibrary, loadSongNathab, nathabNames } from '../lib/nathab';
+import { DRUMS, drumLabel, loadNathabLibrary, loadSongNathab, nathabNames } from '../lib/nathab';
 
 const LEVEL_OPTS = ['สามชั้น', 'สองชั้น', 'ชั้นเดียว'];
 
@@ -112,7 +112,7 @@ export default function SongNathab({ song, verses, onRules }) {
               <option value="">อัตราตามโน้ต/ผู้ฟังเลือก</option>{LEVEL_OPTS.map(l => <option key={l}>{l}</option>)}
             </select>
             <select className="filter-select" value={draft.main.drum} onChange={e => setMain({ drum: e.target.value })} title="เครื่องกำกับจังหวะที่แนะนำ">
-              <option value="">เครื่องใดก็ได้</option>{DRUMS.map(d => <option key={d}>{d}</option>)}
+              <option value="">เครื่องใดก็ได้</option>{DRUMS.map(d => <option key={d} value={d}>{drumLabel(d)}</option>)}
             </select>
           </div>
           {draft.extra.map((x, i) => (
@@ -127,7 +127,7 @@ export default function SongNathab({ song, verses, onRules }) {
                 <option value="">อัตราเดิม</option>{LEVEL_OPTS.map(l => <option key={l}>{l}</option>)}
               </select>
               <select className="filter-select" value={x.drum} onChange={e => setExtra(i, { drum: e.target.value })}>
-                <option value="">เครื่องเดิม</option>{DRUMS.map(d => <option key={d}>{d}</option>)}
+                <option value="">เครื่องเดิม</option>{DRUMS.map(d => <option key={d} value={d}>{drumLabel(d)}</option>)}
               </select>
               <button className="btn btn-outline btn-sm" onClick={() => setDraft(d => ({ ...d, extra: d.extra.filter((_, j) => j !== i) }))}>🗑</button>
             </div>

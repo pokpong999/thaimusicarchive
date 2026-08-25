@@ -3,7 +3,7 @@ import { usePermissions } from './Gate';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadGongSamples, playSampleNote, samplesAvailable } from '../lib/sampler';
-import { CHING_PATTERNS, DRUMS, parsePattern, playPercussion, loadDrumBank,
+import { CHING_PATTERNS, DRUMS, drumLabel, parsePattern, playPercussion, playHit, loadSetBanks, loadDrumBank,
          loadNathabLibrary, nathabNames, findPattern, planSongNathab } from '../lib/nathab';
 const TH_COLS = ['ด','ร','ม','ฟ','ซ','ล','ท'];
 const TH_ROWS = { '-1': 'zxcvbnm', '0': 'asdfghj', '1': 'qwertyu' };
@@ -139,7 +139,30 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const [playState, setPlayState] = useState('stopped');
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [sampleCount, setSampleCount] = useState(null);
+  // เคอร์เซอร์: อัปเดต DOM ตรง ๆ (ไม่ผ่าน React state) — เพลงยาวหลายพันช่อง re-render ทุกจังหวะทำให้กระตุก/ค้าง
+  // React state ใช้เฉพาะโหมดโน้ตสากล (StaffNotation ต้องการ prop)
   const [cursor, setCursor] = useState(null);
+  const gridRef = useRef(null);
+  const modeRef = useRef(mode); modeRef.current = mode;
+  const cursorElsRef = useRef([]);
+  const cursorLineRef = useRef(null);
+  const moveCursor = c => {
+    cursorElsRef.current.forEach(el => el.classList.remove('np-on'));
+    cursorElsRef.current = [];
+    if (modeRef.current === 'staff') { setCursor(c); return; }
+    if (!c) { cursorLineRef.current = null; return; }
+    const root = gridRef.current; if (!root) return;
+    const els = root.querySelectorAll(`[data-cell="${c.verseIdx}-${c.pos}"]`);
+    els.forEach(el => el.classList.add('np-on'));
+    cursorElsRef.current = Array.from(els);
+    // เลื่อนหน้าให้เห็นบรรทัดที่กำลังเล่น (เฉพาะเมื่อเปลี่ยนบรรทัดและบรรทัดนั้นอยู่นอกจอ)
+    const line = els[0]?.closest('[data-line]') ?? null;
+    if (line && line !== cursorLineRef.current) {
+      cursorLineRef.current = line;
+      const r = line.getBoundingClientRect();
+      if (r.top < 0 || r.bottom > window.innerHeight) line.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  };
   const ctxRef = useRef(null);
   const stopRef = useRef(null);
   // หยุดเสียงเมื่อสลับแท็บ/ย่อหน้าต่าง และเมื่อออกจากหน้านี้
@@ -269,7 +292,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     if (nathab !== 'none' || chingOn) {
       // โหลดเสียงจริงของเครื่องที่เลือก (ถ้ายังไม่มีไฟล์ ระบบใช้เสียงสังเคราะห์ต่อไป)
       await Promise.all([
-        nathab !== 'none' ? loadDrumBank(ctx, drumInst) : null,
+        nathab !== 'none' ? loadSetBanks(ctx, drumInst) : null,   // ทุกบรรทัดของชุด (ตะโพน+กลองทัด ฯลฯ)
         chingOn ? loadDrumBank(ctx, 'ฉิ่ง') : null,
       ].filter(Boolean));
       if (nathab !== 'none') {
@@ -315,7 +338,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       if (d) {
         if (d.key !== percKey) { percKey = d.key; percRel = 0; }
         const pp = (percRel % d.len) + 1; percRel++;
-        d.hits.forEach(h => { if (h.pos === pp) q(t, () => playPercussion(ctx, h.syll, t, 0.75, drumInst)); });
+        d.hits.forEach(h => { if (h.pos === pp) q(t, () => playHit(ctx, drumInst, h, t, 0.75)); });   // h.voice = บรรทัดของชุด
       } else { percKey = null; percRel = 0; }
       if (chingOn && marks && marks[s]) { const syll = marks[s]; q(t, () => playPercussion(ctx, syll, t, 0.7, 'ฉิ่ง')); }
     };
@@ -369,9 +392,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         try { soundEvents[evIdx].fn(); } catch (e) {}
         evIdx++;
       }
+      // ทิ้งคิวที่เล่นไปแล้ว (โหมดวนเรื่อย ๆ ไม่ให้หน่วยความจำโตไม่หยุด)
+      if (evIdx > 4000) { soundEvents.splice(0, evIdx); evIdx = 0; }
+      if (idx > 4000) { cursorTimeline.splice(0, idx); idx = 0; }
     }
-    pump(ctx.currentTime); // นัดช่วงเปิดเพลงทันที
     let idx = 0;
+    pump(ctx.currentTime); // นัดช่วงเปิดเพลงทันที
     function tick() {
       if (playIdRef.current !== myId) return;
       const now = ctx.currentTime;
@@ -381,12 +407,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         endTime = t0 + schedLen * stepDur;
       }
       pump(now);
-      while (idx < cursorTimeline.length && cursorTimeline[idx].time <= now) {
-        setCursor({ verseIdx: cursorTimeline[idx].verseIdx, pos: cursorTimeline[idx].pos });
-        idx++;
-      }
+      // ข้ามตำแหน่งที่เลยมาแล้ว อัปเดตเฉพาะตำแหน่งล่าสุดครั้งเดียวต่อเฟรม
+      let last = null;
+      while (idx < cursorTimeline.length && cursorTimeline[idx].time <= now) { last = cursorTimeline[idx]; idx++; }
+      if (last) moveCursor({ verseIdx: last.verseIdx, pos: last.pos });
       if (now < endTime + 0.1) rafRef.current = requestAnimationFrame(tick);
-      else { setPlayState('stopped'); setCursor(null); }
+      else { setPlayState('stopped'); moveCursor(null); }
     }
     rafRef.current = requestAnimationFrame(tick);
   }
@@ -402,7 +428,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     playIdRef.current++;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (ctxRef.current) { ctxRef.current.close().catch(() => {}); ctxRef.current = null; }
-    setPlayState('stopped'); setCursor(null);
+    setPlayState('stopped'); moveCursor(null);
   }
 
   function seek(vi, p) {
@@ -410,15 +436,14 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     startFrom(parsed[vi].offset + hongStart);
   }
 
-  function renderCell(notes, active, vi, p) {
+  function renderCell(notes, vi, p) {
     const isSabat = notes.length > 1;
     return (
-      <span onClick={() => seek(vi, p)} title="กดเพื่อเล่นจากห้องนี้" style={{
+      <span onClick={() => seek(vi, p)} title="กดเพื่อเล่นจากห้องนี้" data-cell={`${vi}-${p}`} className="np-cell" style={{
         display:'inline-block', minWidth:'26px', textAlign:'center',
         padding:'2px 1px', borderRadius:'3px', fontSize:'1.05rem',
         fontFamily:'THNotation', lineHeight:1.6,
         cursor:'pointer', position:'relative',
-        background: active ? 'rgba(201,168,76,0.4)' : 'transparent',
         color: notes.length ? 'var(--cream)' : 'var(--border)',
       }}>
         {isSabat && <span style={{
@@ -436,7 +461,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     return positions.map((notes, p) => (
       <span key={p} style={{display:'flex'}}>
         {p > 0 && p % 4 === 0 && <span style={{color:'var(--border)',margin:'0 3px'}}>|</span>}
-        {renderCell(notes, cursor && cursor.verseIdx === vi && cursor.pos === p, vi, p)}
+        {renderCell(notes, vi, p)}
       </span>
     ));
   }
@@ -536,7 +561,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         </select>}
         {nathab !== 'none' && (
           <select className="filter-select" value={drumInst} onChange={e => setDrumInst(e.target.value)} disabled={playState !== 'stopped'}>
-            {DRUMS.map(d => <option key={d} value={d}>{d}</option>)}
+            {DRUMS.map(d => <option key={d} value={d}>{drumLabel(d)}</option>)}
           </select>
         )}
         <select className="filter-select" value={level} onChange={e => setLevel(e.target.value)} disabled={playState !== 'stopped'}>
@@ -575,8 +600,9 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>💡 กดที่ห้องใดก็ได้เพื่อเล่นจากตรงนั้น</span>
       </div>
 
+      <style>{`.np-cell.np-on{background:rgba(201,168,76,0.4)}`}</style>
       {mode === 'staff' ? <StaffNotation verses={verses} cursor={cursor} /> :
-      <div style={{background:'var(--navy3)',border:'1px solid var(--border)',borderRadius:'8px',
+      <div ref={gridRef} style={{background:'var(--navy3)',border:'1px solid var(--border)',borderRadius:'8px',
         padding:'1rem',overflowX:'auto',display:'flex',flexDirection:'column',gap:'0.7rem'}}>
         {lineGroups.map((group, gi) => {
           const first = parsed[group[0]].v;
@@ -586,7 +612,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           const luk = group.map(vi => parsed[vi].v.luktok).filter(Boolean).join(' / ');
           const segs = f => group.map(vi => ({ positions: f(parsed[vi]), vi }));
           return (
-            <div key={gi} style={{paddingBottom:'0.5rem',
+            <div key={gi} data-line={gi} style={{paddingBottom:'0.5rem',
               borderBottom: gi < lineGroups.length-1 ? '1px dashed rgba(42,63,92,0.6)' : 'none'}}>
               <div style={{fontSize:'0.62rem',color:'var(--muted)',marginBottom:'3px'}}>
                 {label}{first.section ? ` · ${first.section}` : ''}{luk ? ` · ลูกตก: ${luk}` : ''}

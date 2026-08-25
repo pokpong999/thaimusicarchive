@@ -16,7 +16,7 @@ import dynamic from 'next/dynamic';
 import { NotationEngine } from '../lib/notation-engine';
 import { textToVerses, versesToRows, hasSound } from '../lib/notation-core';
 import { loadGongSamples, playSampleNote } from '../lib/sampler';
-import { parsePattern, playPercussion, loadDrumBank, loadNathabLibrary, nathabNames, findPattern, approvedRows } from '../lib/nathab';
+import { parsePattern, playPercussion, playHit, loadSetBanks, loadDrumBank, loadNathabLibrary, nathabNames, findPattern, approvedRows, DRUMS, drumLabel } from '../lib/nathab';
 
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
 
@@ -30,13 +30,15 @@ const PERC = {
   load: async (ctx, instrument) => {
     // โหลดเสียงจริงของกลองที่เลือกและฉิ่งไว้ล่วงหน้า (ไม่มีไฟล์ = ใช้เสียงสังเคราะห์)
     if (ctx) {
-      try { await Promise.all([loadDrumBank(ctx, instrument), loadDrumBank(ctx, 'ฉิ่ง')]); } catch (e) {}
+      try { await loadSetBanks(ctx, instrument, { ching: true }); } catch (e) {}
     }
     return approvedRows(await loadNathabLibrary());
   },
   // หาแถวที่ตรงเครื่อง/อัตราที่สุด (ตกลงมาที่ 'ทุกอัตรา' หรือเครื่องตระกูลเดียวกันได้)
   find: (rows, nathab, level, instrument) => findPattern(rows, nathab, level, instrument),
   parse: parsePattern, play: playPercussion,
+  // เล่น hit ของชุดหลายบรรทัด (h.voice บอกว่าเป็นบรรทัดไหน → โฟลเดอร์เสียงของใบนั้น)
+  playHit: (ctx, instrument, h, t, gain) => playHit(ctx, instrument, h, t, gain),
 };
 
 const DRAFT_PREFIX = 'thma-draft:';
@@ -58,6 +60,14 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
   const versesRef = useRef([]);
   const rowIdxRef = useRef([]);   // ดัชนีวรรค → ดัชนีแถวใน staffRows (วรรคเงียบถูกข้าม = -1)
   const saveTimer = useRef(null);
+  const pendingRef = useRef(null);      // ร่างที่ยังไม่ได้เขียนลง localStorage
+  const initialRef = useRef(null);      // โน้ตตั้งต้นจากฐาน (ไว้ย้อนกลับถ้าไม่เอาร่าง)
+  const hideRef = useRef(null);
+  const flushDraft = () => {
+    const d = pendingRef.current; if (!d || !draftKey) return;
+    pendingRef.current = null;
+    if (d.verses.some(hasSound)) writeDraft(draftKey, d); else dropDraft(draftKey);
+  };
   const setVersesRef = vs => {
     versesRef.current = vs; let k = 0;
     rowIdxRef.current = vs.map(v => hasSound(v) ? k++ : -1);
@@ -89,22 +99,38 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
         setVersesRef(d.verses);
         if (onChangeRef.current) onChangeRef.current(d);
         if (draftKey && !options.readOnly) {
+          // เก็บร่างเร็ว (250 ms) + flush ทันทีตอนปิด/รีเฟรชหน้า (pagehide) — เผลอกดรีเฟรชแล้วโน้ตไม่หาย
+          pendingRef.current = d;
           clearTimeout(saveTimer.current);
-          saveTimer.current = setTimeout(() => {
-            if (d.verses.some(hasSound)) writeDraft(draftKey, d); else dropDraft(draftKey);
-          }, 600);
+          saveTimer.current = setTimeout(() => { flushDraft(); }, 250);
         }
         if (showStaffRef.current) setStaffRows(versesToRows(d.verses, { twoHands: d.twoHands }));
       },
     });
     engRef.current = eng;
+    initialRef.current = verses || null;
+    // เผลอรีเฟรช/ปิดแท็บ: เซฟร่างที่ค้างอยู่ทันที
+    const onHide = () => flushDraft();
+    window.addEventListener('pagehide', onHide);
+    window.addEventListener('beforeunload', onHide);
+    hideRef.current = onHide;
     // รายชื่อหน้าทับใน dropdown "กลอง" มาจากคลังกลาง (ไม่ใช่ค่าตายตัว)
     loadNathabLibrary().then(rows => { if (engRef.current === eng) eng.setNathabOptions(nathabNames(rows)); }).catch(() => {});
+    eng.setDrumOptions(DRUMS.map(d => [d, drumLabel(d)]));
     if (draftKey && !options.readOnly) {
       const d = readDraft(draftKey);
-      if (d && d.verses && d.verses.some(hasSound)) setDraft(d);
+      if (d && d.verses && d.verses.some(hasSound)) {
+        // กู้คืนร่างให้เลย (Pk 2026-08-25: เผลอรีเฟรชแล้วต้องได้โน้ตกลับมาเหมือนเดิม) — มีปุ่มกลับไปใช้ของเดิมจากฐานถ้าไม่ต้องการ
+        // (S.base/S.lineHong เป็น getter — ต้องตั้งผ่าน ta/rap ไม่งั้น throw · บั๊กเดิมของปุ่ม "กู้คืนร่าง")
+        const ta = d.ta || d.base || 4;
+        Object.assign(eng.S, { ta, rap: d.rap != null ? d.rap : Math.max(0, (d.lineHong || 8) - ta), twoHands: !!d.twoHands,
+          ensemble: d.ensemble || 'sai', level: d.level || 'สองชั้น' });
+        eng.syncControls();
+        eng.setVerses(d.verses); eng.emit();
+        setDraft(d);
+      }
     }
-    return () => { clearTimeout(saveTimer.current); eng.destroy(); engRef.current = null; };
+    return () => { clearTimeout(saveTimer.current); flushDraft(); window.removeEventListener('pagehide', onHide); window.removeEventListener('beforeunload', onHide); eng.destroy(); engRef.current = null; };
     // สร้างครั้งเดียวตอน mount — ข้อมูลเริ่มต้นเปลี่ยนทีหลังให้ใช้ ref.loadVerses()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -127,24 +153,26 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
     clearDraft: () => { if (draftKey) dropDraft(draftKey); },
   }), [draftKey]);
 
-  function restoreDraft() {
-    const eng = engRef.current; if (!eng || !draft) return;
-    Object.assign(eng.S, { base: draft.base || 4, lineHong: draft.lineHong || 8, twoHands: !!draft.twoHands,
-      ensemble: draft.ensemble || 'sai', level: draft.level || 'สองชั้น' });
-    eng.setVerses(draft.verses); eng.emit();
+  // ไม่เอาร่าง → กลับไปใช้โน้ตตั้งต้นจากฐาน และลบร่างทิ้ง
+  function discardDraft() {
+    const eng = engRef.current;
+    if (draftKey) dropDraft(draftKey);
+    pendingRef.current = null;
+    if (eng) { eng.setVerses(initialRef.current); eng.emit(); }
+    // emit ข้างบนจะเขียนร่างใหม่จากโน้ตตั้งต้น — ลบทิ้งอีกรอบหลัง debounce
+    setTimeout(() => { if (draftKey) dropDraft(draftKey); pendingRef.current = null; }, 400);
     setDraft(null);
   }
-  function discardDraft() { if (draftKey) dropDraft(draftKey); setDraft(null); }
 
   const staffOn = options.staff !== false;
   return (
     <div>
       {draft && (
-        <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',padding:'0.6rem 0.9rem',
-          marginBottom:'0.6rem',background:'rgba(201,168,76,0.12)',border:'1px solid rgba(201,168,76,0.5)',borderRadius:'8px',fontSize:'0.82rem'}}>
-          <span>📝 พบร่างที่ยังไม่ได้ส่ง ({draft.verses.filter(hasSound).length} วรรค · {new Date(draft.at).toLocaleString('th-TH')})</span>
-          <button className="btn btn-primary btn-sm" type="button" onClick={restoreDraft}>กู้คืนร่าง</button>
-          <button className="btn btn-outline btn-sm" type="button" onClick={discardDraft}>ทิ้งร่าง</button>
+        <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',padding:'0.5rem 0.9rem',
+          marginBottom:'0.6rem',background:'rgba(76,154,132,0.12)',border:'1px solid rgba(76,154,132,0.5)',borderRadius:'8px',fontSize:'0.8rem'}}>
+          <span>⟲ กู้คืนโน้ตที่พิมพ์ค้างไว้ให้แล้ว ({draft.verses.filter(hasSound).length} วรรค · บันทึกล่าสุด {new Date(draft.at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.) — ยังไม่ได้ส่งเข้าฐาน</span>
+          <button className="btn btn-outline btn-sm" type="button" onClick={discardDraft} title="ทิ้งร่างนี้ กลับไปใช้โน้ตตามที่อยู่ในฐานข้อมูล">ไม่เอาร่าง ใช้ของเดิมจากฐาน</button>
+          <button className="btn btn-outline btn-sm" type="button" onClick={() => setDraft(null)} title="ซ่อนข้อความนี้ ร่างยังอยู่">ตกลง</button>
         </div>
       )}
       <div ref={rootRef} />

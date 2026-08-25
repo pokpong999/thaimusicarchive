@@ -9,7 +9,7 @@ import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 import { FeaturePage, useMe } from '../../components/Gate';
 import NathabEditor, { NathabPreview } from '../../components/NathabEditor';
-import { DRUMS, LEVELS, invalidateNathabLibrary, loadNathabLibrary, nathabNames } from '../../lib/nathab';
+import { DRUMS, LEVELS, drumLabel, invalidateNathabLibrary, loadNathabLibrary, nathabNames } from '../../lib/nathab';
 
 const LEVEL_ORDER = { 'สามชั้น': 0, 'สองชั้น': 1, 'ชั้นเดียว': 2, 'ทุกอัตรา': 3 };
 const MIN_POINTS = 300;
@@ -112,7 +112,7 @@ export default function NathabLibraryPage() {
           )}
           <input className="form-input" style={{ width: 180 }} placeholder="ค้นชื่อหน้าทับ" value={q} onChange={e => setQ(e.target.value)} />
           <select className="filter-select" value={fInst} onChange={e => setFInst(e.target.value)}>
-            <option value="">ทุกเครื่อง</option>{DRUMS.map(d => <option key={d}>{d}</option>)}
+            <option value="">ทุกเครื่อง</option>{DRUMS.map(d => <option key={d} value={d}>{drumLabel(d)}</option>)}
           </select>
           <select className="filter-select" value={fLevel} onChange={e => setFLevel(e.target.value)}>
             <option value="">ทุกอัตรา</option>{LEVELS.map(l => <option key={l}>{l}</option>)}
@@ -154,7 +154,7 @@ export default function NathabLibraryPage() {
           {g.rows.map(r => (
             <div key={r.id} style={{ padding: '7px 0', borderTop: '1px solid rgba(42,63,92,0.4)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.78rem', minWidth: 150 }}>
-                <span style={{ color: 'var(--jade)' }}>{r.level}</span> · {r.instrument}
+                <span style={{ color: 'var(--jade)' }}>{r.level}</span> · {drumLabel(r.instrument)}
                 {r.source && <div style={{ fontSize: '0.64rem', color: 'var(--muted)' }}>ที่มา: {r.source}</div>}
               </span>
               <NathabPreview row={r} />
