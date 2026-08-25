@@ -77,7 +77,7 @@ export default function EditMelodyPage() {
       });
       setBusy(false);
       if (error) { setMsg('⚠ ' + error.message); return; }
-      setDirty(false); padRef.current.clearDraft(); setMsg('✓ ส่งทาง' + instrument + ' แล้ว (' + newRows.length + ' วรรค) — รอผู้ดูแลอนุมัติ (+10 แต้มเมื่อผ่าน)');
+      setDirty(false); padRef.current.clearDraft(); setMsg('✓ ส่งทาง' + instrument + ' แล้ว (' + newRows.length + ' วรรค) — รอผู้ดูแลอนุมัติ (+10 ศักดินาเมื่อผ่าน)');
       return;
     }
 
