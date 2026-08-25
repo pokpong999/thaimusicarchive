@@ -43,6 +43,32 @@ function ensureFonts() {
 
 const SPACING = { compact: 0.78, normal: 1, airy: 1.28 };
 
+/* คอมโพเนนต์ย่อยต้องอยู่นอกตัวหลัก — ประกาศข้างในจะกลายเป็น "ชนิดใหม่" ทุกครั้ง
+   ที่วาดจอ ช่องกรอกถูกสร้างใหม่ โฟกัสหลุด พิมพ์ได้ทีละตัวอักษร */
+function Row({ label, children }) {
+  return (
+    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.55rem' }}>
+      <span style={{ fontSize: '0.74rem', color: 'var(--muted)', width: '86px', flexShrink: 0 }}>{label}</span>
+      {children}
+    </div>
+  );
+}
+function Sel({ value, onChange, opts }) {
+  return (
+    <select className="form-input" style={{ padding: '4px 8px', fontSize: '0.78rem', width: 'auto' }}
+      value={value} onChange={e => onChange(e.target.value)}>
+      {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  );
+}
+function Btn({ busy, id, label, fn }) {
+  return (
+    <button className="btn btn-primary btn-sm" disabled={!!busy} onClick={fn} style={{ fontSize: '0.78rem' }}>
+      {busy === id ? '⏳ กำลังสร้าง...' : label}
+    </button>
+  );
+}
+
 export default function SheetExport({ song, instrument, verses, onClose }) {
   const me = useMe();
   const hasHands = (verses ?? []).some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim());
@@ -73,11 +99,13 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
     return base;
   }, [o, h, me.isAdmin]);
 
-  // เรนเดอร์ทุกหน้าเป็น canvas (scale = ความละเอียด)
-  async function renderPages(scale) {
+  // เรนเดอร์เป็น canvas · onlyPage = เรนเดอร์เฉพาะหน้านั้น (พรีวิว — เร็วแม้เพลงร้อยหน้า)
+  async function renderPages(scale, onlyPage = null) {
     await ensureFonts();
     const g = pageGeometry(opt);
     const canvases = [];
+    let total = 0;
+    const wants = pi => onlyPage == null || pi === onlyPage;
     if (opt.notation === 'staff') {
       await loadScript(...CDN.vexflow);
       const VF = (window.Vex && window.Vex.Flow) || window.VexFlow;
@@ -85,23 +113,27 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
         source: opt.handMode === 'hands' ? 'hands' : 'combined',
         beat: opt.beat, measuresPerLine: opt.hongsPerLine });
       const layout = paginateStaff(prepS, g, opt);
+      total = layout.pages.length;
       layout.pages.forEach((_, pi) => {
+        if (!wants(pi)) return;
         const c = document.createElement('canvas');
-        drawStaffPage(VF, c, g, opt, layout, pi, layout.pages.length, scale);
+        drawStaffPage(VF, c, g, opt, layout, pi, total, scale);
         canvases.push(c);
       });
     } else {
       const prep = prepare(verses, { hongsPerLine: opt.hongsPerLine });
       const layout = paginateThai(prep, g, opt);
+      total = layout.pages.length;
       layout.pages.forEach((_, pi) => {
+        if (!wants(pi)) return;
         const c = document.createElement('canvas');
         c.width = g.W * scale; c.height = g.H * scale;
         const ctx = c.getContext('2d'); ctx.scale(scale, scale);
-        drawThaiPage(ctx, g, opt, layout, pi, layout.pages.length);
+        drawThaiPage(ctx, g, opt, layout, pi, total);
         canvases.push(c);
       });
     }
-    return { canvases, g };
+    return { canvases, g, total };
   }
 
   // พรีวิว
@@ -110,11 +142,14 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
     const t = setTimeout(async () => {
       try {
         setErr('');
-        const { canvases } = await renderPages(1.6);
+        let { canvases, total } = await renderPages(1.6, pageIdx);
+        if (!canvases.length && total > 0) {          // pageIdx เกินหน้าจริง → ถอยไปหน้าสุดท้าย
+          ({ canvases, total } = await renderPages(1.6, total - 1));
+          setPageIdx(total - 1);
+        }
         if (dead || !wrapRef.current) return;
-        setPageCount(canvases.length);
-        const pi = Math.min(pageIdx, canvases.length - 1);
-        const c = canvases[pi];
+        setPageCount(total);
+        const c = canvases[0] ?? Object.assign(document.createElement('canvas'), { width: 10, height: 10 });
         c.style.width = '100%'; c.style.height = 'auto';
         c.style.boxShadow = '0 3px 18px rgba(0,0,0,0.45)'; c.style.borderRadius = '3px';
         wrapRef.current.replaceChildren(c);
@@ -201,24 +236,6 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
     setBusy('');
   }
 
-  const Sel = ({ k, opts, value }) => (
-    <select className="form-input" style={{ padding: '4px 8px', fontSize: '0.78rem', width: 'auto' }}
-      value={value ?? o[k]} onChange={e => set(k, e.target.value)}>
-      {opts.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-    </select>
-  );
-  const Row = ({ label, children }) => (
-    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.55rem' }}>
-      <span style={{ fontSize: '0.74rem', color: 'var(--muted)', width: '86px', flexShrink: 0 }}>{label}</span>
-      {children}
-    </div>
-  );
-  const B = ({ id, label, fn }) => (
-    <button className="btn btn-primary btn-sm" disabled={!!busy} onClick={fn} style={{ fontSize: '0.78rem' }}>
-      {busy === id ? '⏳ กำลังสร้าง...' : label}
-    </button>
-  );
-
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(6,12,22,0.82)',
       display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '2rem 1rem' }}
@@ -234,27 +251,34 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
           {/* ── ตัวเลือก ── */}
           <div style={{ flex: '1 1 300px', minWidth: '280px' }}>
             <Row label="รูปแบบโน้ต">
-              <Sel k="notation" opts={[['thai', 'โน้ตไทย'], ['staff', 'โน้ตสากล 5 เส้น']]} />
-              <Sel k="handMode" opts={[['combined', 'บรรทัดเดียว (รวม)'],
+              <Sel value={o.notation} onChange={v => set('notation', v)}
+                opts={[['thai', 'โน้ตไทย'], ['staff', 'โน้ตสากล 5 เส้น']]} />
+              <Sel value={o.handMode} onChange={v => set('handMode', v)}
+                opts={[['combined', 'บรรทัดเดียว (รวม)'],
                 ...(hasHands ? [['hands', o.notation === 'staff' ? 'สองมือ (คู่เสียง)' : 'สองมือ (ขวา/ซ้าย)']] : [])]} />
             </Row>
             {o.notation === 'thai' && (
               <Row label="แบบอักษร">
-                <Sel k="font" opts={[['notation', 'TH Notation (จุดบน-ล่างสวย)'], ['unicode', 'ไทยยูนิโค้ด']]} />
+                <Sel value={o.font} onChange={v => set('font', v)}
+                  opts={[['notation', 'TH Notation (จุดบน-ล่างสวย)'], ['unicode', 'ไทยยูนิโค้ด']]} />
               </Row>
             )}
             {o.notation === 'staff' && (
               <Row label="จังหวะตก">
-                <Sel k="beat" opts={[['thai', 'แบบไทย (ตกท้ายห้อง)'], ['western', 'แบบสากล (ตกต้นห้อง)']]} />
+                <Sel value={o.beat} onChange={v => set('beat', v)}
+                  opts={[['thai', 'แบบไทย (ตกท้ายห้อง)'], ['western', 'แบบสากล (ตกต้นห้อง)']]} />
               </Row>
             )}
             <Row label="กระดาษ">
-              <Sel k="paper" opts={Object.keys(PAPERS).map(k => [k, k])} />
-              <Sel k="orientation" opts={[['portrait', 'แนวตั้ง'], ['landscape', 'แนวนอน']]} />
+              <Sel value={o.paper} onChange={v => set('paper', v)} opts={Object.keys(PAPERS).map(k => [k, k])} />
+              <Sel value={o.orientation} onChange={v => set('orientation', v)}
+                opts={[['portrait', 'แนวตั้ง'], ['landscape', 'แนวนอน']]} />
             </Row>
             <Row label="ห้อง/บรรทัด">
-              <Sel k="hongs" value={String(o.hongs)} opts={[['0', 'อัตโนมัติ'], ['4', '4'], ['8', '8'], ['16', '16']]} />
-              <Sel k="spacing" opts={[['compact', 'บรรทัดชิด'], ['normal', 'ปกติ'], ['airy', 'บรรทัดห่าง']]} />
+              <Sel value={String(o.hongs)} onChange={v => set('hongs', +v)}
+                opts={[['0', 'อัตโนมัติ'], ['4', '4'], ['8', '8'], ['16', '16']]} />
+              <Sel value={o.spacing} onChange={v => set('spacing', v)}
+                opts={[['compact', 'บรรทัดชิด'], ['normal', 'ปกติ'], ['airy', 'บรรทัดห่าง']]} />
             </Row>
 
             <div style={{ borderTop: '1px solid var(--border)', margin: '0.7rem 0', paddingTop: '0.7rem',
@@ -277,10 +301,10 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
             </label>
 
             <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '1rem' }}>
-              <B id="pdf" label="📕 PDF" fn={exportPDF} />
-              <B id="png" label="🖼 PNG" fn={exportPNG} />
-              <B id="docx" label="📄 DOCX" fn={exportDOCX} />
-              <B id="xlsx" label="📊 Excel" fn={exportXLSX} />
+              <Btn busy={busy} id="pdf" label="📕 PDF" fn={exportPDF} />
+              <Btn busy={busy} id="png" label="🖼 PNG" fn={exportPNG} />
+              <Btn busy={busy} id="docx" label="📄 DOCX" fn={exportDOCX} />
+              <Btn busy={busy} id="xlsx" label="📊 Excel" fn={exportXLSX} />
             </div>
             {err && <div style={{ marginTop: '0.6rem', fontSize: '0.75rem', color: 'var(--gold)' }}>{err}</div>}
             <div style={{ marginTop: '0.6rem', fontSize: '0.68rem', color: 'var(--muted)', lineHeight: 1.7 }}>
