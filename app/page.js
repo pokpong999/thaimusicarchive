@@ -13,9 +13,14 @@ function HeroAuth() {
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null)); }, []);
   if (user !== null) return null;
   return (
-    <div style={{display:'flex',gap:'12px',justifyContent:'center',margin:'-0.2rem 0 1.8rem',flexWrap:'wrap'}}>
-      <a href="/login"><button className="btn btn-primary" style={{padding:'0.7rem 2rem',fontSize:'0.95rem'}}>✦ สมัครสมาชิก</button></a>
-      <a href="/login"><button className="btn btn-outline" style={{padding:'0.7rem 2rem',fontSize:'0.95rem'}}>เข้าสู่ระบบ</button></a>
+    <div style={{margin:'-0.2rem 0 1.8rem'}}>
+      <div style={{textAlign:'center',color:'var(--gold)',fontSize:'0.88rem',marginBottom:'0.7rem',lineHeight:1.8}}>
+        🎖 บันทึกเหตุการณ์เพื่อเลื่อนระดับ — สะสมแต้มถึง ขุน (300 แต้ม) ปลดล็อกระบบบันทึกโน้ตฟรี
+      </div>
+      <div style={{display:'flex',gap:'12px',justifyContent:'center',flexWrap:'wrap'}}>
+        <a href="/login"><button className="btn btn-primary" style={{padding:'0.7rem 2rem',fontSize:'0.95rem'}}>✦ สมัครสมาชิก</button></a>
+        <a href="/login"><button className="btn btn-outline" style={{padding:'0.7rem 2rem',fontSize:'0.95rem'}}>เข้าสู่ระบบ</button></a>
+      </div>
     </div>
   );
 }
