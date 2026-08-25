@@ -44,6 +44,28 @@ export default function AdminPage() {
   const [members, setMembers] = useState([]);
   const [nathabRows, setNathabRows] = useState([]);
   const [activity, setActivity] = useState({});   // id → {joined_at, last_sign_in_at}
+  // เรียงตารางสมาชิก: กดหัวคอลัมน์ · กดซ้ำสลับ มาก→น้อย
+  const [memberSort, setMemberSort] = useState({ key: 'points', dir: -1 });
+  const sortMembers = key => setMemberSort(s => ({ key, dir: s.key === key ? -s.dir : (key === 'points' || key === 'joined' || key === 'lastseen' ? -1 : 1) }));
+  const memberVal = (m, key) => {
+    if (key === 'joined') return activity[m.id]?.joined_at ?? m.created_at ?? '';
+    if (key === 'lastseen') return activity[m.id]?.last_sign_in_at ?? '';
+    if (key === 'points') return m.points ?? 0;
+    return (m[key] ?? '').toString();
+  };
+  const sortedMembers = [...members].sort((a, b) => {
+    const va = memberVal(a, memberSort.key), vb = memberVal(b, memberSort.key);
+    if (va === vb) return 0;
+    if (va === '' || va == null) return 1;      // ค่าว่างไว้ท้ายเสมอ
+    if (vb === '' || vb == null) return -1;
+    const c = typeof va === 'number' ? va - vb : String(va).localeCompare(String(vb), 'th');
+    return c * memberSort.dir;
+  });
+  const Th = ({ k, children }) => (
+    <th onClick={() => sortMembers(k)} style={{cursor:'pointer',userSelect:'none',whiteSpace:'nowrap'}} title="กดเพื่อเรียง · กดซ้ำสลับทิศ">
+      {children}{memberSort.key === k ? (memberSort.dir > 0 ? ' ▲' : ' ▼') : <span style={{opacity:.25}}> ⇅</span>}
+    </th>
+  );
   const [mgQ, setMgQ] = useState('');
   const [mgSongs, setMgSongs] = useState([]);
   const [mgRecords, setMgRecords] = useState([]);
@@ -411,7 +433,7 @@ export default function AdminPage() {
       js.onload = res; document.head.appendChild(js);
     });
     const rows = [['ชื่อ','อีเมล','เบอร์โทร','LINE','สำนัก/วง','จังหวัด','แต้ม','สถานะ','สมัครเมื่อ','เข้าใช้ล่าสุด']];
-    members.forEach(m => rows.push([
+    sortedMembers.forEach(m => rows.push([
       m.display_name ?? '', m.email ?? '', m.phone ?? '', m.line_id ?? '',
       m.organization ?? '', m.province ?? '', m.points ?? 0, m.role ?? '',
       fmtDT(activity[m.id]?.joined_at ?? m.created_at), fmtDT(activity[m.id]?.last_sign_in_at),
@@ -880,9 +902,9 @@ export default function AdminPage() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>ชื่อ</th><th>อีเมล</th><th>โทร</th><th>LINE</th><th>สำนัก</th><th>จังหวัด</th><th>แต้ม</th><th>สมัครเมื่อ</th><th>เข้าใช้ล่าสุด</th><th>สถานะ</th></tr></thead>
+              <thead><tr><Th k="display_name">ชื่อ</Th><Th k="email">อีเมล</Th><Th k="phone">โทร</Th><Th k="line_id">LINE</Th><Th k="organization">สำนัก</Th><Th k="province">จังหวัด</Th><Th k="points">แต้ม</Th><Th k="joined">สมัครเมื่อ</Th><Th k="lastseen">เข้าใช้ล่าสุด</Th><Th k="role">สถานะ</Th></tr></thead>
               <tbody>
-                {members.map(m => (
+                {sortedMembers.map(m => (
                   <tr key={m.id}>
                     <td>{m.display_name ?? '—'}</td>
                     <td style={{fontSize:'0.72rem'}}>{m.email ?? '—'}</td>
@@ -1076,9 +1098,9 @@ export default function AdminPage() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>ชื่อ</th><th>อีเมล</th><th>โทร</th><th>LINE</th><th>สำนัก</th><th>จังหวัด</th><th>แต้ม</th><th>สมัครเมื่อ</th><th>เข้าใช้ล่าสุด</th><th>สถานะ</th></tr></thead>
+              <thead><tr><Th k="display_name">ชื่อ</Th><Th k="email">อีเมล</Th><Th k="phone">โทร</Th><Th k="line_id">LINE</Th><Th k="organization">สำนัก</Th><Th k="province">จังหวัด</Th><Th k="points">แต้ม</Th><Th k="joined">สมัครเมื่อ</Th><Th k="lastseen">เข้าใช้ล่าสุด</Th><Th k="role">สถานะ</Th></tr></thead>
               <tbody>
-                {members.map(m => (
+                {sortedMembers.map(m => (
                   <tr key={m.id}>
                     <td>{m.display_name ?? '—'}</td>
                     <td style={{fontSize:'0.72rem'}}>{m.email ?? '—'}</td>
