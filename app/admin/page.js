@@ -104,7 +104,7 @@ export default function AdminPage() {
       if (data.user) {
         const { data: p } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
         setRole(p?.role);
-        if (p?.role === 'admin') { loadAll(); }
+        if (p?.role === 'admin' || p?.role === 'moderator') { loadAll(); }
       }
       setLoading(false);
     });
@@ -426,7 +426,8 @@ export default function AdminPage() {
   }
 
   if (loading) return <main className="container">กำลังโหลด...</main>;
-  if (!user || role !== 'admin') return (
+  const isRealAdmin = role === 'admin';
+  if (!user || (role !== 'admin' && role !== 'moderator')) return (
     <main className="container">
       <div className="lock-box">
         <div style={{fontSize:'2rem',marginBottom:'0.8rem'}}>👑</div>
@@ -870,10 +871,16 @@ export default function AdminPage() {
                     <td style={{fontSize:'0.72rem'}}>{m.province ?? '—'}</td>
                     <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{m.points ?? 0}</td>
                     <td>
-                      <select className="filter-select" value={m.role ?? 'contributor'}
-                        onChange={e => setMemberRole(m.id, e.target.value)} style={{fontSize:'0.72rem',padding:'2px 6px'}}>
-                        <option value="contributor">สมาชิก</option>
-                        <option value="admin">Admin</option>
+                      <select className="filter-select" value={m.role ?? 'member'}
+                        onChange={e => setMemberRole(m.id, e.target.value)}
+                        disabled={m.role === 'admin' && !isRealAdmin}
+                        title={m.role === 'admin' && !isRealAdmin ? 'บัญชีแอดมิน — แก้ได้เฉพาะแอดมินด้วยกัน' : ''}
+                        style={{fontSize:'0.72rem',padding:'2px 6px'}}>
+                        <option value="member">สมาชิก</option>
+                        <option value="student">🎓 Student (ใช้กระดานโน้ตได้)</option>
+                        <option value="superuser">👁 Super user (เห็นทุกอย่าง)</option>
+                        <option value="moderator">🛡 Moderator</option>
+                        {(isRealAdmin || m.role === 'admin') && <option value="admin">⭐ Admin</option>}
                       </select>
                     </td>
                   </tr>
@@ -1032,10 +1039,14 @@ export default function AdminPage() {
                 {m.display_name ?? 'ไม่ระบุชื่อ'}
                 <span style={{color:'var(--muted)',fontSize:'0.7rem'}}> · {m.province ?? '-'} · {m.points ?? 0} แต้ม</span>
               </span>
-              <select className="form-input" style={{width:'120px'}} value={m.role ?? 'member'}
+              <select className="form-input" style={{width:'150px'}} value={m.role ?? 'member'}
+                disabled={m.role === 'admin' && !isRealAdmin}
                 onChange={e => setMemberList(memberList.map((x,j) => j===i ? {...x, role: e.target.value} : x))}>
                 <option value="member">สมาชิก</option>
-                <option value="admin">Admin</option>
+                <option value="student">🎓 Student</option>
+                <option value="superuser">👁 Super user</option>
+                <option value="moderator">🛡 Moderator</option>
+                {(isRealAdmin || m.role === 'admin') && <option value="admin">⭐ Admin</option>}
               </select>
               <select className="form-input" style={{width:'150px'}} value={m.tier ?? 'free'}
                 onChange={e => setMemberList(memberList.map((x,j) => j===i ? {...x, tier: e.target.value} : x))}>

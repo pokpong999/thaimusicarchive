@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabase';
 import NotationInput from '../../../components/NotationInput';
+import RankGate from '../../../components/RankGate';
 import { versesToRows, versesToText, checkVerses, hasSound } from '../../../lib/notation-core';
 
 const TYPES = ['🟢 แปรทำนอง', '🟠 บังคับทาง', '🟡 กึ่งบังคับทาง'];
@@ -43,7 +44,9 @@ export default function NewSongPage() {
       note: note || null, submitted_by: user.id,
     });
     setBusy(false);
-    if (error) { setMsg('⚠ ' + error.message); return; }
+    if (error) { setMsg(error.message.includes('row-level security')
+      ? '⚠ บัญชีของคุณยังไม่ถึงบรรดาศักดิ์ ขุน (300 แต้ม) จึงยังใช้ระบบบันทึกโน้ตไม่ได้ — ร่วมบันทึกเหตุการณ์จดหมายเหตุเพื่อสะสมแต้มก่อน'
+      : '⚠ ' + error.message); return; }
     setMsg(`✓ ส่งเพลง "${name}" (${rows.length} วรรค) แล้ว — รอผู้ดูแลตรวจสอบและอนุมัติ (+10 แต้มเมื่อผ่าน)`);
     padRef.current.clearDraft();
     setName(''); setNote('');
@@ -58,7 +61,9 @@ export default function NewSongPage() {
     </main>
   );
 
+  // ช่วงเปิดตัว: ระบบบันทึกโน้ตเปิดให้ระดับ ขุน (300 แต้ม) ขึ้นไป
   return (
+    <RankGate minPoints={300}>
     <main className="container" style={{maxWidth:'1180px'}}>
       <Link href="/"><span style={{color:'var(--muted)',fontSize:'0.8rem'}}>← กลับรายการเพลง</span></Link>
       <div className="card" style={{marginTop:'1rem'}}>
@@ -101,5 +106,6 @@ export default function NewSongPage() {
         {msg && <div style={{marginTop:'0.8rem',fontSize:'0.82rem',color:'var(--jade)'}}>{msg}</div>}
       </div>
     </main>
+    </RankGate>
   );
 }

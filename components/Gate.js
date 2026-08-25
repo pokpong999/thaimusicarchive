@@ -11,7 +11,20 @@ export function useMe() {
       setMe({ loading: false, user: data.user, role: p?.role ?? 'member', tier: p?.tier ?? 'free' });
     });
   }, []);
-  return { ...me, isAdmin: me.role === 'admin', isPremium: me.role === 'admin' || me.tier === 'premium' };
+  // ระดับสิทธิ์ (2026-08-25):
+  //   admin      ทำได้ทุกอย่าง รวมถึงตั้ง/ถอดแอดมิน
+  //   moderator  ทำได้ทุกอย่าง ยกเว้นตั้งแอดมินและแตะบัญชีแอดมิน
+  //   superuser  เข้าชมได้ทุกอย่าง (รวมส่วนที่ล็อกด้วยแต้ม/อุปถัมภ์) แต่อนุมัติ/แก้แบบแอดมินไม่ได้
+  //   student    ใช้ระบบบันทึกโน้ตได้โดยไม่ต้องมีแต้ม แต่ไม่เห็นเนื้อหาพิเศษ
+  //   member     สมาชิกธรรมดา
+  const isAdmin = me.role === 'admin' || me.role === 'moderator';   // อำนาจจัดการเนื้อหา
+  return { ...me,
+    isAdmin,
+    isRealAdmin: me.role === 'admin',                               // อำนาจจัดการแอดมินด้วยกัน
+    isViewer: me.role === 'superuser',
+    isStudent: me.role === 'student',
+    isPremium: isAdmin || me.role === 'superuser' || me.tier === 'premium',
+  };
 }
 
 // หน้าปิดปรับปรุง (เฉพาะ Admin เข้าได้)
@@ -66,16 +79,18 @@ export function usePermissions() {
     } catch (e) {}
     return () => { if (ch) supabase.removeChannel(ch); };
   }, []);
+  // superuser ใช้เลนส์ 'admin' เฉพาะการมองเห็น — ปุ่มจัดการทั้งหมดเช็ค isAdmin แยกอยู่แล้ว
   const tier = me.loading ? null
-    : me.isAdmin ? 'admin' : !me.user ? 'guest' : (me.tier === 'premium' ? 'premium' : 'free');
+    : (me.isAdmin || me.isViewer) ? 'admin'
+    : !me.user ? 'guest' : (me.tier === 'premium' ? 'premium' : 'free');
   function can(key) {
     if (tier === 'admin') return true;
     const r = perms?.[key];
     if (!r) return true;                 // ไม่มีในตาราง = เปิด
     return !!r[tier ?? 'guest'];
   }
-  return { can, tier, isAdmin: me.isAdmin, user: me.user,
-    loading: me.loading || perms == null };
+  return { can, tier, isAdmin: me.isAdmin, isRealAdmin: me.isRealAdmin, role: me.role,
+    user: me.user, loading: me.loading || perms == null };
 }
 
 // ห่อทั้งหน้า: เปิดตามตารางสิทธิ์
