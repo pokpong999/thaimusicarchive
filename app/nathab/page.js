@@ -2,7 +2,7 @@
 // app/nathab/page.js — คลังหน้าทับกลาง (ดู/ฟังได้ทุกคน · เขียนได้ตามสิทธิ์)
 //
 //   แอดมิน/ผู้ดูแล  → บันทึกเข้าคลังทันที (คีย์ซ้ำ = แทนที่ของเดิม)
-//   superuser/student/สมาชิกแต้ม ≥ 300 → ส่งรออนุมัติ (เห็นของตัวเองในกล่อง "รออนุมัติ")
+//   superuser/student/สมาชิกศักดินา ≥ 300 → ส่งรออนุมัติ (เห็นของตัวเองในกล่อง "รออนุมัติ")
 //   ทุกเพลงเลือกหน้าทับจากคลังนี้ได้ที่หน้าเพลง (แผง 🥁 หน้าทับ)
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -107,7 +107,7 @@ export default function NathabLibraryPage() {
           {canWrite && <button className="btn btn-primary btn-sm" onClick={() => setEditing({ row: null, mode: 'new' })}>＋ เขียนหน้าทับใหม่</button>}
           {!me.loading && !canWrite && (
             <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>
-              {me.user ? `เขียนหน้าทับได้เมื่อถึงระดับขุน (${MIN_POINTS} แต้ม) — ตอนนี้ ${points} แต้ม` : 'เข้าสู่ระบบเพื่อเขียนหน้าทับ'}
+              {me.user ? `เขียนหน้าทับได้เมื่อถึงระดับขุน (${MIN_POINTS} ศักดินา) — ตอนนี้ ${points} ศักดินา` : 'เข้าสู่ระบบเพื่อเขียนหน้าทับ'}
             </span>
           )}
           <input className="form-input" style={{ width: 180 }} placeholder="ค้นชื่อหน้าทับ" value={q} onChange={e => setQ(e.target.value)} />

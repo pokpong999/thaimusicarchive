@@ -23,7 +23,7 @@ export default function LeaderboardPage() {
     <main className="container" style={{maxWidth:'760px'}}>
       <EText k="board.title" className="section-title">ทำเนียบนักจดหมายเหตุ</EText>
       <div className="section-subtitle">
-        อันดับผู้ร่วมสร้างหอจดหมายเหตุดนตรีไทย · สะสมแต้มจากผลงานที่ได้รับอนุมัติ
+        อันดับผู้ร่วมสร้างหอจดหมายเหตุดนตรีไทย · สะสมศักดินาจากผลงานที่ได้รับอนุมัติ
       </div>
 
       <div className="card" style={{marginBottom:'1.4rem'}}>
@@ -47,7 +47,7 @@ export default function LeaderboardPage() {
         <div className="table-wrap">
           <table>
             <thead><tr>
-              <th style={{width:'50px'}}>อันดับ</th><th>สมาชิก</th><th>บรรดาศักดิ์</th><th style={{textAlign:'right'}}>แต้ม</th><th>ก้าวต่อไป</th>
+              <th style={{width:'50px'}}>อันดับ</th><th>สมาชิก</th><th>บรรดาศักดิ์</th><th style={{textAlign:'right'}}>ศักดินา</th><th>ก้าวต่อไป</th>
             </tr></thead>
             <tbody>
               {profiles.map((p, i) => {
@@ -79,7 +79,7 @@ export default function LeaderboardPage() {
       )}
 
       <div style={{marginTop:'1.2rem',fontSize:'0.75rem',color:'var(--muted)',lineHeight:1.8}}>
-        <b style={{color:'var(--cream)'}}>วิธีได้แต้ม:</b> วิดีโอเพลงได้รับอนุมัติ +10 · บันทึกจดหมายเหตุได้รับอนุมัติ +10 · โบนัสบันทึกที่มีทั้งรูปและพิกัด +5
+        <b style={{color:'var(--cream)'}}>วิธีได้ศักดินา:</b> วิดีโอเพลงได้รับอนุมัติ +10 · บันทึกจดหมายเหตุได้รับอนุมัติ +10 · โบนัสบันทึกที่มีทั้งรูปและพิกัด +5
       </div>
     </main>
     </FeaturePage>

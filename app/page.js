@@ -38,7 +38,7 @@ export default function HomePage() {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
       const { data: p } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
-      setIsAdmin(p?.role === 'admin');
+      setIsAdmin(p?.role === 'admin' || p?.role === 'moderator');
     });
   }, []);
 
@@ -87,7 +87,7 @@ export default function HomePage() {
     <>
       <AnniversaryBanner />
       <main className="container">
-        {/* ป้ายเป้าหมาย: โพสต์เหตุการณ์ → 300 แต้ม → ขุน → ปลดล็อกกระดานโน้ตฟรี */}
+        {/* ป้ายเป้าหมาย: โพสต์เหตุการณ์ → 300 ศักดินา → ขุน → ปลดล็อกกระดานโน้ตฟรี */}
         <GoalBanner />
 
         {/* ── Hero: สองหอ ── */}

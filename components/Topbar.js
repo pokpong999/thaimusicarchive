@@ -59,7 +59,7 @@ export default function Topbar() {
           style={{cursor:'pointer',fontSize:'0.72rem',border:'1px solid var(--border)',
             borderRadius:'4px',padding:'2px 7px',color:'var(--muted)'}}>
           {lang === 'th' ? 'EN' : 'ไทย'}</span>
-        {profile?.role === 'admin' && <Link href="/admin">Admin</Link>}
+        {(profile?.role === 'admin' || profile?.role === 'moderator') && <Link href="/admin">Admin</Link>}
       </nav>
       <div className="topbar-right">
         {user ? (
@@ -70,6 +70,7 @@ export default function Topbar() {
             <Link href="/profile"><span style={{fontSize:'0.78rem',color:'var(--muted)',cursor:'pointer',textDecoration:'underline dotted'}}>
               {profile?.display_name ?? user.email}</span></Link>
             {profile?.role === 'admin' && <span className="badge badge-fixed">Admin</span>}
+            {profile?.role === 'moderator' && <span className="badge badge-fixed">Moderator</span>}
             <button className="btn btn-outline btn-sm" onClick={logout}>ออกจากระบบ</button>
           </>
         ) : (

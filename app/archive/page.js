@@ -32,7 +32,7 @@ export default function ArchivePage() {
       if (!data.user) return;
       setMyId(data.user.id);
       const { data: p } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
-      setIsAdmin(p?.role === 'admin');
+      setIsAdmin(p?.role === 'admin' || p?.role === 'moderator');
     });
   }, []);
 

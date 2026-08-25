@@ -114,7 +114,7 @@ export default function DashboardPage() {
               {profile?.display_name ?? 'สมาชิก'} <RankBadge points={pts} />
             </div>
             <div style={{fontSize:'0.78rem',color:'var(--muted)',marginTop:'4px'}}>
-              ผลงานอนุมัติแล้ว {totalApproved} ชิ้น · {pts.toLocaleString()} แต้ม
+              ผลงานอนุมัติแล้ว {totalApproved} ชิ้น · {pts.toLocaleString()} ศักดินา
             </div>
             </div>
           </div>
@@ -124,7 +124,7 @@ export default function DashboardPage() {
           <div style={{marginTop:'0.9rem'}}>
             <div style={{display:'flex',justifyContent:'space-between',fontSize:'0.72rem',color:'var(--muted)',marginBottom:'4px'}}>
               <span>{rank.icon} {rank.name}</span>
-              <span>อีก {(next.min - pts).toLocaleString()} แต้ม → {next.icon} {next.name}</span>
+              <span>อีก {(next.min - pts).toLocaleString()} ศักดินา → {next.icon} {next.name}</span>
             </div>
             <div style={{height:'8px',background:'var(--navy3)',borderRadius:'4px',overflow:'hidden'}}>
               <div style={{width:`${progress}%`,height:'100%',background:'linear-gradient(90deg,var(--gold),var(--gold2))'}} />

@@ -45,9 +45,9 @@ export default function NewSongPage() {
     });
     setBusy(false);
     if (error) { setMsg(error.message.includes('row-level security')
-      ? '⚠ บัญชีของคุณยังไม่ถึงบรรดาศักดิ์ ขุน (300 แต้ม) จึงยังใช้ระบบบันทึกโน้ตไม่ได้ — ร่วมบันทึกเหตุการณ์จดหมายเหตุเพื่อสะสมแต้มก่อน'
+      ? '⚠ บัญชีของคุณยังไม่ถึงบรรดาศักดิ์ ขุน (300 ศักดินา) จึงยังใช้ระบบบันทึกโน้ตไม่ได้ — ร่วมบันทึกเหตุการณ์จดหมายเหตุเพื่อสะสมศักดินาก่อน'
       : '⚠ ' + error.message); return; }
-    setMsg(`✓ ส่งเพลง "${name}" (${rows.length} วรรค) แล้ว — รอผู้ดูแลตรวจสอบและอนุมัติ (+10 แต้มเมื่อผ่าน)`);
+    setMsg(`✓ ส่งเพลง "${name}" (${rows.length} วรรค) แล้ว — รอผู้ดูแลตรวจสอบและอนุมัติ (+10 ศักดินาเมื่อผ่าน)`);
     padRef.current.clearDraft();
     setName(''); setNote('');
   }
@@ -61,7 +61,7 @@ export default function NewSongPage() {
     </main>
   );
 
-  // ช่วงเปิดตัว: ระบบบันทึกโน้ตเปิดให้ระดับ ขุน (300 แต้ม) ขึ้นไป
+  // ช่วงเปิดตัว: ระบบบันทึกโน้ตเปิดให้ระดับ ขุน (300 ศักดินา) ขึ้นไป
   return (
     <RankGate minPoints={300}>
     <main className="container" style={{maxWidth:'1180px'}}>

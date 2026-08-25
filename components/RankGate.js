@@ -1,7 +1,7 @@
 'use client';
 // components/RankGate.js — เปิดใช้งานเฉพาะสมาชิกที่ถึงบรรดาศักดิ์ที่กำหนด
 //
-// ใช้กับระบบบันทึกโน้ต: ช่วงเปิดตัวให้เฉพาะ "ขุน" (300 แต้ม) ขึ้นไป
+// ใช้กับระบบบันทึกโน้ต: ช่วงเปิดตัวให้เฉพาะ "ขุน" (300 ศักดินา) ขึ้นไป
 // ใครยังไม่ถึง ต้องร่วมบันทึกเหตุการณ์จดหมายเหตุก่อน
 //
 // <RankGate>{children}</RankGate>
@@ -38,7 +38,7 @@ export default function RankGate({ minPoints = 300, bypass = false, children }) 
   );
 
   // ผ่านด่าน: แอดมิน/ผู้ช่วยแอดมิน · superuser (เข้าชมได้ทุกอย่าง)
-  //           · student (ไว้สอนใช้โปรแกรมบันทึกโน้ต) · หรือแต้มถึงเกณฑ์
+  //           · student (ไว้สอนใช้โปรแกรมบันทึกโน้ต) · หรือศักดินาถึงเกณฑ์
   if (me.isAdmin || me.role === 'superuser' || me.role === 'student' || points >= minPoints) return children;
 
   const need = minPoints - points;
@@ -52,7 +52,7 @@ export default function RankGate({ minPoints = 300, bypass = false, children }) 
         ระบบบันทึกโน้ตสำหรับสมาชิกระดับ {target.icon} {target.name} ขึ้นไป
       </div>
       <div style={{color:'var(--muted)',fontSize:'0.88rem',lineHeight:1.9}}>
-        เข้าสู่ระบบก่อน แล้วสะสมแต้มจากการร่วมบันทึกจดหมายเหตุ
+        เข้าสู่ระบบก่อน แล้วสะสมศักดินาจากการร่วมบันทึกจดหมายเหตุ
       </div>
       <Link href="/login"><button className="btn btn-primary" style={{marginTop:'1.2rem'}}>เข้าสู่ระบบ / สมัครฟรี</button></Link>
     </main>
@@ -75,7 +75,7 @@ export default function RankGate({ minPoints = 300, bypass = false, children }) 
         <div style={{margin:'1.4rem 0 0.5rem',display:'flex',alignItems:'center',gap:'10px',flexWrap:'wrap'}}>
           <RankBadge points={points} />
           <span style={{fontSize:'0.85rem',color:'var(--muted)'}}>
-            แต้มของคุณ <b style={{color:'var(--jade)',fontFamily:'monospace'}}>{points.toLocaleString()}</b>
+            ศักดินาของคุณ <b style={{color:'var(--jade)',fontFamily:'monospace'}}>{points.toLocaleString()}</b>
             {' '}/ {minPoints.toLocaleString()}
           </span>
         </div>
@@ -83,12 +83,12 @@ export default function RankGate({ minPoints = 300, bypass = false, children }) 
           <div style={{width:pct+'%',height:'100%',background:'linear-gradient(90deg,#4C9A84,#C9A84C)'}} />
         </div>
         <div style={{fontSize:'0.9rem',marginTop:'0.7rem',textAlign:'center'}}>
-          อีก <b style={{color:'var(--gold)',fontFamily:'monospace',fontSize:'1.1rem'}}>{need.toLocaleString()}</b> แต้ม
+          อีก <b style={{color:'var(--gold)',fontFamily:'monospace',fontSize:'1.1rem'}}>{need.toLocaleString()}</b> ศักดินา
           {' '}ถึง {target.icon} {target.name}
         </div>
 
         <div style={{marginTop:'1.4rem',borderTop:'1px solid var(--border)',paddingTop:'1rem'}}>
-          <div style={{fontWeight:600,fontSize:'0.9rem',marginBottom:'0.6rem'}}>วิธีได้แต้ม</div>
+          <div style={{fontWeight:600,fontSize:'0.9rem',marginBottom:'0.6rem'}}>วิธีได้ศักดินา</div>
           {HOW.map(([icon, text, pts]) => (
             <div key={text} style={{display:'flex',gap:'10px',alignItems:'center',padding:'6px 0',fontSize:'0.84rem'}}>
               <span style={{fontSize:'1.05rem'}}>{icon}</span>
@@ -97,7 +97,7 @@ export default function RankGate({ minPoints = 300, bypass = false, children }) 
             </div>
           ))}
           <div style={{fontSize:'0.76rem',color:'var(--muted)',marginTop:'0.5rem',lineHeight:1.8}}>
-            บันทึกที่มีครบทั้งรูปและพิกัดได้ 15 แต้ม — ราว {Math.ceil(need / 15)} บันทึกก็ถึงแล้ว
+            บันทึกที่มีครบทั้งรูปและพิกัดได้ 15 ศักดินา — ราว {Math.ceil(need / 15)} บันทึกก็ถึงแล้ว
           </div>
         </div>
 

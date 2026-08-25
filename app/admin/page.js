@@ -284,7 +284,7 @@ export default function AdminPage() {
     loadAll();
   }
 
-  // ── อนุมัติเพลงใหม่: สร้าง song + แตกโน้ต + ให้แต้ม ──
+  // ── อนุมัติเพลงใหม่: สร้าง song + แตกโน้ต + ให้ศักดินา ──
   async function approveSong(sub) {
     const sid = (songIdInput[sub.id] ?? '').trim().toUpperCase();
     if (!sid) { alert('ใส่ Song ID ก่อน เช่น USR001'); return; }
@@ -432,7 +432,7 @@ export default function AdminPage() {
       js.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
       js.onload = res; document.head.appendChild(js);
     });
-    const rows = [['ชื่อ','อีเมล','เบอร์โทร','LINE','สำนัก/วง','จังหวัด','แต้ม','สถานะ','สมัครเมื่อ','เข้าใช้ล่าสุด']];
+    const rows = [['ชื่อ','อีเมล','เบอร์โทร','LINE','สำนัก/วง','จังหวัด','ศักดินา','สถานะ','สมัครเมื่อ','เข้าใช้ล่าสุด']];
     sortedMembers.forEach(m => rows.push([
       m.display_name ?? '', m.email ?? '', m.phone ?? '', m.line_id ?? '',
       m.organization ?? '', m.province ?? '', m.points ?? 0, m.role ?? '',
@@ -672,7 +672,7 @@ export default function AdminPage() {
                 <div style={{display:'flex',gap:'8px'}}>
                   <button className="btn btn-jade btn-sm" onClick={async () => {
                     await supabase.from('song_audio').update({ approved: true }).eq('id', a.id); loadAll();
-                  }}>✓ อนุมัติ (+10 แต้ม)</button>
+                  }}>✓ อนุมัติ (+10 ศักดินา)</button>
                   <button className="btn btn-danger btn-sm" onClick={async () => {
                     if (!confirm('ปฏิเสธและลบไฟล์เสียงนี้?')) return;
                     await supabase.storage.from('song-audio').remove([a.storage_path]);
@@ -902,20 +902,22 @@ export default function AdminPage() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><Th k="display_name">ชื่อ</Th><Th k="email">อีเมล</Th><Th k="phone">โทร</Th><Th k="line_id">LINE</Th><Th k="organization">สำนัก</Th><Th k="province">จังหวัด</Th><Th k="points">แต้ม</Th><Th k="joined">สมัครเมื่อ</Th><Th k="lastseen">เข้าใช้ล่าสุด</Th><Th k="role">สถานะ</Th></tr></thead>
+              <thead><tr><Th k="display_name">ชื่อ / อีเมล</Th><Th k="phone">ติดต่อ</Th><Th k="organization">สำนัก / จังหวัด</Th><Th k="points">ศักดินา</Th><Th k="joined">สมัคร · เข้าใช้ล่าสุด</Th><Th k="role">สถานะ</Th></tr></thead>
               <tbody>
                 {sortedMembers.map(m => (
                   <tr key={m.id}>
-                    <td>{m.display_name ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.email ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.phone ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.line_id ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.organization ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.province ?? '—'}</td>
-                    <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{m.points ?? 0}</td>
-                    <td style={{fontSize:'0.7rem',whiteSpace:'nowrap'}} title={activity[m.id]?.joined_at ?? m.created_at ?? ''}>{fmtDT(activity[m.id]?.joined_at ?? m.created_at) || '—'}</td>
-                    <td style={{fontSize:'0.7rem',whiteSpace:'nowrap',color:'var(--muted)'}} title={fmtDT(activity[m.id]?.last_sign_in_at)}>{activity[m.id]?.last_sign_in_at ? ago(activity[m.id].last_sign_in_at) : '—'}</td>
-                    <td>
+                    <td style={{minWidth:'150px'}}>
+                      <Link href={`/members/${m.id}`} style={{color:'var(--cream)'}}>{m.display_name ?? '—'}</Link>
+                      <div style={{fontSize:'0.68rem',color:'var(--muted)',wordBreak:'break-all'}}>{m.email ?? '—'}</div>
+                    </td>
+                    <td style={{fontSize:'0.7rem',color:'var(--muted)'}}>{[m.phone, m.line_id && 'LINE ' + m.line_id].filter(Boolean).join(' · ') || '—'}</td>
+                    <td style={{fontSize:'0.7rem',color:'var(--muted)'}}>{[m.organization, m.province].filter(Boolean).join(' · ') || '—'}</td>
+                    <td style={{fontFamily:'monospace',color:'var(--jade)',whiteSpace:'nowrap'}}>{(m.points ?? 0).toLocaleString()}</td>
+                    <td style={{fontSize:'0.68rem',whiteSpace:'nowrap'}}>
+                      <div title={activity[m.id]?.joined_at ?? m.created_at ?? ''}>{fmtDT(activity[m.id]?.joined_at ?? m.created_at) || '—'}</div>
+                      <div style={{color:'var(--muted)'}} title={fmtDT(activity[m.id]?.last_sign_in_at)}>{activity[m.id]?.last_sign_in_at ? 'ล่าสุด ' + ago(activity[m.id].last_sign_in_at) : ''}</div>
+                    </td>
+                    <td style={{whiteSpace:'nowrap'}}>
                       <select className="filter-select" value={m.role ?? 'member'}
                         onChange={e => setMemberRole(m.id, e.target.value)}
                         disabled={m.role === 'admin' && !isRealAdmin}
@@ -1098,20 +1100,22 @@ export default function AdminPage() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><Th k="display_name">ชื่อ</Th><Th k="email">อีเมล</Th><Th k="phone">โทร</Th><Th k="line_id">LINE</Th><Th k="organization">สำนัก</Th><Th k="province">จังหวัด</Th><Th k="points">แต้ม</Th><Th k="joined">สมัครเมื่อ</Th><Th k="lastseen">เข้าใช้ล่าสุด</Th><Th k="role">สถานะ</Th></tr></thead>
+              <thead><tr><Th k="display_name">ชื่อ / อีเมล</Th><Th k="phone">ติดต่อ</Th><Th k="organization">สำนัก / จังหวัด</Th><Th k="points">ศักดินา</Th><Th k="joined">สมัคร · เข้าใช้ล่าสุด</Th><Th k="role">สถานะ</Th></tr></thead>
               <tbody>
                 {sortedMembers.map(m => (
                   <tr key={m.id}>
-                    <td>{m.display_name ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.email ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.phone ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.line_id ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.organization ?? '—'}</td>
-                    <td style={{fontSize:'0.72rem'}}>{m.province ?? '—'}</td>
-                    <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{m.points ?? 0}</td>
-                    <td style={{fontSize:'0.7rem',whiteSpace:'nowrap'}} title={activity[m.id]?.joined_at ?? m.created_at ?? ''}>{fmtDT(activity[m.id]?.joined_at ?? m.created_at) || '—'}</td>
-                    <td style={{fontSize:'0.7rem',whiteSpace:'nowrap',color:'var(--muted)'}} title={fmtDT(activity[m.id]?.last_sign_in_at)}>{activity[m.id]?.last_sign_in_at ? ago(activity[m.id].last_sign_in_at) : '—'}</td>
-                    <td>
+                    <td style={{minWidth:'150px'}}>
+                      <Link href={`/members/${m.id}`} style={{color:'var(--cream)'}}>{m.display_name ?? '—'}</Link>
+                      <div style={{fontSize:'0.68rem',color:'var(--muted)',wordBreak:'break-all'}}>{m.email ?? '—'}</div>
+                    </td>
+                    <td style={{fontSize:'0.7rem',color:'var(--muted)'}}>{[m.phone, m.line_id && 'LINE ' + m.line_id].filter(Boolean).join(' · ') || '—'}</td>
+                    <td style={{fontSize:'0.7rem',color:'var(--muted)'}}>{[m.organization, m.province].filter(Boolean).join(' · ') || '—'}</td>
+                    <td style={{fontFamily:'monospace',color:'var(--jade)',whiteSpace:'nowrap'}}>{(m.points ?? 0).toLocaleString()}</td>
+                    <td style={{fontSize:'0.68rem',whiteSpace:'nowrap'}}>
+                      <div title={activity[m.id]?.joined_at ?? m.created_at ?? ''}>{fmtDT(activity[m.id]?.joined_at ?? m.created_at) || '—'}</div>
+                      <div style={{color:'var(--muted)'}} title={fmtDT(activity[m.id]?.last_sign_in_at)}>{activity[m.id]?.last_sign_in_at ? 'ล่าสุด ' + ago(activity[m.id].last_sign_in_at) : ''}</div>
+                    </td>
+                    <td style={{whiteSpace:'nowrap'}}>
                       <select className="filter-select" value={m.role ?? 'member'}
                         onChange={e => setMemberRole(m.id, e.target.value)}
                         disabled={m.role === 'admin' && !isRealAdmin}
@@ -1267,7 +1271,7 @@ export default function AdminPage() {
         <div className="card">
           <div style={{fontWeight:600,marginBottom:'0.7rem'}}>👥 จัดการสมาชิก — ตั้ง Admin / สมาชิกอุปถัมภ์</div>
           <div style={{display:'flex',gap:'8px',marginBottom:'1rem'}}>
-            <input className="form-input" placeholder="ค้นหาชื่อสมาชิก... (เว้นว่าง = 30 อันดับแต้มสูงสุด)"
+            <input className="form-input" placeholder="ค้นหาชื่อสมาชิก... (เว้นว่าง = 30 อันดับศักดินาสูงสุด)"
               value={memberQ} onChange={e => setMemberQ(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && searchMembers()} />
             <button className="btn btn-primary btn-sm" onClick={searchMembers}>ค้นหา</button>
@@ -1278,7 +1282,7 @@ export default function AdminPage() {
               padding:'8px 0',borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
               <span style={{flex:1,minWidth:'160px',fontSize:'0.86rem'}}>
                 {m.display_name ?? 'ไม่ระบุชื่อ'}
-                <span style={{color:'var(--muted)',fontSize:'0.7rem'}}> · {m.province ?? '-'} · {m.points ?? 0} แต้ม</span>
+                <span style={{color:'var(--muted)',fontSize:'0.7rem'}}> · {m.province ?? '-'} · {m.points ?? 0} ศักดินา</span>
               </span>
               <select className="form-input" style={{width:'150px'}} value={m.role ?? 'member'}
                 disabled={m.role === 'admin' && !isRealAdmin}

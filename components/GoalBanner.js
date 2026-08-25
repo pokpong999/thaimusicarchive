@@ -1,9 +1,9 @@
 'use client';
 // components/GoalBanner.js — ป้ายเป้าหมายหน้าแรก: "เข้ามาแล้วทำอะไรก่อน"
-//   ยังไม่ล็อกอิน   → เชิญสมัคร + อธิบาย 3 ขั้น (โพสต์เหตุการณ์ → 300 แต้ม → ขุน ปลดล็อกกระดานโน้ตฟรี)
-//   สมาชิก < 300     → แถบความคืบหน้า แต้ม/300 + อีกกี่บันทึก + ปุ่มบันทึกเหตุการณ์
+//   ยังไม่ล็อกอิน   → เชิญสมัคร + อธิบาย 3 ขั้น (โพสต์เหตุการณ์ → 300 ศักดินา → ขุน ปลดล็อกกระดานโน้ตฟรี)
+//   สมาชิก < 300     → แถบความคืบหน้า ศักดินา/300 + อีกกี่บันทึก + ปุ่มบันทึกเหตุการณ์
 //   ปลดล็อกแล้ว      → การ์ดสั้น ๆ ชวนเปิดกระดานโน้ต (ปิดได้ จำไว้ในเครื่อง)
-// กติกาแต้มตามหน้าอันดับ: บันทึกเหตุการณ์อนุมัติ +10 · มีทั้งรูปและพิกัด +5 · วิดีโอ +10
+// กติกาศักดินาตามหน้าอันดับ: บันทึกเหตุการณ์อนุมัติ +10 · มีทั้งรูปและพิกัด +5 · วิดีโอ +10
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
@@ -29,8 +29,8 @@ export default function GoalBanner() {
   if (me === undefined) return null;
   const khun = RANKS.find(r => r.min === GOAL) ?? RANKS[2];
   const steps = [
-    { n: '1', icon: '📜', t: 'บันทึกเหตุการณ์ดนตรีไทย', d: 'ใคร ทำอะไร เมื่อไหร่ ที่ไหน · แนบรูป + ปักหมุด = 15 แต้ม/บันทึก' },
-    { n: '2', icon: '🎖', t: `สะสมครบ ${GOAL} แต้ม → เลื่อนขั้นเป็น "${khun.name}"`, d: `ประมาณ ${Math.ceil(GOAL / PER_RECORD)} บันทึก · วิดีโอเพลงก็ได้แต้ม (+10)` },
+    { n: '1', icon: '📜', t: 'บันทึกเหตุการณ์ดนตรีไทย', d: 'ใคร ทำอะไร เมื่อไหร่ ที่ไหน · แนบรูป + ปักหมุด = 15 ศักดินา/บันทึก' },
+    { n: '2', icon: '🎖', t: `สะสมครบ ${GOAL} ศักดินา → เลื่อนขั้นเป็น "${khun.name}"`, d: `ประมาณ ${Math.ceil(GOAL / PER_RECORD)} บันทึก · วิดีโอเพลงก็ได้ศักดินา (+10)` },
     { n: '3', icon: '🎼', t: 'ปลดล็อกแอปบันทึกโน้ตเพลงไทย ฟรี', d: 'พิมพ์โน้ต ฟังเสียงฆ้องจริง หน้าทับกลอง ส่งออก Music Sheet' },
   ];
   const wrap = { margin: '0 0 1.4rem', padding: '1rem 1.2rem', borderRadius: 12,
@@ -43,11 +43,11 @@ export default function GoalBanner() {
       <section style={wrap}>
         <div style={{ fontSize: '0.72rem', letterSpacing: '.12em', color: 'var(--gold)', fontWeight: 700 }}>เข้ามาแล้วทำอะไรก่อน?</div>
         <div style={{ fontSize: '1.15rem', fontWeight: 700, margin: '4px 0 10px', lineHeight: 1.4 }}>
-          โพสต์เหตุการณ์ → สะสม {GOAL} แต้ม → เลื่อนขั้นเป็น {khun.icon} {khun.name} → ปลดล็อกแอปบันทึกโน้ต <span style={{ color: 'var(--jade)' }}>ฟรี</span>
+          โพสต์เหตุการณ์ → สะสม {GOAL} ศักดินา → เลื่อนขั้นเป็น {khun.icon} {khun.name} → ปลดล็อกแอปบันทึกโน้ต <span style={{ color: 'var(--jade)' }}>ฟรี</span>
         </div>
         <Steps steps={steps} />
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 12, alignItems: 'center' }}>
-          <Link href="/login"><button className="btn btn-primary" style={{ padding: '0.6rem 1.6rem' }}>✦ สมัครสมาชิก เริ่มสะสมแต้ม</button></Link>
+          <Link href="/login"><button className="btn btn-primary" style={{ padding: '0.6rem 1.6rem' }}>✦ สมัครสมาชิก เริ่มสะสมศักดินา</button></Link>
           <Link href="/archive"><button className="btn btn-outline">ดูเหตุการณ์ที่สมาชิกบันทึกไว้ →</button></Link>
           <Link href="/leaderboard" style={{ fontSize: '0.76rem', color: 'var(--gold2)' }}>🏆 อันดับผู้ร่วมสร้าง</Link>
         </div>
@@ -75,8 +75,8 @@ export default function GoalBanner() {
   return (
     <section style={wrap}>
       <div style={{ display: 'flex', gap: 10, alignItems: 'baseline', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>🎯 เป้าหมายของคุณ: {khun.icon} {khun.name} {GOAL} แต้ม → ปลดล็อกแอปบันทึกโน้ตฟรี</div>
-        <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>ตอนนี้ {rank.icon} {rank.name} · {me.points.toLocaleString()} แต้ม</span>
+        <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>🎯 เป้าหมายของคุณ: {khun.icon} {khun.name} {GOAL} ศักดินา → ปลดล็อกแอปบันทึกโน้ตฟรี</div>
+        <span style={{ fontSize: '0.76rem', color: 'var(--muted)' }}>ตอนนี้ {rank.icon} {rank.name} · {me.points.toLocaleString()} ศักดินา</span>
       </div>
       <div style={{ margin: '10px 0 6px', height: 12, borderRadius: 6, background: 'rgba(255,255,255,0.08)', overflow: 'hidden', position: 'relative' }}>
         <div style={{ width: pct + '%', height: '100%', background: 'linear-gradient(90deg, var(--jade), var(--gold))', borderRadius: 6, transition: 'width .6s' }} />
@@ -85,7 +85,7 @@ export default function GoalBanner() {
         ))}
       </div>
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center', fontSize: '0.8rem' }}>
-        <span>อีก <b style={{ color: 'var(--gold)' }}>{need}</b> แต้ม ≈ <b>{recs}</b> บันทึก (มีรูป+พิกัด = 15 แต้ม){next && next.min < GOAL ? ` · ขั้นถัดไป ${next.icon} ${next.name} อีก ${next.min - me.points} แต้ม` : ''}</span>
+        <span>อีก <b style={{ color: 'var(--gold)' }}>{need}</b> ศักดินา ≈ <b>{recs}</b> บันทึก (มีรูป+พิกัด = 15 ศักดินา){next && next.min < GOAL ? ` · ขั้นถัดไป ${next.icon} ${next.name} อีก ${next.min - me.points} ศักดินา` : ''}</span>
         <span style={{ flex: 1 }} />
         <Link href="/archive/new"><button className="btn btn-primary btn-sm">📜 บันทึกเหตุการณ์ (+15)</button></Link>
         <Link href="/dashboard"><button className="btn btn-outline btn-sm">แดชบอร์ดของฉัน</button></Link>
