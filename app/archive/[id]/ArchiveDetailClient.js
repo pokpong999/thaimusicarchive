@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { supabase } from '../../../lib/supabase';
 import LeafletMap from '../../../components/LeafletMap';
 import CommentSection from '../../../components/CommentSection';
+import ArchiveContributions from '../../../components/ArchiveContributions';
 import ShareBar from '../../../components/ShareBar';
 import { useMe } from '../../../components/Gate';
 import StatBadge from '../../../components/StatBadge';
@@ -169,6 +170,7 @@ export default function ArchiveDetailClient() {
           </div>
         </div>
       ))}
+      <ArchiveContributions recordId={id} recordOwner={rec.submitted_by} />
       <CommentSection targetType="archive" targetId={id} />
     </main>
   );
