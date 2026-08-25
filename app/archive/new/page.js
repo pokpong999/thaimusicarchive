@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../../lib/supabase';
 import LeafletMap from '../../../components/LeafletMap';
 import { shrinkImage } from '../../../lib/imgresize';
+import PinColorHint from '../../../components/PinColorHint';
 
 export default function NewArchiveRecord() {
   const [user, setUser] = useState(null);
@@ -132,6 +133,7 @@ export default function NewArchiveRecord() {
           <label className="form-label">วันที่ (ถ้าทราบแน่นอน — ใช้เรียงลำดับ)</label>
           <input className="form-input" type="date" value={whenDate} onChange={e => setWhenDate(e.target.value)} />
         </div>
+        <PinColorHint whenText={whenText} whenDate={whenDate} />
         <div className="form-group">
           <label className="form-label">ที่ไหน * (ชื่อสถานที่)</label>
           <input className="form-input" value={where} onChange={e => setWhere(e.target.value)}

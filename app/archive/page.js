@@ -7,6 +7,7 @@ import { fmtDT } from '../../lib/fmtdate';
 import { supabase } from '../../lib/supabase';
 import LeafletMap from '../../components/LeafletMap';
 import { esc } from '../../lib/htmlesc';
+import { pinColor, pinLabel, yearOf, legendHtml } from '../../lib/eracolor';
 
 const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future: 'อนาคต' };
 
@@ -69,30 +70,17 @@ export default function ArchivePage() {
   }
 
 
-// ── สีหมุดตามยุค: แดงเข้ม (โบราณ) → เขียวอ่อน (ปัจจุบัน) ──
-function markerYear(r) {
-  if (r.when_date) return new Date(r.when_date).getFullYear() + 543;
-  const m = (r.when_text ?? '').match(/(\d{4})/);
-  if (m) { const y = parseInt(m[1]); return y < 2300 ? y + 543 : y; }
-  return null;
-}
-function eraColor(year, minY, maxY) {
-  if (year == null) return '#C9A84C'; // ไม่ระบุปี = ทอง
-  const t = Math.max(0, Math.min(1, (year - minY) / Math.max(1, maxY - minY)));
-  const hue = t * 120;                    // 0 แดง → 120 เขียว
-  const light = 32 + t * 26;              // เข้ม → อ่อน
-  return `hsl(${Math.round(hue)}, 72%, ${Math.round(light)}%)`;
-}
-
-  const yrs = records.map(markerYear).filter(y => y != null);
-  const minY = yrs.length ? Math.min(...yrs) : 2300;
-  const maxY = yrs.length ? Math.max(...yrs) : 2569;
-
+  // สีหมุด = ช่วงเวลาเหตุการณ์ (lib/eracolor.js) · ไม่ระบุปี = เทา
+  // ค้นหาอยู่ → หมุดที่ตรงเปิด popup ให้เลย (ไม่รวมกลุ่ม เห็นครบทุกหมุด)
+  const searching = q.trim().length > 0;
   const markers = records.filter(r => r.lat != null && r.lng != null).map(r => {
     const thumb = thumbUrl(r);
+    const color = pinColor(r), yr = yearOf(r);
     return ({
+    id: r.id,
     lat: r.lat, lng: r.lng,
-    color: eraColor(markerYear(r), minY, maxY),
+    color,
+    open: searching,
     tooltipHtml: `
       <div style="font-family:'Noto Sans Thai',sans-serif;max-width:200px;text-align:center">
         ${thumb ? `<img src="${esc(thumb)}" style="width:180px;height:110px;object-fit:cover;border-radius:6px;display:block;margin-bottom:5px"/>` : ''}
@@ -101,7 +89,7 @@ function eraColor(year, minY, maxY) {
       </div>`,
     popupHtml: `
       <div style="font-family:'Noto Sans Thai',sans-serif;min-width:200px">
-        <div style="font-size:0.7rem;color:#8A6D1F">${ERAS[r.era] ?? r.era} · ${esc(r.when_text)}</div>
+        <div style="font-size:0.7rem;color:#8A6D1F;display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:${color};display:inline-block;border:1px solid #0F1B2D"></span>${ERAS[r.era] ?? r.era} · ${esc(r.when_text)}${yr ? '' : ' <span style="color:#999">(ไม่ระบุปี)</span>'}</div>
         <div style="font-weight:600;margin:4px 0 2px">${esc(r.what_text)}</div>
         <div style="font-size:0.78rem;color:#555">${esc(r.who_text)}<br/>${esc(r.where_text)}</div>
         <div style="margin-top:8px;display:flex;gap:10px">
@@ -144,16 +132,12 @@ function eraColor(year, minY, maxY) {
       {loading ? <div style={{color:'var(--muted)'}}>กำลังโหลด...</div>
       : view === 'map' ? (
         <>
-          <LeafletMap markers={markers} height="520px" legend={`
-            <div style="background:rgba(15,27,45,0.92);border:1px solid #C9A84C;border-radius:8px;padding:7px 11px;font-family:'Noto Sans Thai',sans-serif;color:#F5F0E8;font-size:0.68rem;line-height:1.5">
-              <div style="margin-bottom:3px">ยุคของเหตุการณ์</div>
-              <div style="display:flex;align-items:center;gap:6px">
-                <span>โบราณ</span>
-                <span style="width:90px;height:9px;border-radius:5px;background:linear-gradient(to right, hsl(0,72%,32%), hsl(40,72%,41%), hsl(80,72%,49%), hsl(120,72%,58%))"></span>
-                <span>ปัจจุบัน</span>
-              </div>
-              <div style="color:#8A9BB5;margin-top:3px">● ทอง = ไม่ระบุปี · ตัวเลข = กดเพื่อกางกลุ่มหมุด</div>
-            </div>`} />
+          <LeafletMap markers={markers} height="520px" cluster={!searching} legend={legendHtml()} />
+          {searching && markers.length > 0 && (
+            <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
+              🔍 พบ {markers.length} หมุดที่ตรงกับ "{q}" — เปิดป้ายให้แล้ว{markers.length > 10 ? ' (แสดงป้าย 10 หมุดแรก ที่เหลือกดหมุดเพื่อดู)' : ''}
+            </div>
+          )}
           {markers.length < records.length && (
             <div style={{fontSize:'0.72rem',color:'var(--muted)',marginTop:'6px'}}>
               * {records.length - markers.length} รายการไม่มีพิกัด — ดูได้ในมุมมองรายการ

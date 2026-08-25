@@ -31,8 +31,10 @@ const pinIcon = (L, color = '#C9A84C') => L.divIcon({
   iconSize: [22, 22], iconAnchor: [11, 22], popupAnchor: [0, -22],
 });
 
+// cluster=false → วางหมุดตรง ๆ ไม่รวมกลุ่ม (ใช้ตอนค้นหา ให้ popup เปิดได้ทุกหมุด)
+// marker.open=true → เปิด popup ให้ทันที (เปิดพร้อมกันได้หลายอัน สูงสุด 10)
 export default function LeafletMap({ markers = [], onPick, pickedPos, flyTo, height = '480px',
-  center = [13.75, 100.5], zoom = 6, legend = null }) {
+  center = [13.75, 100.5], zoom = 6, legend = null, cluster = true }) {
   const mapRef = useRef(null);
   const mapObj = useRef(null);
   const pickMarker = useRef(null);
@@ -76,7 +78,8 @@ export default function LeafletMap({ markers = [], onPick, pickedPos, flyTo, hei
     return () => { cancelled = true; if (mapObj.current) { mapObj.current.remove(); mapObj.current = null; } };
   }, []);
 
-  useEffect(() => { if (window.L && mapObj.current) renderMarkers(window.L); }, [markers]);
+  useEffect(() => { if (window.L && mapObj.current) renderMarkers(window.L); }, [markers, cluster]);
+  const plainLayer = useRef(null);
 
   useEffect(() => {
     if (window.L && mapObj.current && flyTo) {
@@ -92,20 +95,31 @@ export default function LeafletMap({ markers = [], onPick, pickedPos, flyTo, hei
   }, [pickedPos]);
 
   function renderMarkers(L) {
-    if (!markerLayer.current) return;
+    if (!markerLayer.current || !mapObj.current) return;
+    const map = mapObj.current;
     markerLayer.current.clearLayers();
-    const bounds = [];
+    if (!plainLayer.current) plainLayer.current = L.layerGroup().addTo(map);
+    plainLayer.current.clearLayers();
+    map.closePopup();
+    const target = cluster ? markerLayer.current : plainLayer.current;
+    const bounds = [], toOpen = [];
     markers.forEach(m => {
       if (m.lat == null || m.lng == null) return;
       const mk = L.marker([m.lat, m.lng], { icon: pinIcon(L, m.color) });
-      mk.bindPopup(m.popupHtml ?? '', { maxWidth: 260 });
-      if (m.tooltipHtml) {
+      // ตอนค้นหา: popup หลายอันเปิดพร้อมกันได้ ไม่ปิดเมื่อคลิกแผนที่
+      mk.bindPopup(m.popupHtml ?? '', { maxWidth: 260, autoClose: !m.open, closeOnClick: !m.open });
+      if (m.tooltipHtml && !m.open) {
         mk.bindTooltip(m.tooltipHtml, { direction: 'top', offset: [0, -20], opacity: 1, className: 'thma-tooltip' });
       }
-      markerLayer.current.addLayer(mk);
+      target.addLayer(mk);
+      if (m.open) toOpen.push(mk);
       bounds.push([m.lat, m.lng]);
     });
-    if (bounds.length > 0) mapObj.current.fitBounds(bounds, { padding: [40, 40], maxZoom: 12 });
+    if (bounds.length > 0) map.fitBounds(bounds, { padding: [40, 40], maxZoom: toOpen.length ? 14 : 12 });
+    if (toOpen.length) {
+      // รอให้แผนที่เลื่อนเสร็จก่อนค่อยเปิด ป้ายจะได้อยู่ในจอ
+      setTimeout(() => { toOpen.slice(0, 10).forEach(mk => { try { mk.openPopup(); } catch (e) {} }); }, 350);
+    }
   }
 
   return <div ref={mapRef} style={{ height, width: '100%', borderRadius: '8px', border: '1px solid var(--border)', zIndex: 0 }} />;
