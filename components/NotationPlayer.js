@@ -89,6 +89,9 @@ export default function NotationPlayer({ verses, lyrics }) {
   const [drumInst, setDrumInst] = useState('ตะโพน');
   const [level, setLevel] = useState('สองชั้น');
   const [chingOn, setChingOn] = useState(false);
+  // การกลับต้น: none = เที่ยวเดียว · section = กลับต้นทุกท่อน (ท่อนละ 2 เที่ยว)
+  //             piece = กลับต้นเที่ยวใหญ่ (ทั้งเพลง 2 เที่ยว) · loop = วนไปเรื่อย ๆ
+  const [repeat, setRepeat] = useState('none');
   const playStateRef = useRef('stopped');
   const playRef = useRef(null);
   const togglePauseRef = useRef(null);
@@ -221,16 +224,12 @@ export default function NotationPlayer({ verses, lyrics }) {
       for (let p = 0; p < pv.len; p++) {
         G[0].push(ls[0][p]);
         G[1].push(ls[1] ? ls[1][p] : []);
-        if (pv.offset + p >= startStep) {
-          cursorTimeline.push({ time: t0 + (pv.offset + p - startStep) * stepDur, verseIdx: vi, pos: p });
-        }
       }
     });
 
     // ── สะบัด + สองมือ: กฎอยู่ที่ lib/notation-core.js (ที่เดียวกับกระดานโน้ต) ──
     const { runs, consumed } = buildVoices(G);
-    for (let s = startStep; s < totalSteps; s++) {
-      const t = t0 + (s - startStep) * stepDur;
+    const scheduleMelodyAt = (s, t) => {
       for (let li = 0; li < 2; li++) {
         if (consumed[li][s]) continue;
         const run = runs.get(li * totalSteps + s);
@@ -246,11 +245,12 @@ export default function NotationPlayer({ verses, lyrics }) {
           G[li][s].forEach(n => q(t, () => scheduleNote(n, t)));
         }
       }
-    }
+    };
 
     // ── หน้าทับกลอง + ฉิ่ง ──
+    let drumHits = null, drumLen = 0;
+    let marks = null;
     if (nathab !== 'none' || chingOn) {
-      let drumHits = null, drumLen = 0;
       if (nathab !== 'none') {
         if (!nathabRowsRef.current) {
           const { data } = await supabase.from('nathab_patterns').select('*');
@@ -266,7 +266,7 @@ export default function NotationPlayer({ verses, lyrics }) {
       // ฉิ่งตามอัตราของท่อน (คอลัมน์ level ของ song_melody — เพลงเถาท่อนละอัตรา)
       // + ฉิ่งกำหนดเองของเพลงจังหวะพิเศษ (คอลัมน์ ching: '-'/'ฉ'/'บ' ต่อตำแหน่ง)
       // จังหวะฉิ่งนับใหม่ทุกต้นท่อน · ถ้าไม่มีข้อมูลใช้อัตราที่เลือกใน dropdown
-      const marks = new Array(totalSteps).fill('');
+      marks = new Array(totalSteps).fill('');
       {
         let lastSec = null, rel = 0, cyc = (CHING_PATTERNS[level]?.hongs ?? 4) * 4;
         parsed.forEach(pv => {
@@ -282,17 +282,57 @@ export default function NotationPlayer({ verses, lyrics }) {
           }
         });
       }
-      for (let s = startStep; s < totalSteps; s++) {
-        const t = t0 + (s - startStep) * stepDur;
-        if (drumHits && drumLen > 0) {
-          const pp = (s % drumLen) + 1;
-          drumHits.forEach(h => { if (h.pos === pp) q(t, () => playPercussion(ctx, h.syll, t, 0.75)); });
-        }
-        if (chingOn && marks[s]) { const syll = marks[s]; q(t, () => playPercussion(ctx, syll, t, 0.7)); }
-      }
     }
+    const schedulePercAt = (s, i, t) => {
+      if (drumHits && drumLen > 0) {
+        // กลองนับตามลำดับที่เล่นจริง (i) — กลับต้นแล้วหน้าทับเดินต่อเนื่องไม่สะดุด
+        const pp = (i % drumLen) + 1;
+        drumHits.forEach(h => { if (h.pos === pp) q(t, () => playPercussion(ctx, h.syll, t, 0.75)); });
+      }
+      if (chingOn && marks && marks[s]) { const syll = marks[s]; q(t, () => playPercussion(ctx, syll, t, 0.7)); }
+    };
 
-    const endTime = t0 + (totalSteps - startStep) * stepDur;
+    // ── ลำดับการเล่น (การกลับต้น) ──
+    const stepInfo = [];
+    parsed.forEach((pv, vi) => { for (let p = 0; p < pv.len; p++) stepInfo.push({ vi, pos: p }); });
+
+    const wholeOnce = () => Array.from({ length: totalSteps }, (_, s) => s);
+    function buildSeq() {
+      if (repeat === 'section') {
+        // กลับต้นทุกท่อน: ท่อน = วรรคติดกันที่ section เดียวกัน เล่นท่อนละ 2 เที่ยว
+        // เพลงที่ไม่ระบุท่อน = ทั้งเพลงนับเป็นท่อนเดียว (เท่ากับกลับต้นเที่ยวใหญ่)
+        const seq = []; let g0 = 0;
+        for (let i = 0; i < parsed.length; i++) {
+          const cur = parsed[i].v.section ?? null;
+          const next = i + 1 < parsed.length ? (parsed[i + 1].v.section ?? null) : undefined;
+          if (i + 1 >= parsed.length || next !== cur) {
+            const s0 = parsed[g0].offset, s1 = parsed[i].offset + parsed[i].len;
+            for (let r = 0; r < 2; r++) for (let s = s0; s < s1; s++) seq.push(s);
+            g0 = i + 1;
+          }
+        }
+        return seq;
+      }
+      const one = wholeOnce();
+      return repeat === 'piece' ? one.concat(one) : one;   // loop เริ่มหนึ่งเที่ยว แล้วต่อท้ายเองระหว่างเล่น
+    }
+    let seq = buildSeq();
+    // กดเล่นจากกลางเพลง: เริ่มที่ตำแหน่งนั้นครั้งแรกที่พบ แล้วเล่นตามผังกลับต้นต่อ
+    if (startStep > 0) { const k = seq.indexOf(startStep); if (k > 0) seq = seq.slice(k); }
+
+    let schedLen = 0;
+    const scheduleSteps = steps => {
+      for (const s of steps) {
+        const t = t0 + schedLen * stepDur;
+        scheduleMelodyAt(s, t);
+        schedulePercAt(s, schedLen, t);
+        cursorTimeline.push({ time: t, verseIdx: stepInfo[s].vi, pos: stepInfo[s].pos });
+        schedLen++;
+      }
+    };
+    scheduleSteps(seq);
+
+    let endTime = t0 + schedLen * stepDur;
     soundEvents.sort((a, b) => a.t - b.t);
     let evIdx = 0;
     const LOOKAHEAD = 5; // วินาที
@@ -307,6 +347,11 @@ export default function NotationPlayer({ verses, lyrics }) {
     function tick() {
       if (playIdRef.current !== myId) return;
       const now = ctx.currentTime;
+      // วนกลับต้นไปเรื่อย ๆ: พอใกล้จบ นัดเที่ยวถัดไปต่อท้าย (นัดล่วงหน้าอย่างน้อย 8 วิ)
+      while (repeat === 'loop' && totalSteps > 0 && endTime - now < 8) {
+        scheduleSteps(wholeOnce());
+        endTime = t0 + schedLen * stepDur;
+      }
       pump(now);
       while (idx < cursorTimeline.length && cursorTimeline[idx].time <= now) {
         setCursor({ verseIdx: cursorTimeline[idx].verseIdx, pos: cursorTimeline[idx].pos });
@@ -472,6 +517,13 @@ export default function NotationPlayer({ verses, lyrics }) {
           <option value="สามชั้น">สามชั้น</option>
           <option value="สองชั้น">สองชั้น</option>
           <option value="ชั้นเดียว">ชั้นเดียว</option>
+        </select>
+        <select className="filter-select" value={repeat} onChange={e => setRepeat(e.target.value)}
+          disabled={playState !== 'stopped'} title="การกลับต้น">
+          <option value="none">▶ เที่ยวเดียวจบ</option>
+          <option value="section">🔁 กลับต้นทุกท่อน (ท่อนละ 2 เที่ยว)</option>
+          <option value="piece">🔁 กลับต้นเที่ยวใหญ่ (ทั้งเพลง 2 เที่ยว)</option>
+          <option value="loop">♾ วนกลับต้นไปเรื่อย ๆ</option>
         </select>
         <label style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'0.78rem',color:'var(--muted)',cursor:'pointer'}}>
           <input type="checkbox" checked={chingOn} onChange={e => setChingOn(e.target.checked)}
