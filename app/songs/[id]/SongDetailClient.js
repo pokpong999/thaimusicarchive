@@ -11,6 +11,7 @@ import { EText, EImage } from '../../../components/Editable';
 import StatBadge from '../../../components/StatBadge';
 import ShareBar from '../../../components/ShareBar';
 import SongNathab from '../../../components/SongNathab';
+import { fmtDT } from '../../../lib/fmtdate';
 
 export default function SongDetailClient() {
   const { can } = usePermissions();
@@ -22,6 +23,7 @@ export default function SongDetailClient() {
   const [contributors, setContributors] = useState({});
   const [instOwners, setInstOwners] = useState({});
   const [songOwner, setSongOwner] = useState(null);
+  const [instAt, setInstAt] = useState({});   // ทาง → created_at
   const [instrument, setInstrument] = useState('ทำนองหลัก');
   const [pdfs, setPdfs] = useState([]);
   const [pdfFile, setPdfFile] = useState(null);
@@ -68,7 +70,11 @@ export default function SongDetailClient() {
       .eq('song_id', id).eq('approved', true).order('created_at');
     setAudios(au ?? []);
     const { data: inst } = await supabase.from('song_melody')
-      .select('instrument, submitted_by').eq('song_id', id).eq('approved', true);
+      .select('instrument, submitted_by, created_at').eq('song_id', id).eq('approved', true);
+    // วัน-เวลาที่บันทึกโน้ตแต่ละทาง (แถวแรกสุดของทางนั้น)
+    const at = {};
+    (inst ?? []).forEach(r => { const k = r.instrument ?? 'ทำนองหลัก'; if (r.created_at && (!at[k] || r.created_at < at[k])) at[k] = r.created_at; });
+    setInstAt(at);
     const uniq = [...new Set((inst ?? []).map(r => r.instrument ?? 'ทำนองหลัก'))];
     setInstruments(uniq.length ? uniq : ['ทำนองหลัก']);
     // เครดิตผู้เพิ่มข้อมูล
@@ -202,7 +208,7 @@ export default function SongDetailClient() {
           {song.notation && song.notation !== '-' && <span className="badge badge-fixed">{song.notation}</span>}
         </div>
         {songOwner && <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
-          ✍️ เพิ่มข้อมูลโดย: {songOwner}</div>}
+          ✍️ เพิ่มข้อมูลโดย: {songOwner}{song.created_at && <span style={{color:'var(--muted)'}}> · {fmtDT(song.created_at)}</span>}</div>}
         <div style={{marginTop:'0.8rem',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}}>
           <ShareBar statType="song" statId={id} title={song.name_th + ' — หอจดหมายเหตุดนตรีไทย'} />
           {can('cite') && <button className="btn btn-outline btn-sm" style={{fontSize:'0.7rem'}} onClick={copyCitation}>
@@ -290,7 +296,7 @@ export default function SongDetailClient() {
             {user && <Link href={`/songs/${id}/edit?inst=${encodeURIComponent(instrument === 'ทำนองหลัก' ? 'ระนาดเอก' : instrument)}&new=1`}>
               <button className="btn btn-outline btn-sm">＋ เสนอทางเครื่องอื่น</button></Link>}
             {contributors[instrument] && (
-              <span style={{fontSize:'0.7rem',color:'var(--jade)'}}>✍️ ทางนี้บันทึกโดย: {contributors[instrument]}</span>
+              <span style={{fontSize:'0.7rem',color:'var(--jade)'}}>✍️ ทางนี้บันทึกโดย: {contributors[instrument]}{instAt[instrument] && <span style={{color:'var(--muted)'}}> · {fmtDT(instAt[instrument])}</span>}</span>
             )}
           </div>
 
@@ -334,7 +340,7 @@ export default function SongDetailClient() {
                       <span style={{fontSize:'1.4rem'}}>📄</span>
                       <div style={{minWidth:0}}>
                         <div style={{fontSize:'0.86rem'}}>{pf.title}</div>
-                        <div style={{fontSize:'0.7rem',color:'var(--muted)'}}>เปิด / ดาวน์โหลด ↗</div>
+                        <div style={{fontSize:'0.7rem',color:'var(--muted)'}}>เปิด / ดาวน์โหลด ↗{pf.created_at && ` · 🕒 ${fmtDT(pf.created_at)}`}</div>
                       </div>
                     </div>
                   </a>
@@ -404,7 +410,7 @@ export default function SongDetailClient() {
               <div key={a.id} className="card" style={{padding:'0.9rem 1.1rem'}}>
                 <div style={{fontWeight:600,fontSize:'0.9rem'}}>{a.title ?? song.name_th}</div>
                 <div style={{fontSize:'0.74rem',color:'var(--muted)',margin:'3px 0 8px'}}>
-                  {[a.performer && `บรรเลงโดย ${a.performer}`, a.year_recorded && `บันทึกปี ${a.year_recorded}`, a.license]
+                  {[a.performer && `บรรเลงโดย ${a.performer}`, a.year_recorded && `บันทึกปี ${a.year_recorded}`, a.license, a.created_at && `🕒 อัปโหลด ${fmtDT(a.created_at)}`]
                     .filter(Boolean).join(' · ')}
                 </div>
                 <audio controls preload="none" src={url} style={{width:'100%'}} />
@@ -472,7 +478,7 @@ export default function SongDetailClient() {
                   <div className="video-body">
                     <div className="video-title">{v.title || song.name_th}</div>
                     <div className="video-meta" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <span>▶ {v.channel_name}</span>
+                      <span>▶ {v.channel_name}{v.created_at && <span style={{color:'var(--muted)',fontSize:'0.66rem'}}> · 🕒 {fmtDT(v.created_at)}</span>}</span>
                       {user && v.submitted_by === user.id && (
                         <button className="btn btn-danger btn-sm" onClick={async () => {
                           if (!confirm('ลบวิดีโอนี้?')) return;
