@@ -55,7 +55,7 @@ export default function SongDetailClient() {
       setUser(data.user);
       if (data.user) {
         const { data: p } = await supabase.from('profiles').select('role').eq('id', data.user.id).single();
-        setIsAdmin(p?.role === 'admin');
+        setIsAdmin(p?.role === 'admin' || p?.role === 'moderator');   // moderator แก้โน้ต/ประวัติได้เท่าแอดมิน
       }
     });
     load();
@@ -123,7 +123,7 @@ export default function SongDetailClient() {
       submitted_by: user.id,
     });
     if (error) { setPdfMsg('⚠ ' + error.message); return; }
-    setPdfMsg('✓ อัปโหลดแล้ว — รอ Admin อนุมัติ (+10 แต้มเมื่อผ่าน)');
+    setPdfMsg('✓ อัปโหลดแล้ว — รอ Admin อนุมัติ (+10 ศักดินาเมื่อผ่าน)');
     setPdfFile(null); setPdfTitle(''); setShowPdfForm(false);
   }
 
@@ -172,7 +172,7 @@ export default function SongDetailClient() {
       song_id: id, title: audioMeta.title || null, performer: audioMeta.performer || null,
       year_recorded: audioMeta.year || null, storage_path: pathName, submitted_by: user.id,
     });
-    setAudioMsg(e2 ? '⚠ ' + e2.message : '✓ ส่งแล้ว รอ Admin ตรวจสอบ (+10 แต้มเมื่อผ่าน)');
+    setAudioMsg(e2 ? '⚠ ' + e2.message : '✓ ส่งแล้ว รอ Admin ตรวจสอบ (+10 ศักดินาเมื่อผ่าน)');
     setAudioFile(null);
   }
 
