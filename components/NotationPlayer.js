@@ -516,6 +516,7 @@ export default function NotationPlayer({ verses, lyrics }) {
             <option value="กลองแขก">กลองแขก</option>
             <option value="กลองสองหน้า">กลองสองหน้า</option>
             <option value="โทนรำมะนา">โทนรำมะนา</option>
+            <option value="กลองทัด">กลองทัด</option>
           </select>
         )}
         <select className="filter-select" value={level} onChange={e => setLevel(e.target.value)} disabled={playState !== 'stopped'}>
