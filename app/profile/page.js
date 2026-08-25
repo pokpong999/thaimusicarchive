@@ -44,12 +44,22 @@ export default function ProfilePage() {
   }
 
   async function save() {
-    const { error } = await supabase.from('profiles').update({
+    setMsg('⏳ กำลังบันทึก...');
+    const { error, count } = await supabase.from('profiles').update({
       display_name: p.display_name || null, phone: p.phone || null,
       line_id: p.line_id || null, organization: p.organization || null,
       province: p.province || null, bio: p.bio || null,
-    }).eq('id', user.id);
-    setMsg(error ? '⚠ ' + error.message : '✓ บันทึกแล้ว');
+    }, { count: 'exact' }).eq('id', user.id);
+    if (error) {
+      // ข้อความจริงของ Postgres อ่านไม่รู้เรื่องสำหรับผู้ใช้ทั่วไป
+      setMsg(/permission denied|not allowed/i.test(error.message)
+        ? '⚠ บัญชีนี้ยังไม่มีสิทธิ์แก้โปรไฟล์ — แจ้งผู้ดูแลให้รัน sql/10_contributions.sql'
+        : '⚠ ' + error.message);
+      return;
+    }
+    if (count === 0) { setMsg('⚠ บันทึกไม่สำเร็จ — ไม่พบโปรไฟล์ของคุณ'); return; }
+    setMsg('✓ บันทึกแล้ว');
+    setTimeout(() => setMsg(''), 3000);
   }
 
   if (!user) return (
