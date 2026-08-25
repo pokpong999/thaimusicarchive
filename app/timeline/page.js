@@ -14,10 +14,16 @@ function extractYear(r) {
 
 export default function TimelinePage() {
   const [groups, setGroups] = useState([]);
+  const [posters, setPosters] = useState({});
 
   useEffect(() => {
     supabase.from('archive_records').select('*').eq('approved', true).limit(1000)
-      .then(({ data }) => {
+      .then(async ({ data }) => {
+        const ids = [...new Set((data ?? []).map(r => r.submitted_by).filter(Boolean))];
+        if (ids.length) {
+          const { data: ps } = await supabase.from('profiles').select('id, display_name').in('id', ids);
+          const m = {}; (ps ?? []).forEach(p => { m[p.id] = p.display_name; }); setPosters(m);
+        }
         const byYear = {};
         (data ?? []).forEach(r => {
           const y = extractYear(r) ?? 'ไม่ระบุปี';
@@ -51,6 +57,8 @@ export default function TimelinePage() {
                     <div style={{fontWeight:600,fontSize:'0.9rem'}}>{r.what_text}</div>
                     <div style={{fontSize:'0.75rem',color:'var(--muted)',marginTop:'3px'}}>
                       {r.who_text} · {r.when_text} · 📍 {r.where_text}</div>
+                    {r.submitted_by && <div style={{fontSize:'0.66rem',color:'var(--muted)',marginTop:'2px'}}>
+                      ✍️ โพสต์โดย <span style={{color:'var(--jade)'}}>{posters[r.submitted_by] ?? 'สมาชิก'}</span></div>}
                   </div>
                 </Link>
               ))}

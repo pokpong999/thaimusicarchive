@@ -24,6 +24,7 @@ export default function ArchivePage() {
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
+  const [posters, setPosters] = useState({});   // submitted_by → display_name
   useEffect(() => { load(); }, [era, q]);
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
@@ -53,6 +54,12 @@ export default function ArchivePage() {
     const { data } = await query;
     setRecords(data ?? []);
     setLoading(false);
+    // ชื่อคนโพสต์ (ดึงครั้งเดียวทั้งหน้า)
+    const ids = [...new Set((data ?? []).map(r => r.submitted_by).filter(Boolean))];
+    if (ids.length) {
+      const { data: ps } = await supabase.from('profiles').select('id, display_name').in('id', ids);
+      const m = {}; (ps ?? []).forEach(p => { m[p.id] = p.display_name; }); setPosters(m);
+    }
   }
 
   function thumbUrl(rec) {
@@ -170,7 +177,11 @@ function eraColor(year, minY, maxY) {
                     </div>
                     <div style={{fontWeight:600,fontSize:'1rem',margin:'6px 0 2px'}}>{r.what_text}</div>
                     <div style={{fontSize:'0.82rem',color:'var(--muted)'}}>{r.who_text} · {r.where_text}</div>
-                    {r.created_at && <div style={{fontSize:'0.66rem',color:'var(--muted)',opacity:.8,marginTop:'3px'}}>🕒 บันทึกเมื่อ {fmtDT(r.created_at)}</div>}
+                    {(r.submitted_by || r.created_at) && <div style={{fontSize:'0.66rem',color:'var(--muted)',opacity:.85,marginTop:'3px'}}>
+                      {r.submitted_by && <>✍️ โพสต์โดย <span style={{color:'var(--jade)'}}>{posters[r.submitted_by] ?? 'สมาชิก'}</span></>}
+                      {r.submitted_by && r.created_at && ' · '}
+                      {r.created_at && <>🕒 {fmtDT(r.created_at)}</>}
+                    </div>}
                   </div>
                   {(isAdmin || r.submitted_by === myId) && <button className="btn btn-danger btn-sm"
                     style={{marginLeft:'auto',alignSelf:'flex-start',flexShrink:0}}
