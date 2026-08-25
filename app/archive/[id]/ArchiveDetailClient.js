@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { esc } from '../../../lib/htmlesc';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { fmtDT } from '../../../lib/fmtdate';
 import { supabase } from '../../../lib/supabase';
 import LeafletMap from '../../../components/LeafletMap';
 import CommentSection from '../../../components/CommentSection';
@@ -89,6 +90,7 @@ export default function ArchiveDetailClient() {
         <div className="detail-meta">
           <div className="meta-pill"><span className="meta-label">ใคร</span><span className="meta-value">{rec.who_text}</span></div>
           <div className="meta-pill"><span className="meta-label">ที่ไหน</span><span className="meta-value">{rec.where_text}</span></div>
+          {rec.created_at && <div className="meta-pill" title="วัน-เวลาที่โพสต์เข้าหอจดหมายเหตุ"><span className="meta-label">บันทึกเมื่อ</span><span className="meta-value" style={{fontSize:'0.78rem'}}>{fmtDT(rec.created_at)}</span></div>}
         </div>
         <div style={{marginTop:'0.6rem'}}><StatBadge type="archive" id={id} /></div>
         {canEditMedia && (
