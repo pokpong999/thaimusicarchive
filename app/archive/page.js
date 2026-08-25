@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import LeafletMap from '../../components/LeafletMap';
+import { esc } from '../../lib/htmlesc';
 
 const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future: 'อนาคต' };
 
@@ -86,15 +87,15 @@ function eraColor(year, minY, maxY) {
     color: eraColor(markerYear(r), minY, maxY),
     tooltipHtml: `
       <div style="font-family:'Noto Sans Thai',sans-serif;max-width:200px;text-align:center">
-        ${thumb ? `<img src="${thumb}" style="width:180px;height:110px;object-fit:cover;border-radius:6px;display:block;margin-bottom:5px"/>` : ''}
-        <div style="font-size:0.75rem;font-weight:600">${r.what_text}</div>
-        <div style="font-size:0.65rem;color:#666">${r.when_text}</div>
+        ${thumb ? `<img src="${esc(thumb)}" style="width:180px;height:110px;object-fit:cover;border-radius:6px;display:block;margin-bottom:5px"/>` : ''}
+        <div style="font-size:0.75rem;font-weight:600">${esc(r.what_text)}</div>
+        <div style="font-size:0.65rem;color:#666">${esc(r.when_text)}</div>
       </div>`,
     popupHtml: `
       <div style="font-family:'Noto Sans Thai',sans-serif;min-width:200px">
-        <div style="font-size:0.7rem;color:#8A6D1F">${ERAS[r.era] ?? r.era} · ${r.when_text}</div>
-        <div style="font-weight:600;margin:4px 0 2px">${r.what_text}</div>
-        <div style="font-size:0.78rem;color:#555">${r.who_text}<br/>${r.where_text}</div>
+        <div style="font-size:0.7rem;color:#8A6D1F">${ERAS[r.era] ?? r.era} · ${esc(r.when_text)}</div>
+        <div style="font-weight:600;margin:4px 0 2px">${esc(r.what_text)}</div>
+        <div style="font-size:0.78rem;color:#555">${esc(r.who_text)}<br/>${esc(r.where_text)}</div>
         <div style="margin-top:8px;display:flex;gap:10px">
           <a href="/archive/${r.id}" style="font-size:0.78rem;color:#3A7A67;font-weight:600">ดูรายละเอียด →</a>
           <a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" style="font-size:0.78rem;color:#4285F4">Google Maps ↗</a>

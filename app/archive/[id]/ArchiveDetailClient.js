@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { esc } from '../../../lib/htmlesc';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabase';
@@ -113,7 +114,7 @@ export default function ArchiveDetailClient() {
             </a>
           </div>
           <LeafletMap height="300px"
-            markers={[{ lat: rec.lat, lng: rec.lng, popupHtml: `<b>${rec.what_text}</b><br/>${rec.where_text}` }]}
+            markers={[{ lat: rec.lat, lng: rec.lng, popupHtml: `<b>${esc(rec.what_text)}</b><br/>${esc(rec.where_text)}` }]}
             center={[rec.lat, rec.lng]} zoom={13} />
         </div>
       )}
