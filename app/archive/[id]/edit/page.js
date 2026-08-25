@@ -1,92 +1,24 @@
-'use client';
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { supabase } from '../../../../lib/supabase';
-import { useMe } from '../../../../components/Gate';
+import ArchiveDetailClient from './ArchiveDetailClient';
 
-const F = [
-  ['who_text', 'ใคร', 'ชื่อบุคคล / คณะ / หน่วยงาน'],
-  ['what_text', 'ทำอะไร (หัวเรื่อง) *', 'สรุปเหตุการณ์สั้นๆ'],
-  ['when_text', 'เมื่อไหร่', 'เช่น พ.ศ. ๒๔๖๖ หรือ ราวรัชกาลที่ ๕'],
-  ['where_text', 'ที่ไหน', 'สถานที่'],
-  ['era', 'ยุคสมัย', 'เช่น รัชกาลที่ 5'],
-];
+export async function generateMetadata({ params }) {
+  let rec = null;
+  try {
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/archive_records?id=eq.${encodeURIComponent(params.id)}&select=what_text,who_text,when_text`,
+      { headers: { apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY }, next: { revalidate: 3600 } }
+    );
+    const rows = await res.json();
+    rec = rows?.[0] ?? null;
+  } catch {}
+  const title = rec ? `${rec.what_text} — หอจดหมายเหตุดนตรีไทย` : 'หอจดหมายเหตุดนตรีไทย';
+  const description = rec ? `${rec.who_text} · ${rec.when_text}` : 'บันทึกเหตุการณ์ดนตรีไทย อดีต ปัจจุบัน อนาคต';
+  return {
+    title, description,
+    openGraph: { title, description, type: 'article' },
+    twitter: { card: 'summary_large_image', title, description },
+  };
+}
 
-export default function EditArchive() {
-  const { id } = useParams();
-  const router = useRouter();
-  const { isAdmin, user, loading } = useMe();
-  const [rec, setRec] = useState(null);
-  const [msg, setMsg] = useState('');
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    supabase.from('archive_records').select('*').eq('id', id).single()
-      .then(({ data }) => setRec(data));
-  }, [id]);
-
-  if (loading || !rec) return <main className="container" style={{paddingTop:'3rem',color:'var(--muted)'}}>กำลังโหลด...</main>;
-  const canEdit = isAdmin || (user && rec.submitted_by === user.id);
-  if (!canEdit) return (
-    <main className="container" style={{maxWidth:'520px',textAlign:'center',paddingTop:'4rem'}}>
-      <div style={{fontSize:'2rem'}}>🔒</div>
-      <div style={{margin:'0.8rem 0'}}>แก้ไขได้เฉพาะผู้บันทึกข้อมูลนี้หรือผู้ดูแล</div>
-      <a href={`/archive/${id}`}><button className="btn btn-outline btn-sm">← กลับ</button></a>
-    </main>
-  );
-
-  const set = (k, v) => setRec({ ...rec, [k]: v });
-
-  async function save() {
-    if (!rec.what_text?.trim()) { setMsg('⚠ กรอกหัวเรื่องก่อน'); return; }
-    setBusy(true);
-    const patch = {};
-    F.forEach(([k]) => { patch[k] = rec[k] ?? null; });
-    patch.description = rec.description ?? null;
-    patch.lat = rec.lat === '' ? null : rec.lat;
-    patch.lng = rec.lng === '' ? null : rec.lng;
-    const { error } = await supabase.from('archive_records').update(patch).eq('id', id);
-    setBusy(false);
-    if (error) { setMsg('⚠ ' + error.message); return; }
-    router.push(`/archive/${id}`);
-  }
-
-  return (
-    <main className="container" style={{maxWidth:'700px'}}>
-      <a href={`/archive/${id}`} style={{fontSize:'0.8rem',color:'var(--gold2)'}}>← กลับหน้าเหตุการณ์</a>
-      <div className="section-title" style={{fontSize:'1.2rem',marginTop:'0.8rem'}}>✏️ แก้ไขเหตุการณ์</div>
-      <div className="card" style={{marginTop:'1rem'}}>
-        {F.map(([k, label, ph]) => (
-          <div className="form-group" key={k}>
-            <label className="form-label">{label}</label>
-            <input className="form-input" value={rec[k] ?? ''} placeholder={ph}
-              onChange={e => set(k, e.target.value)} />
-          </div>
-        ))}
-        <div className="form-group">
-          <label className="form-label">รายละเอียด / คำอธิบาย</label>
-          <textarea className="form-input" rows="7" value={rec.description ?? ''}
-            onChange={e => set('description', e.target.value)} style={{resize:'vertical'}} />
-        </div>
-        <div style={{display:'flex',gap:'10px'}}>
-          <div className="form-group" style={{flex:1}}>
-            <label className="form-label">ละติจูด</label>
-            <input className="form-input" value={rec.lat ?? ''} onChange={e => set('lat', e.target.value)} />
-          </div>
-          <div className="form-group" style={{flex:1}}>
-            <label className="form-label">ลองจิจูด</label>
-            <input className="form-input" value={rec.lng ?? ''} onChange={e => set('lng', e.target.value)} />
-          </div>
-        </div>
-        {msg && <div style={{fontSize:'0.8rem',color:'var(--gold)',marginBottom:'0.6rem'}}>{msg}</div>}
-        <div style={{display:'flex',gap:'8px'}}>
-          <button className="btn btn-primary btn-sm" disabled={busy} onClick={save}>💾 บันทึกการแก้ไข</button>
-          <a href={`/archive/${id}`}><button className="btn btn-outline btn-sm">ยกเลิก</button></a>
-        </div>
-        <div style={{fontSize:'0.68rem',color:'var(--muted)',marginTop:'0.8rem'}}>
-          * เพิ่ม/ลบรูปประกอบได้ที่หน้าเหตุการณ์
-        </div>
-      </div>
-    </main>
-  );
+export default function Page() {
+  return <ArchiveDetailClient />;
 }
