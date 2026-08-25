@@ -16,7 +16,7 @@ import dynamic from 'next/dynamic';
 import { NotationEngine } from '../lib/notation-engine';
 import { textToVerses, versesToRows, hasSound } from '../lib/notation-core';
 import { loadGongSamples, playSampleNote } from '../lib/sampler';
-import { parsePattern, playPercussion } from '../lib/nathab';
+import { parsePattern, playPercussion, loadDrumBank } from '../lib/nathab';
 import { supabase } from '../lib/supabase';
 
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
@@ -29,7 +29,11 @@ const AUDIO = {
 // หน้าทับกลองจากตาราง nathab_patterns (แอดมินแก้ได้ในหน้า admin)
 let _nathabCache = null;
 const PERC = {
-  load: async () => {
+  load: async (ctx, instrument) => {
+    // โหลดเสียงจริงของกลองที่เลือกและฉิ่งไว้ล่วงหน้า (ไม่มีไฟล์ = ใช้เสียงสังเคราะห์)
+    if (ctx) {
+      try { await Promise.all([loadDrumBank(ctx, instrument), loadDrumBank(ctx, 'ฉิ่ง')]); } catch (e) {}
+    }
     if (_nathabCache) return _nathabCache;
     const { data } = await supabase.from('nathab_patterns').select('*');
     _nathabCache = data ?? []; return _nathabCache;

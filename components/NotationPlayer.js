@@ -3,7 +3,7 @@ import { usePermissions } from './Gate';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadGongSamples, playSampleNote, samplesAvailable } from '../lib/sampler';
-import { CHING_PATTERNS, parsePattern, playPercussion } from '../lib/nathab';
+import { CHING_PATTERNS, parsePattern, playPercussion, loadDrumBank } from '../lib/nathab';
 const TH_COLS = ['ด','ร','ม','ฟ','ซ','ล','ท'];
 const TH_ROWS = { '-1': 'zxcvbnm', '0': 'asdfghj', '1': 'qwertyu' };
 const noteKey = n => TH_ROWS[String(n.register ?? 0)]?.[TH_COLS.indexOf(n.ch)] ?? n.ch;
@@ -251,6 +251,11 @@ export default function NotationPlayer({ verses, lyrics }) {
     let drumHits = null, drumLen = 0;
     let marks = null;
     if (nathab !== 'none' || chingOn) {
+      // โหลดเสียงจริงของเครื่องที่เลือก (ถ้ายังไม่มีไฟล์ ระบบใช้เสียงสังเคราะห์ต่อไป)
+      await Promise.all([
+        nathab !== 'none' ? loadDrumBank(ctx, drumInst) : null,
+        chingOn ? loadDrumBank(ctx, 'ฉิ่ง') : null,
+      ].filter(Boolean));
       if (nathab !== 'none') {
         if (!nathabRowsRef.current) {
           const { data } = await supabase.from('nathab_patterns').select('*');
@@ -287,9 +292,9 @@ export default function NotationPlayer({ verses, lyrics }) {
       if (drumHits && drumLen > 0) {
         // กลองนับตามลำดับที่เล่นจริง (i) — กลับต้นแล้วหน้าทับเดินต่อเนื่องไม่สะดุด
         const pp = (i % drumLen) + 1;
-        drumHits.forEach(h => { if (h.pos === pp) q(t, () => playPercussion(ctx, h.syll, t, 0.75)); });
+        drumHits.forEach(h => { if (h.pos === pp) q(t, () => playPercussion(ctx, h.syll, t, 0.75, drumInst)); });
       }
-      if (chingOn && marks && marks[s]) { const syll = marks[s]; q(t, () => playPercussion(ctx, syll, t, 0.7)); }
+      if (chingOn && marks && marks[s]) { const syll = marks[s]; q(t, () => playPercussion(ctx, syll, t, 0.7, 'ฉิ่ง')); }
     };
 
     // ── ลำดับการเล่น (การกลับต้น) ──
