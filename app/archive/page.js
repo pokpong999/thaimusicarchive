@@ -3,6 +3,7 @@ import { EText, EImage } from '../../components/Editable';
 import { usePermissions } from '../../components/Gate';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
+import { fmtDT } from '../../lib/fmtdate';
 import { supabase } from '../../lib/supabase';
 import LeafletMap from '../../components/LeafletMap';
 import { esc } from '../../lib/htmlesc';
@@ -169,6 +170,7 @@ function eraColor(year, minY, maxY) {
                     </div>
                     <div style={{fontWeight:600,fontSize:'1rem',margin:'6px 0 2px'}}>{r.what_text}</div>
                     <div style={{fontSize:'0.82rem',color:'var(--muted)'}}>{r.who_text} · {r.where_text}</div>
+                    {r.created_at && <div style={{fontSize:'0.66rem',color:'var(--muted)',opacity:.8,marginTop:'3px'}}>🕒 บันทึกเมื่อ {fmtDT(r.created_at)}</div>}
                   </div>
                   {(isAdmin || r.submitted_by === myId) && <button className="btn btn-danger btn-sm"
                     style={{marginLeft:'auto',alignSelf:'flex-start',flexShrink:0}}

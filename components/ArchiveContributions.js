@@ -13,7 +13,8 @@ import Avatar from './Avatar';
 import RankBadge from './RankBadge';
 
 const BUCKET = 'archive-images';
-const fmtDate = s => new Date(s).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+import { fmtDT } from '../lib/fmtdate';
+const fmtDate = s => fmtDT(s);
 
 export default function ArchiveContributions({ recordId, recordOwner }) {
   const me = useMe();

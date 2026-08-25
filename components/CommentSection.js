@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { fmtDT } from '../lib/fmtdate';
 import { supabase } from '../lib/supabase';
 import { shrinkImage } from '../lib/imgresize';
 import { useMe } from './Gate';
@@ -145,8 +146,8 @@ export default function CommentSection({ targetType, targetId, canPost = true })
                   <span style={{fontWeight:600,fontSize:'0.84rem',cursor:'pointer'}}>{c.profiles?.display_name ?? 'สมาชิก'}</span>
                 </Link>
                 <RankBadge points={c.profiles?.points} />
-                <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>
-                  {new Date(c.created_at).toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'numeric' })}
+                <span style={{fontSize:'0.68rem',color:'var(--muted)'}} title="วัน-เวลาที่โพสต์">
+                  {fmtDT(c.created_at)}
                 </span>
               </div>
               {canDelete && (

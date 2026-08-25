@@ -6,6 +6,7 @@ import { textToVerses, versesToRows, rowsToVerses } from '../../lib/notation-cor
 import NotationInput from '../../components/NotationInput';
 import { NathabPreview } from '../../components/NathabEditor';
 import { invalidateNathabLibrary } from '../../lib/nathab';
+import { fmtDT, ago } from '../../lib/fmtdate';
 
 // กระดานอ่านอย่างเดียวสำหรับดู/ฟังโน้ตที่ส่งมาก่อนอนุมัติ
 function SubmissionBoard({ sub }) {
@@ -42,6 +43,7 @@ export default function AdminPage() {
   const [songIdInput, setSongIdInput] = useState({});
   const [members, setMembers] = useState([]);
   const [nathabRows, setNathabRows] = useState([]);
+  const [activity, setActivity] = useState({});   // id → {joined_at, last_sign_in_at}
   const [mgQ, setMgQ] = useState('');
   const [mgSongs, setMgSongs] = useState([]);
   const [mgRecords, setMgRecords] = useState([]);
@@ -135,6 +137,11 @@ export default function AdminPage() {
     const { data: mb } = await supabase.from('profiles')
       .select('*').order('points', { ascending: false });
     setMembers(mb ?? []);
+    // วันสมัคร/เข้าใช้ล่าสุด จาก auth.users (แอดมินเท่านั้น · ต้องรัน sql/10_timestamps.sql)
+    try {
+      const { data: act } = await supabase.rpc('thma_member_activity');
+      const m = {}; (act ?? []).forEach(a => { m[a.id] = a; }); setActivity(m);
+    } catch (e) {}
     const { data: np } = await supabase.from('nathab_patterns').select('*').order('id');
     setNathabRows(np ?? []);
     const { data: mr } = await supabase.from('archive_records')
@@ -403,11 +410,11 @@ export default function AdminPage() {
       js.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
       js.onload = res; document.head.appendChild(js);
     });
-    const rows = [['ชื่อ','อีเมล','เบอร์โทร','LINE','สำนัก/วง','จังหวัด','แต้ม','สถานะ','สมัครเมื่อ']];
+    const rows = [['ชื่อ','อีเมล','เบอร์โทร','LINE','สำนัก/วง','จังหวัด','แต้ม','สถานะ','สมัครเมื่อ','เข้าใช้ล่าสุด']];
     members.forEach(m => rows.push([
       m.display_name ?? '', m.email ?? '', m.phone ?? '', m.line_id ?? '',
       m.organization ?? '', m.province ?? '', m.points ?? 0, m.role ?? '',
-      m.created_at ? new Date(m.created_at).toLocaleDateString('th-TH') : '',
+      fmtDT(activity[m.id]?.joined_at ?? m.created_at), fmtDT(activity[m.id]?.last_sign_in_at),
     ]));
     const ws = window.XLSX.utils.aoa_to_sheet(rows);
     ws['!cols'] = rows[0].map(() => ({ wch: 18 }));
@@ -873,7 +880,7 @@ export default function AdminPage() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>ชื่อ</th><th>อีเมล</th><th>โทร</th><th>LINE</th><th>สำนัก</th><th>จังหวัด</th><th>แต้ม</th><th>สถานะ</th></tr></thead>
+              <thead><tr><th>ชื่อ</th><th>อีเมล</th><th>โทร</th><th>LINE</th><th>สำนัก</th><th>จังหวัด</th><th>แต้ม</th><th>สมัครเมื่อ</th><th>เข้าใช้ล่าสุด</th><th>สถานะ</th></tr></thead>
               <tbody>
                 {members.map(m => (
                   <tr key={m.id}>
@@ -884,6 +891,8 @@ export default function AdminPage() {
                     <td style={{fontSize:'0.72rem'}}>{m.organization ?? '—'}</td>
                     <td style={{fontSize:'0.72rem'}}>{m.province ?? '—'}</td>
                     <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{m.points ?? 0}</td>
+                    <td style={{fontSize:'0.7rem',whiteSpace:'nowrap'}} title={activity[m.id]?.joined_at ?? m.created_at ?? ''}>{fmtDT(activity[m.id]?.joined_at ?? m.created_at) || '—'}</td>
+                    <td style={{fontSize:'0.7rem',whiteSpace:'nowrap',color:'var(--muted)'}} title={fmtDT(activity[m.id]?.last_sign_in_at)}>{activity[m.id]?.last_sign_in_at ? ago(activity[m.id].last_sign_in_at) : '—'}</td>
                     <td>
                       <select className="filter-select" value={m.role ?? 'member'}
                         onChange={e => setMemberRole(m.id, e.target.value)}
@@ -1067,7 +1076,7 @@ export default function AdminPage() {
           </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>ชื่อ</th><th>อีเมล</th><th>โทร</th><th>LINE</th><th>สำนัก</th><th>จังหวัด</th><th>แต้ม</th><th>สถานะ</th></tr></thead>
+              <thead><tr><th>ชื่อ</th><th>อีเมล</th><th>โทร</th><th>LINE</th><th>สำนัก</th><th>จังหวัด</th><th>แต้ม</th><th>สมัครเมื่อ</th><th>เข้าใช้ล่าสุด</th><th>สถานะ</th></tr></thead>
               <tbody>
                 {members.map(m => (
                   <tr key={m.id}>
@@ -1078,6 +1087,8 @@ export default function AdminPage() {
                     <td style={{fontSize:'0.72rem'}}>{m.organization ?? '—'}</td>
                     <td style={{fontSize:'0.72rem'}}>{m.province ?? '—'}</td>
                     <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{m.points ?? 0}</td>
+                    <td style={{fontSize:'0.7rem',whiteSpace:'nowrap'}} title={activity[m.id]?.joined_at ?? m.created_at ?? ''}>{fmtDT(activity[m.id]?.joined_at ?? m.created_at) || '—'}</td>
+                    <td style={{fontSize:'0.7rem',whiteSpace:'nowrap',color:'var(--muted)'}} title={fmtDT(activity[m.id]?.last_sign_in_at)}>{activity[m.id]?.last_sign_in_at ? ago(activity[m.id].last_sign_in_at) : '—'}</td>
                     <td>
                       <select className="filter-select" value={m.role ?? 'member'}
                         onChange={e => setMemberRole(m.id, e.target.value)}
