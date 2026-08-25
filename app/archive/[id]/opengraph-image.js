@@ -1,14 +1,16 @@
 import { ImageResponse } from 'next/og';
 import { createElement as h } from 'react';
 import { thaiFont, latinFont } from '../../../lib/ogFonts';
+import { fit, clip, COLORS as C } from '../../../lib/og-layout';
 
-export const runtime = 'nodejs';
+export const runtime = 'nodejs';          // ต้องเป็น Node — Intl.Segmenter ต้องใช้ ICU เต็ม
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
 const SB = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-// ดึงข้อมูลแบบมีเวลาจำกัด — ถ้าช้าเกินให้ปล่อยผ่าน จะได้สร้างภาพทันก่อนตัวดึงข้อมูลหมดเวลา
+const BUCKET = 'archive-images';
+
 async function fetchT(url, opts = {}, ms = 2500) {
   const c = new AbortController();
   const t = setTimeout(() => c.abort(), ms);
@@ -16,92 +18,107 @@ async function fetchT(url, opts = {}, ms = 2500) {
   finally { clearTimeout(t); }
 }
 
-const D = (style, ...children) =>
-  h('div', { style: { display: 'flex', ...style } }, ...children);
+const D = (style, ...children) => h('div', { style: { display: 'flex', ...style } }, ...children);
+
+const PHOTO_W = 452;
+const PAD_X = 62;
+
+export function buildTree({ what, who, when, where, photo }) {
+  // ขีดยาวเป็นตัวคั่นหัวเรื่องกับคำขยาย — ให้เป็นจุดขึ้นบรรทัดใหม่แทน
+  what  = clip(what, 96).replace(/\s*[—–]\s*/g, ' ') || 'หอจดหมายเหตุดนตรีไทย';
+  who   = clip(who, 48);
+  when  = clip(when, 42);
+  where = clip(where, 52);
+
+  const panelW = photo ? 1200 - PHOTO_W : 1200;
+  const textW  = panelW - PAD_X * 2;
+  const { size: tSize, lines } = fit(what, {
+    max: photo ? 58 : 64, min: 30, width: textW, maxLines: 3,
+  });
+  const lh = Math.round(tSize * 1.3);
+
+  const panel = D(
+    { flexDirection: 'column', justifyContent: 'space-between', width: panelW + 'px',
+      height: '100%', padding: `52px ${PAD_X}px 46px`, background: C.navy },
+    D({ alignItems: 'center', gap: '13px' },
+      D({ width: '34px', height: '34px', borderRadius: '50%', border: `3px solid ${C.gold}`,
+          alignItems: 'center', justifyContent: 'center' },
+        D({ width: '12px', height: '12px', borderRadius: '50%', background: C.gold })),
+      D({ color: C.muted, fontSize: '21px', letterSpacing: '0.3px' },
+        'หอจดหมายเหตุดนตรีไทย · Thai Music Archive')),
+    // flex:1 + จัดกึ่งกลาง กันหัวเรื่องยาวไปชนหัวกระดาษ
+    D({ flexDirection: 'column', flex: 1, justifyContent: 'center',
+        paddingTop: '26px', paddingBottom: '22px' },
+      // วันที่กับผู้เกี่ยวข้องแยกคนละบรรทัดเสมอ — กันตัวคั่นหล่นบรรทัดเวลาชื่อยาว
+      D({ flexDirection: 'column', marginBottom: '16px' },
+        when ? D({ color: C.gold, fontSize: '25px', lineHeight: '34px' }, when) : D({}),
+        who  ? D({ color: C.muted, fontSize: '25px', lineHeight: '34px' }, who) : D({})),
+      D({ flexDirection: 'column' },
+        ...lines.map((ln, i) =>
+          D({ key: 'l' + i, color: C.cream, fontSize: tSize + 'px', fontWeight: 700,
+              lineHeight: lh + 'px', height: lh + 'px' }, ln))),
+      where
+        ? D({ marginTop: '16px', alignItems: 'center', gap: '9px' },
+            D({ width: '9px', height: '9px', background: C.jade, transform: 'rotate(45deg)' }),
+            D({ color: C.jade, fontSize: '24px' }, where))
+        : D({})),
+    D({ color: C.muted, fontSize: '20px', letterSpacing: '0.6px', marginTop: '18px' },
+      'thaimusicarchive.com'),
+  );
+
+  return D(
+    { width: '100%', height: '100%', background: C.navy, fontFamily: 'NotoThai',
+      borderTop: `9px solid ${C.gold}`, borderBottom: `9px solid ${C.gold}` },
+    panel,
+    photo
+      ? D({ width: PHOTO_W + 'px', height: '100%', position: 'relative',
+            borderLeft: `3px solid ${C.gold}` },
+          h('img', { src: photo, width: PHOTO_W, height: 612,
+            style: { width: PHOTO_W + 'px', height: '612px', objectFit: 'cover' } }))
+      : D({}),
+  );
+}
 
 export default async function OgImage({ params }) {
-  let what = 'หอจดหมายเหตุดนตรีไทย', who = '', when = '', where = '';
-  let photo = null;
+  let what = '', who = '', when = '', where = '', photo = null;
 
   try {
     const res = await fetchT(
       `${SB}/rest/v1/archive_records?id=eq.${encodeURIComponent(params.id)}&select=what_text,who_text,when_text,where_text`,
-      { headers: { apikey: KEY } }
-    );
+      { headers: { apikey: KEY } });
     const rows = await res.json();
     if (rows?.[0]) {
-      what = rows[0].what_text || what; who = rows[0].who_text || '';
+      what = rows[0].what_text || ''; who = rows[0].who_text || '';
       when = rows[0].when_text || ''; where = rows[0].where_text || '';
     }
     const mres = await fetchT(
       `${SB}/rest/v1/archive_media?record_id=eq.${encodeURIComponent(params.id)}&media_type=eq.image&select=id,storage_path&order=id.asc&limit=4`,
-      { headers: { apikey: KEY } }
-    );
+      { headers: { apikey: KEY } });
     const media = await mres.json();
-    // ไล่ทีละรูปจนกว่าจะได้รูปที่ฝังในภาพแชร์ได้
-    // สำคัญ: ดึงผ่าน render/image ให้ Supabase ย่อรูปให้ก่อน (1200×630 ~150 KB)
-    // ของเดิมดึงไฟล์ต้นฉบับ รูปจากกล้อง 2–5 MB จึงถูกข้ามทุกใบ → การ์ดแชร์ไม่มีรูป
-    const BUCKET = 'archive-images';
+
+    // ดึงผ่าน render/image ให้ Supabase ย่อรูปให้ก่อน (เหลือ ~150 KB)
+    // ถ้าดึงไฟล์ต้นฉบับ รูปจากกล้อง 2–5 MB จะช้าและถูกข้าม → การ์ดแชร์ไม่มีรูป
     const urlsFor = p => [
-      `${SB}/storage/v1/render/image/public/${BUCKET}/${p}?width=1200&height=630&resize=cover&quality=72`,
+      `${SB}/storage/v1/render/image/public/${BUCKET}/${p}?width=904&height=1224&resize=cover&quality=72`,
       `${SB}/storage/v1/object/public/${BUCKET}/${p}`,
     ];
     for (const m of (Array.isArray(media) ? media : [])) {
       if (!m?.storage_path) continue;
       for (const url of urlsFor(m.storage_path)) {
         try {
-          const imgRes = await fetchT(url, {}, 6000);
-          if (!imgRes.ok) continue;
-          const ct = imgRes.headers.get('content-type') || '';
+          const r = await fetchT(url, {}, 6000);
+          if (!r.ok) continue;
+          const ct = (r.headers.get('content-type') || '').split(';')[0];
           if (!/^image\/(jpeg|png|webp|avif)/.test(ct)) continue;
-          const buf = Buffer.from(await imgRes.arrayBuffer());
-          if (buf.length > 5 * 1024 * 1024) continue;   // ใหญ่เกินจริง ๆ ข้ามไปรูปถัดไป
-          photo = `data:${ct.split(';')[0]};base64,${buf.toString('base64')}`;
+          const buf = Buffer.from(await r.arrayBuffer());
+          if (buf.length > 5 * 1024 * 1024) continue;
+          photo = `data:${ct};base64,${buf.toString('base64')}`;
           break;
         } catch { /* ลิงก์นี้ไม่ได้ ลองแบบถัดไป */ }
       }
       if (photo) break;
     }
   } catch {}
-
-  const clip = (t, n) => { t = (t ?? '').trim(); return t.length > n ? t.slice(0, n - 1).trim() + '…' : t; };
-  what = clip(what, 58); who = clip(who, 42); when = clip(when, 30); where = clip(where, 40);
-
-  const whatSize = photo
-    ? (what.length > 44 ? 38 : what.length > 30 ? 46 : what.length > 16 ? 56 : 68)
-    : (what.length > 44 ? 42 : what.length > 30 ? 50 : what.length > 16 ? 62 : 78);
-
-  const build = (photo) => {
-  const textCol = D(
-    { flexDirection: 'column', justifyContent: 'space-between', flex: 1, height: '100%',
-      padding: photo ? '64px 72px 60px' : '64px 84px 60px' },
-    D({ alignItems: 'center', gap: '14px' },
-      D({ width: '38px', height: '38px', borderRadius: '50%', border: '3px solid #C9A84C',
-          alignItems: 'center', justifyContent: 'center' },
-        D({ width: '13px', height: '13px', borderRadius: '50%', background: '#C9A84C' })),
-      D({ color: '#8A9BB5', fontSize: '24px' }, 'หอจดหมายเหตุดนตรีไทย · Thai Music Archive')),
-    D({ flexDirection: 'column' },
-      when ? D({ color: '#C9A84C', fontSize: '28px', marginBottom: '8px' }, when) : D({}),
-      who ? D({ color: '#8A9BB5', fontSize: '30px', marginBottom: '10px' }, who) : D({}),
-      D({ color: '#F5F0E8', fontSize: `${whatSize}px`, fontWeight: 700, lineHeight: 1.22, maxWidth: '100%' }, what),
-      where ? D({ color: '#4C9A84', fontSize: '28px', marginTop: '12px' }, '◆ ' + where) : D({})),
-    D({ color: '#8A9BB5', fontSize: '22px' }, 'thaimusicarchive.com')
-  );
-
-  return D(
-    { width: '100%', height: '100%', position: 'relative', background: '#0F1B2D',
-      borderTop: '10px solid #C9A84C', borderBottom: '10px solid #C9A84C',
-      fontFamily: 'NotoThai' },
-    ...(photo ? [
-      h('img', { key: 'p', src: photo, width: 1200, height: 630,
-        style: { position: 'absolute', top: 0, left: 0, width: '1200px', height: '630px', objectFit: 'cover' } }),
-      D({ position: 'absolute', top: 0, left: 0, width: '1200px', height: '630px',
-          background: 'linear-gradient(90deg, rgba(9,17,30,0.97) 0%, rgba(9,17,30,0.93) 42%, rgba(9,17,30,0.55) 72%, rgba(9,17,30,0.30) 100%)' }),
-      D({ position: 'relative', width: '760px', height: '630px' }, textCol),
-    ] : [textCol])
-  );
-  };
-  const tree = build(photo);
 
   const opts = {
     ...size,
@@ -112,9 +129,9 @@ export default async function OgImage({ params }) {
     ],
   };
   try {
-    return new ImageResponse(tree, opts);
+    return new ImageResponse(buildTree({ what, who, when, where, photo }), opts);
   } catch (e) {
-    // กันพลาด: ถ้าฝังรูปไม่สำเร็จ ยังต้องได้ภาพแชร์แบบข้อความล้วน
-    return new ImageResponse(build(null), opts);
+    // กันพลาด: ฝังรูปไม่สำเร็จ ยังต้องได้ภาพแชร์แบบข้อความล้วน
+    return new ImageResponse(buildTree({ what, who, when, where, photo: null }), opts);
   }
 }
