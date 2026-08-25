@@ -16,8 +16,7 @@ import dynamic from 'next/dynamic';
 import { NotationEngine } from '../lib/notation-engine';
 import { textToVerses, versesToRows, hasSound } from '../lib/notation-core';
 import { loadGongSamples, playSampleNote } from '../lib/sampler';
-import { parsePattern, playPercussion, loadDrumBank } from '../lib/nathab';
-import { supabase } from '../lib/supabase';
+import { parsePattern, playPercussion, loadDrumBank, loadNathabLibrary, nathabNames, findPattern, approvedRows } from '../lib/nathab';
 
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
 
@@ -26,18 +25,17 @@ const AUDIO = {
   load: ctx => loadGongSamples(ctx),
   play: (ctx, buf, ch, reg, t, gain, shift) => playSampleNote(ctx, buf, ch, reg, t, gain, shift),
 };
-// หน้าทับกลองจากตาราง nathab_patterns (แอดมินแก้ได้ในหน้า admin)
-let _nathabCache = null;
+// หน้าทับกลองจากคลังหน้าทับกลาง (/nathab) — ตาราง nathab_patterns เฉพาะแถวที่อนุมัติแล้ว
 const PERC = {
   load: async (ctx, instrument) => {
     // โหลดเสียงจริงของกลองที่เลือกและฉิ่งไว้ล่วงหน้า (ไม่มีไฟล์ = ใช้เสียงสังเคราะห์)
     if (ctx) {
       try { await Promise.all([loadDrumBank(ctx, instrument), loadDrumBank(ctx, 'ฉิ่ง')]); } catch (e) {}
     }
-    if (_nathabCache) return _nathabCache;
-    const { data } = await supabase.from('nathab_patterns').select('*');
-    _nathabCache = data ?? []; return _nathabCache;
+    return approvedRows(await loadNathabLibrary());
   },
+  // หาแถวที่ตรงเครื่อง/อัตราที่สุด (ตกลงมาที่ 'ทุกอัตรา' หรือเครื่องตระกูลเดียวกันได้)
+  find: (rows, nathab, level, instrument) => findPattern(rows, nathab, level, instrument),
   parse: parsePattern, play: playPercussion,
 };
 
@@ -100,6 +98,8 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
       },
     });
     engRef.current = eng;
+    // รายชื่อหน้าทับใน dropdown "กลอง" มาจากคลังกลาง (ไม่ใช่ค่าตายตัว)
+    loadNathabLibrary().then(rows => { if (engRef.current === eng) eng.setNathabOptions(nathabNames(rows)); }).catch(() => {});
     if (draftKey && !options.readOnly) {
       const d = readDraft(draftKey);
       if (d && d.verses && d.verses.some(hasSound)) setDraft(d);

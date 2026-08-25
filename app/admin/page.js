@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../lib/supabase';
 import { textToVerses, versesToRows, rowsToVerses } from '../../lib/notation-core';
 import NotationInput from '../../components/NotationInput';
+import { NathabPreview } from '../../components/NathabEditor';
+import { invalidateNathabLibrary } from '../../lib/nathab';
 
 // กระดานอ่านอย่างเดียวสำหรับดู/ฟังโน้ตที่ส่งมาก่อนอนุมัติ
 function SubmissionBoard({ sub }) {
@@ -339,10 +341,13 @@ export default function AdminPage() {
     if (error) { alert('เปลี่ยนสิทธิ์ไม่สำเร็จ: ' + error.message); return; }
     loadAll();
   }
-  async function saveNathab(row) {
-    const { error } = await supabase.from('nathab_patterns')
-      .update({ pattern_text: row.pattern_text }).eq('id', row.id);
-    setMgMsg(error ? '⚠ ' + error.message : `✓ บันทึกหน้าทับ ${row.nathab} ${row.level} ${row.instrument}`);
+  // คลังหน้าทับกลาง: แก้/เขียนที่หน้า /nathab · ที่นี่ใช้อนุมัติของที่สมาชิกส่งมา
+  async function judgeNathab(row, ok) {
+    const { error } = await supabase.rpc('approve_nathab', { p_id: String(row.id), p_ok: ok });
+    setMgMsg(error ? '⚠ ' + error.message : (ok ? `✓ อนุมัติหน้าทับ ${row.nathab} · ${row.level} · ${row.instrument} เข้าคลังแล้ว` : `✗ ไม่อนุมัติ ${row.nathab}`));
+    invalidateNathabLibrary();
+    const { data: np } = await supabase.from('nathab_patterns').select('*').order('id');
+    setNathabRows(np ?? []);
   }
 
   const [backupMsg, setBackupMsg] = useState('');
@@ -445,7 +450,7 @@ export default function AdminPage() {
       </div>
 
       <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','หน้าทับ'],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์'],['content','🖼 เนื้อหาเว็บ'],['stats','📈 สถิติ']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','🥁 หน้าทับ'+(nathabRows.filter(r=>r.status==='pending').length?' ('+nathabRows.filter(r=>r.status==='pending').length+')':'')],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์'],['content','🖼 เนื้อหาเว็บ'],['stats','📈 สถิติ']].map(([k,label]) => (
           <div key={k} onClick={() => setTab(k)}
             style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
@@ -738,6 +743,200 @@ export default function AdminPage() {
             })}
           </div>
         </>
+      )}
+
+      {tab === 'stats' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>📈 สถิติการเข้าชมและการแชร์</div>
+          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
+            นับ 1 วิวต่อผู้ชม 1 คนต่อชิ้นงาน ทุก 6 ชั่วโมง · ยอดแชร์นับเมื่อกดปุ่มแชร์
+            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadStats}>โหลดสถิติ</button>
+          </div>
+          {statSum.length > 0 && (
+            <div style={{display:'flex',gap:'12px',flexWrap:'wrap',marginBottom:'1rem'}}>
+              {statSum.map(r => (
+                <div key={r.target_type} className="card" style={{flex:'1 1 190px',margin:0,padding:'0.8rem'}}>
+                  <div style={{fontSize:'0.72rem',color:'var(--muted)'}}>
+                    {r.target_type === 'song' ? '🎵 เพลง' : r.target_type === 'archive' ? '📜 เหตุการณ์' : r.target_type}</div>
+                  <div style={{fontSize:'1.3rem',fontWeight:700,color:'var(--gold)'}}>
+                    👁 {Number(r.total_views ?? 0).toLocaleString('th-TH')}</div>
+                  <div style={{fontSize:'0.78rem',color:'var(--jade)'}}>
+                    ↗ แชร์ {Number(r.total_shares ?? 0).toLocaleString('th-TH')} · {r.items} รายการ</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {['song','archive'].map(t => (statTop[t]?.length > 0 && (
+            <div key={t} style={{marginBottom:'1rem'}}>
+              <div style={{fontWeight:600,fontSize:'0.85rem',marginBottom:'0.4rem'}}>
+                {t === 'song' ? '🎵 เพลงยอดนิยม 15 อันดับ' : '📜 เหตุการณ์ยอดนิยม 15 อันดับ'}</div>
+              {statTop[t].map((r, i) => (
+                <div key={r.target_id} style={{display:'flex',gap:'10px',fontSize:'0.8rem',
+                  padding:'5px 0',borderBottom:'1px solid rgba(42,63,92,0.3)'}}>
+                  <span style={{color:'var(--muted)',width:'22px'}}>{i+1}.</span>
+                  <a href={`/${t === 'song' ? 'songs' : 'archive'}/${r.target_id}`}
+                    style={{flex:1,color:'var(--gold2)',overflow:'hidden',textOverflow:'ellipsis'}}>{r.target_id}</a>
+                  <span>👁 {r.views}</span><span style={{color:'var(--jade)'}}>↗ {r.shares}</span>
+                </div>
+              ))}
+            </div>
+          )))}
+          {statSum.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดสถิติ" (ต้องรัน thma_stats.sql ก่อน)</div>}
+        </div>
+      )}
+
+      {tab === 'content' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🖼 เนื้อหาเว็บที่ถูกแก้ไข</div>
+          <div style={{fontSize:'0.74rem',color:'var(--muted)',lineHeight:1.9,marginBottom:'0.8rem'}}>
+            วิธีแก้ข้อความ/รูป: เข้าหน้านั้นๆ ขณะล็อกอินเป็น Admin แล้วกดปุ่ม ✏️ ข้างข้อความ หรือปุ่ม ＋ เพิ่มรูป บนกรอบรูป<br/>
+            ตารางนี้แสดงรายการที่แก้ไปแล้ว กด "คืนค่าเดิม" เพื่อกลับไปใช้ข้อความต้นฉบับในโค้ด
+            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadSC}>โหลดรายการ</button>
+          </div>
+          {scMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{scMsg}</div>}
+          {scRows.map(r => (
+            <div key={r.key} style={{display:'flex',gap:'10px',alignItems:'flex-start',
+              padding:'8px 0',borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:'0.72rem',color:'var(--gold)'}}>{r.key}</div>
+                <div style={{fontSize:'0.8rem',color:'var(--cream)',whiteSpace:'pre-wrap',
+                  maxHeight:'60px',overflow:'hidden'}}>{r.text_value ?? (r.image_path ? '🖼 ' + r.image_path : '—')}</div>
+              </div>
+              <button className="btn btn-outline btn-sm" onClick={() => clearSC(r.key)}
+                style={{fontSize:'0.68rem'}}>↺ คืนค่าเดิม</button>
+            </div>
+          ))}
+          {scRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>ยังไม่มีการแก้ไข (หรือกดโหลดรายการ)</div>}
+        </div>
+      )}
+
+      {tab === 'perm' && (
+        <div className="card">
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🔐 ตารางสิทธิ์การมองเห็น</div>
+          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
+            ติ๊ก = เปิดให้เห็น/ใช้งาน · บันทึกและมีผลทันทีทั้งเว็บ · คอลัมน์ Admin ล็อกเปิดเสมอ
+            {permRows.length === 0 && <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadPerms}>โหลดตาราง</button>}
+          </div>
+          {permMsg && <div style={{fontSize:'0.78rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{permMsg}</div>}
+          {permRows.length > 0 && (
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
+                <thead><tr style={{borderBottom:'2px solid var(--border)'}}>
+                  <th style={{textAlign:'left',padding:'6px'}}>สิทธิ์</th>
+                  <th style={{padding:'6px'}}>👤 ผู้เยี่ยมชม</th>
+                  <th style={{padding:'6px'}}>สมาชิกฟรี</th>
+                  <th style={{padding:'6px'}}>💎 อุปถัมภ์</th>
+                  <th style={{padding:'6px'}}>Admin</th>
+                </tr></thead>
+                <tbody>
+                  {permRows.map((row, i) => (
+                    <>
+                      {(i === 0 || permRows[i-1].section !== row.section) && (
+                        <tr key={row.section}><td colSpan={5} style={{padding:'10px 6px 4px',color:'var(--gold)',fontWeight:700,fontSize:'0.75rem'}}>▸ {row.section}</td></tr>
+                      )}
+                      <tr key={row.feature_key} style={{borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
+                        <td style={{padding:'6px'}}>{row.label}</td>
+                        {['guest','free','premium'].map(tk => (
+                          <td key={tk} style={{textAlign:'center'}}>
+                            <input type="checkbox" checked={!!row[tk]} onChange={() => togglePerm(row, tk)}
+                              style={{width:'17px',height:'17px',accentColor:'var(--gold)',cursor:'pointer'}} />
+                          </td>
+                        ))}
+                        <td style={{textAlign:'center'}}>
+                          <input type="checkbox" checked disabled style={{width:'17px',height:'17px',accentColor:'var(--jade)'}} />
+                        </td>
+                      </tr>
+                    </>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {permRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดตาราง" (ต้องรัน thma_permissions.sql ก่อน)</div>}
+        </div>
+      )}
+
+      {tab === 'members' && (
+        <div className="card">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.8rem'}}>
+            <div style={{fontWeight:600}}>👥 สมาชิกทั้งหมด ({members.length})</div>
+            <button className="btn btn-jade btn-sm" onClick={exportMembers}>📊 Export Excel</button>
+          </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>ชื่อ</th><th>อีเมล</th><th>โทร</th><th>LINE</th><th>สำนัก</th><th>จังหวัด</th><th>แต้ม</th><th>สถานะ</th></tr></thead>
+              <tbody>
+                {members.map(m => (
+                  <tr key={m.id}>
+                    <td>{m.display_name ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.email ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.phone ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.line_id ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.organization ?? '—'}</td>
+                    <td style={{fontSize:'0.72rem'}}>{m.province ?? '—'}</td>
+                    <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{m.points ?? 0}</td>
+                    <td>
+                      <select className="filter-select" value={m.role ?? 'member'}
+                        onChange={e => setMemberRole(m.id, e.target.value)}
+                        disabled={m.role === 'admin' && !isRealAdmin}
+                        title={m.role === 'admin' && !isRealAdmin ? 'บัญชีแอดมิน — แก้ได้เฉพาะแอดมินด้วยกัน' : ''}
+                        style={{fontSize:'0.72rem',padding:'2px 6px'}}>
+                        <option value="member">สมาชิก</option>
+                        <option value="student">🎓 Student (ใช้กระดานโน้ตได้)</option>
+                        <option value="superuser">👁 Super user (เห็นทุกอย่าง)</option>
+                        <option value="moderator">🛡 Moderator</option>
+                        {(isRealAdmin || m.role === 'admin') && <option value="admin">⭐ Admin</option>}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'nathab' && (
+        <div>
+          <div className="card" style={{fontSize:'0.8rem',lineHeight:1.9}}>
+            <b>🥁 คลังหน้าทับกลาง</b> — เขียน/แก้/ลบหน้าทับทั้งหมดได้ที่หน้า{' '}
+            <Link href="/nathab" style={{color:'var(--gold)'}}>/nathab</Link> (แอดมินบันทึกเข้าคลังทันที)
+            · ในคลังตอนนี้ {nathabRows.filter(r => r.status === 'approved').length} รายการ
+            · ผูกหน้าทับกับเพลงได้ที่หน้าเพลง แผง 🥁 หน้าทับ
+          </div>
+          {mgMsg && <div style={{fontSize:'0.8rem',color: mgMsg.startsWith('⚠') ? 'var(--gold)' : 'var(--jade)',margin:'0.5rem 0'}}>{mgMsg}</div>}
+          <div style={{fontWeight:600,fontSize:'0.9rem',margin:'0.8rem 0 0.4rem'}}>
+            ⏳ รออนุมัติ ({nathabRows.filter(r => r.status === 'pending').length})
+          </div>
+          {nathabRows.filter(r => r.status === 'pending').length === 0 && (
+            <div style={{fontSize:'0.8rem',color:'var(--muted)'}}>ไม่มีหน้าทับที่รออนุมัติ</div>
+          )}
+          {nathabRows.filter(r => r.status === 'pending').map(row => {
+            const cur = nathabRows.find(x => x.status === 'approved' && x.nathab === row.nathab && x.level === row.level && x.instrument === row.instrument);
+            const who = members.find(m => m.id === row.submitted_by);
+            return (
+              <div className="card" key={row.id} style={{padding:'0.8rem'}}>
+                <div style={{fontSize:'0.82rem',fontWeight:600,marginBottom:'0.4rem'}}>
+                  {row.nathab} · {row.level} · {row.instrument}
+                  <span style={{fontWeight:400,color:'var(--muted)',fontSize:'0.72rem',marginLeft:8}}>
+                    โดย {who?.display_name ?? '—'} · {row.created_at ? new Date(row.created_at).toLocaleDateString('th-TH') : ''}
+                    {cur ? ' · จะแทนที่แถวเดิมในคลัง' : ' · หน้าทับใหม่'}</span>
+                </div>
+                {row.note && <div style={{fontSize:'0.74rem',color:'var(--muted)',marginBottom:4}}>หมายเหตุ: {row.note}{row.source ? ` · ที่มา: ${row.source}` : ''}</div>}
+                <div style={{fontSize:'0.68rem',color:'var(--muted)'}}>ที่ส่งมา</div>
+                <NathabPreview row={row} />
+                {cur && <>
+                  <div style={{fontSize:'0.68rem',color:'var(--muted)',marginTop:6}}>ของเดิมในคลัง</div>
+                  <NathabPreview row={cur} />
+                </>}
+                <div style={{display:'flex',gap:8,marginTop:'0.6rem'}}>
+                  <button className="btn btn-jade btn-sm" onClick={() => judgeNathab(row, true)}>✓ อนุมัติ</button>
+                  <button className="btn btn-outline btn-sm" onClick={() => judgeNathab(row, false)}>✗ ไม่อนุมัติ</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {tab === 'stats' && (

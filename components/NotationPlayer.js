@@ -3,11 +3,11 @@ import { usePermissions } from './Gate';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadGongSamples, playSampleNote, samplesAvailable } from '../lib/sampler';
-import { CHING_PATTERNS, parsePattern, playPercussion, loadDrumBank } from '../lib/nathab';
+import { CHING_PATTERNS, DRUMS, parsePattern, playPercussion, loadDrumBank,
+         loadNathabLibrary, nathabNames, findPattern, planSongNathab } from '../lib/nathab';
 const TH_COLS = ['ด','ร','ม','ฟ','ซ','ล','ท'];
 const TH_ROWS = { '-1': 'zxcvbnm', '0': 'asdfghj', '1': 'qwertyu' };
 const noteKey = n => TH_ROWS[String(n.register ?? 0)]?.[TH_COLS.indexOf(n.ch)] ?? n.ch;
-import { supabase } from '../lib/supabase';
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
 
 const NOTE_STEP = { 'ด':0, 'ร':1, 'ม':2, 'ฟ':3, 'ซ':4, 'ล':5, 'ท':6 };
@@ -76,7 +76,8 @@ function synthNote(ctx, freq, time, dur, gain = 0.45) {
 
 const REG_LABEL = { '-1': 'ต่ำ', '0': 'กลาง', '1': 'สูง' };
 
-export default function NotationPlayer({ verses, lyrics }) {
+// nathabRules = แถว song_nathab ของเพลงนี้ (หน้าทับหลัก + ข้อยกเว้นต่อท่อน) — ถ้ามี เครื่องเล่นเลือกโหมด "ตามที่เพลงกำหนด" ให้เอง
+export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const { can } = usePermissions();
   const [mode, setMode] = useState('combined');
   const [hand, setHand] = useState('both');
@@ -85,7 +86,17 @@ export default function NotationPlayer({ verses, lyrics }) {
   const [sabatGap, setSabatGap] = useState(SABAT_DEFAULT);
   const [bpm, setBpm] = useState(120);
   const [hongsPerLine, setHongsPerLine] = useState(8);
-  const [nathab, setNathab] = useState('none');       // none | ปรบไก่ | สองไม้
+  const [nathab, setNathab] = useState('none');       // none | auto (ตามที่เพลงกำหนด) | ชื่อหน้าทับในคลัง
+  const [libNames, setLibNames] = useState([]);       // ชื่อหน้าทับทั้งหมดในคลังกลาง (/nathab)
+  const nathabTouchedRef = useRef(false);
+  useEffect(() => { loadNathabLibrary().then(rows => setLibNames(nathabNames(rows))).catch(() => {}); }, []);
+  // เพลงที่ตั้งหน้าทับไว้แล้ว → เปิดกลองให้อัตโนมัติ (ถ้าผู้ฟังยังไม่ได้เลือกเอง)
+  useEffect(() => {
+    if (!nathabRules?.length || nathabTouchedRef.current) return;
+    if (can('player_perc')) setNathab('auto');
+    const main = nathabRules.find(r => !r.section);
+    if (main?.drum && DRUMS.includes(main.drum)) setDrumInst(main.drum);
+  }, [nathabRules, can]);
   const [drumInst, setDrumInst] = useState('ตะโพน');
   const [level, setLevel] = useState('สองชั้น');
   const [chingOn, setChingOn] = useState(false);
@@ -122,9 +133,9 @@ export default function NotationPlayer({ verses, lyrics }) {
     if (!can('player_vocal') && mode === 'vocal') setMode('combined');
     if (!can('player_real') && sound === 'real') setSound('synth');
     if (!can('player_perc') && nathab !== 'none') setNathab('none');
-  }, [can, mode, sound, nathab]);
+    if (nathab === 'auto' && !nathabRules?.length) setNathab('none');
+  }, [can, mode, sound, nathab, nathabRules]);
 
-  const nathabRowsRef = useRef(null);
   const [playState, setPlayState] = useState('stopped');
   const [loadingSamples, setLoadingSamples] = useState(false);
   const [sampleCount, setSampleCount] = useState(null);
@@ -248,8 +259,13 @@ export default function NotationPlayer({ verses, lyrics }) {
     };
 
     // ── หน้าทับกลอง + ฉิ่ง ──
-    let drumHits = null, drumLen = 0;
+    // drumPlan[vi] = หน้าทับที่ใช้ตีวรรคนั้น {hits, len, key} · null = ไม่ตี
+    //   โหมด auto  → ตามตาราง song_nathab (หน้าทับหลัก + ข้อยกเว้นต่อท่อน · อัตราตามที่ตั้งไว้)
+    //   โหมดชื่อ   → ใช้หน้าทับนั้นทั้งเพลง อัตราตาม song_melody.level หรือที่เลือกใน dropdown
+    //   โน้ตอ่านจากคลังกลาง (/nathab) เลือกแถวที่ตรงเครื่อง/อัตราที่สุด (findPattern)
+    let drumPlan = null;
     let marks = null;
+    const levelOf = vi => drumPlan?.[vi]?.level || parsed[vi].v.level || level;
     if (nathab !== 'none' || chingOn) {
       // โหลดเสียงจริงของเครื่องที่เลือก (ถ้ายังไม่มีไฟล์ ระบบใช้เสียงสังเคราะห์ต่อไป)
       await Promise.all([
@@ -257,28 +273,31 @@ export default function NotationPlayer({ verses, lyrics }) {
         chingOn ? loadDrumBank(ctx, 'ฉิ่ง') : null,
       ].filter(Boolean));
       if (nathab !== 'none') {
-        if (!nathabRowsRef.current) {
-          const { data } = await supabase.from('nathab_patterns').select('*');
-          nathabRowsRef.current = data ?? [];
-        }
-        const row = nathabRowsRef.current.find(r =>
-          r.nathab === nathab && r.level === level && r.instrument === drumInst);
-        if (row) {
-          const parsed2 = parsePattern(row.pattern_text);
-          drumHits = parsed2.hits; drumLen = parsed2.len;
-        }
+        let rows = [];
+        try { rows = await loadNathabLibrary(); } catch (e) { rows = []; }
+        const plan = nathab === 'auto'
+          ? planSongNathab(parsed.map(pv => pv.v), nathabRules, { level })
+          : parsed.map(pv => ({ nathab, level: pv.v.level || level }));
+        drumPlan = plan.map(p => {
+          if (!p) return null;
+          const row = findPattern(rows, p.nathab, p.level, drumInst);
+          if (!row) return null;
+          const pp = parsePattern(row.pattern_text);
+          if (!pp.len) return null;
+          return { hits: pp.hits, len: pp.len, level: p.level, key: `${p.nathab}|${p.level}|${row.id}` };
+        });
       }
-      // ฉิ่งตามอัตราของท่อน (คอลัมน์ level ของ song_melody — เพลงเถาท่อนละอัตรา)
+      // ฉิ่งตามอัตราของท่อน (หน้าทับที่ตั้งไว้ > คอลัมน์ level ของ song_melody > dropdown)
       // + ฉิ่งกำหนดเองของเพลงจังหวะพิเศษ (คอลัมน์ ching: '-'/'ฉ'/'บ' ต่อตำแหน่ง)
-      // จังหวะฉิ่งนับใหม่ทุกต้นท่อน · ถ้าไม่มีข้อมูลใช้อัตราที่เลือกใน dropdown
+      // จังหวะฉิ่งนับใหม่ทุกต้นท่อน
       marks = new Array(totalSteps).fill('');
       {
         let lastSec = null, rel = 0, cyc = (CHING_PATTERNS[level]?.hongs ?? 4) * 4;
-        parsed.forEach(pv => {
+        parsed.forEach((pv, vi) => {
           const v = pv.v;
           if ((v.section ?? null) !== lastSec) {
             lastSec = v.section ?? null; rel = 0;
-            cyc = (CHING_PATTERNS[v.level || level]?.hongs ?? CHING_PATTERNS[level].hongs) * 4;
+            cyc = (CHING_PATTERNS[levelOf(vi)]?.hongs ?? CHING_PATTERNS[level]?.hongs ?? 4) * 4;
           }
           const custom = v.ching ? [...v.ching] : null;
           for (let i = 0; i < pv.len; i++, rel++) {
@@ -288,12 +307,16 @@ export default function NotationPlayer({ verses, lyrics }) {
         });
       }
     }
+    // กลองนับตามลำดับที่เล่นจริง — กลับต้นแล้วหน้าทับเดินต่อเนื่องไม่สะดุด
+    // นับใหม่เฉพาะเมื่อเปลี่ยนหน้าทับ/อัตรา (เข้าท่อนที่ตั้งข้อยกเว้นไว้)
+    let percKey = null, percRel = 0;
     const schedulePercAt = (s, i, t) => {
-      if (drumHits && drumLen > 0) {
-        // กลองนับตามลำดับที่เล่นจริง (i) — กลับต้นแล้วหน้าทับเดินต่อเนื่องไม่สะดุด
-        const pp = (i % drumLen) + 1;
-        drumHits.forEach(h => { if (h.pos === pp) q(t, () => playPercussion(ctx, h.syll, t, 0.75, drumInst)); });
-      }
+      const d = drumPlan?.[stepInfo[s].vi] ?? null;
+      if (d) {
+        if (d.key !== percKey) { percKey = d.key; percRel = 0; }
+        const pp = (percRel % d.len) + 1; percRel++;
+        d.hits.forEach(h => { if (h.pos === pp) q(t, () => playPercussion(ctx, h.syll, t, 0.75, drumInst)); });
+      } else { percKey = null; percRel = 0; }
       if (chingOn && marks && marks[s]) { const syll = marks[s]; q(t, () => playPercussion(ctx, syll, t, 0.7, 'ฉิ่ง')); }
     };
 
@@ -505,18 +528,15 @@ export default function NotationPlayer({ verses, lyrics }) {
           <option value="R">🔊 มือขวา</option>
           <option value="L">🔊 มือซ้าย</option>
         </select>
-        {can('player_perc') && <select className="filter-select" value={nathab} onChange={e => setNathab(e.target.value)} disabled={playState !== 'stopped'}>
+        {can('player_perc') && <select className="filter-select" value={nathab} disabled={playState !== 'stopped'}
+          onChange={e => { nathabTouchedRef.current = true; setNathab(e.target.value); }} title="หน้าทับจากคลังกลาง (/nathab)">
           <option value="none">🥁 ไม่มีกลอง</option>
-          <option value="ปรบไก่">หน้าทับปรบไก่</option>
-          <option value="สองไม้">หน้าทับสองไม้</option>
+          {nathabRules?.length > 0 && <option value="auto">🥁 ตามที่เพลงกำหนด ({nathabRules.find(r => !r.section)?.nathab ?? 'รายท่อน'})</option>}
+          {(libNames.length ? libNames : ['ปรบไก่', 'สองไม้']).map(n => <option key={n} value={n}>หน้าทับ{n}</option>)}
         </select>}
         {nathab !== 'none' && (
           <select className="filter-select" value={drumInst} onChange={e => setDrumInst(e.target.value)} disabled={playState !== 'stopped'}>
-            <option value="ตะโพน">ตะโพน</option>
-            <option value="กลองแขก">กลองแขก</option>
-            <option value="กลองสองหน้า">กลองสองหน้า</option>
-            <option value="โทนรำมะนา">โทนรำมะนา</option>
-            <option value="กลองทัด">กลองทัด</option>
+            {DRUMS.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
         )}
         <select className="filter-select" value={level} onChange={e => setLevel(e.target.value)} disabled={playState !== 'stopped'}>

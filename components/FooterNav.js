@@ -6,6 +6,7 @@ export default function FooterNav() {
   const { can } = usePermissions();
   const links = [
     can('page_krasuan') && ['/krasuan', 'ค้นกระสวน'],
+    can('page_nathab') && ['/nathab', 'คลังหน้าทับ'],
     can('page_people') && ['/people', 'ครูดนตรี'],
     can('page_timeline') && ['/timeline', 'เส้นเวลา'],
     can('page_compare') && ['/compare', 'เปรียบเทียบเพลง'],
