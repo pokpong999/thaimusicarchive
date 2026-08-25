@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { supabase } from '../../../lib/supabase';
 import RankBadge from '../../../components/RankBadge';
 import Avatar from '../../../components/Avatar';
+import { useMe } from '../../../components/Gate';
+import { fmtDT, ago } from '../../../lib/fmtdate';
 
 export default function MemberPage() {
   const { id } = useParams();
@@ -12,18 +14,24 @@ export default function MemberPage() {
   const [records, setRecords] = useState([]);
   const [videos, setVideos] = useState([]);
   const [songs, setSongs] = useState([]);
+  const [act, setAct] = useState(null);      // วันสมัคร/เข้าใช้ล่าสุด (แอดมินเท่านั้น)
+  const me = useMe();
 
   useEffect(() => {
-    supabase.from('profiles').select('id, display_name, points, role, organization, province, bio, avatar_url')
+    supabase.from('profiles').select('id, display_name, points, role, organization, province, bio, avatar_url, created_at')
       .eq('id', id).single().then(({ data }) => setP(data));
-    supabase.from('archive_records').select('id, what_text, when_text').eq('approved', true)
+    supabase.from('archive_records').select('id, what_text, when_text, created_at').eq('approved', true)
       .eq('submitted_by', id).order('created_at', { ascending: false }).limit(30)
       .then(({ data }) => setRecords(data ?? []));
-    supabase.from('song_videos').select('id, song_id, songs(name_th)').eq('approved', true)
-      .eq('submitted_by', id).limit(30).then(({ data }) => setVideos(data ?? []));
-    supabase.from('songs').select('id, name_th').eq('contributed_by', id).limit(30)
+    supabase.from('song_videos').select('id, song_id, created_at, songs(name_th)').eq('approved', true)
+      .eq('submitted_by', id).order('created_at', { ascending: false }).limit(30).then(({ data }) => setVideos(data ?? []));
+    supabase.from('songs').select('id, name_th, created_at').eq('contributed_by', id).order('created_at', { ascending: false }).limit(30)
       .then(({ data }) => setSongs(data ?? []));
   }, [id]);
+  useEffect(() => {
+    if (!me.isAdmin) return;
+    supabase.rpc('thma_member_activity').then(({ data }) => setAct((data ?? []).find(a => a.id === id) ?? null));
+  }, [me.isAdmin, id]);
 
   if (!p) return <main className="container">กำลังโหลด...</main>;
 
@@ -38,6 +46,13 @@ export default function MemberPage() {
             <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>
               {[p.organization, p.province].filter(Boolean).join(' · ')}
             </div>
+            {me.isAdmin && (act || p.created_at) && (
+              <div style={{fontSize:'0.72rem',color:'var(--gold2)',marginTop:'6px'}} title="เห็นเฉพาะผู้ดูแล">
+                🔐 สมัครเมื่อ {fmtDT(act?.joined_at ?? p.created_at) || '—'}
+                {act?.last_sign_in_at && <> · เข้าใช้ล่าสุด {ago(act.last_sign_in_at)} ({fmtDT(act.last_sign_in_at)})</>}
+                {act && !act.email_confirmed_at && <span style={{color:'var(--danger)'}}> · ยังไม่ยืนยันอีเมล</span>}
+              </div>
+            )}
           </div>
         </div>
         {p.bio && <div style={{marginTop:'1rem',fontSize:'0.85rem',lineHeight:1.8,
@@ -50,7 +65,8 @@ export default function MemberPage() {
           {songs.map(s => (
             <Link key={s.id} href={`/songs/${s.id}`}>
               <div style={{padding:'6px 0',cursor:'pointer',fontSize:'0.86rem'}}>
-                <span className="song-id" style={{marginRight:'8px'}}>{s.id}</span>{s.name_th}</div>
+                <span className="song-id" style={{marginRight:'8px'}}>{s.id}</span>{s.name_th}
+                {s.created_at && <span style={{color:'var(--muted)',fontSize:'0.7rem'}}> · 🕒 {fmtDT(s.created_at)}</span>}</div>
             </Link>
           ))}
         </div>
@@ -61,7 +77,8 @@ export default function MemberPage() {
           {records.map(r => (
             <Link key={r.id} href={`/archive/${r.id}`}>
               <div style={{padding:'6px 0',cursor:'pointer',fontSize:'0.86rem'}}>
-                {r.what_text} <span style={{color:'var(--muted)',fontSize:'0.74rem'}}>· {r.when_text}</span></div>
+                {r.what_text} <span style={{color:'var(--muted)',fontSize:'0.74rem'}}>· {r.when_text}</span>
+                {r.created_at && <span style={{color:'var(--muted)',fontSize:'0.7rem'}}> · 🕒 {fmtDT(r.created_at)}</span>}</div>
             </Link>
           ))}
         </div>
@@ -71,7 +88,8 @@ export default function MemberPage() {
           <div style={{fontWeight:600,marginBottom:'0.6rem'}}>🎬 วิดีโอที่เพิ่ม ({videos.length})</div>
           {videos.map(v => (
             <Link key={v.id} href={`/songs/${v.song_id}`}>
-              <div style={{padding:'6px 0',cursor:'pointer',fontSize:'0.86rem'}}>{v.songs?.name_th}</div>
+              <div style={{padding:'6px 0',cursor:'pointer',fontSize:'0.86rem'}}>{v.songs?.name_th}
+                {v.created_at && <span style={{color:'var(--muted)',fontSize:'0.7rem'}}> · 🕒 {fmtDT(v.created_at)}</span>}</div>
             </Link>
           ))}
         </div>
