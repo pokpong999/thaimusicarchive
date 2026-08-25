@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../../lib/supabase';
 import LeafletMap from '../../../components/LeafletMap';
+import { shrinkImage } from '../../../lib/imgresize';
 
 export default function NewArchiveRecord() {
   const [user, setUser] = useState(null);
@@ -62,13 +63,17 @@ export default function NewArchiveRecord() {
     }).select().single();
     if (error) { setMsg('⚠ ' + error.message); setBusy(false); return; }
 
-    for (const file of Array.from(files).slice(0, 5)) {
-      if (file.size > 5 * 1024 * 1024) continue;
+    const skipped = [];
+    const picked = Array.from(files).slice(0, 5);
+    for (let i = 0; i < picked.length; i++) {
+      setMsg(`กำลังอัปโหลดรูป ${i + 1}/${picked.length}...`);
+      // ย่อรูปก่อนอัปโหลด — รูปจากกล้องใหญ่เกินไปทั้งสำหรับเว็บและภาพแชร์
+      const file = await shrinkImage(picked[i], 2000, 0.85);
+      if (file.size > 5 * 1024 * 1024) { skipped.push(picked[i].name); continue; }
       const path = `${rec.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
       const { error: upErr } = await supabase.storage.from('archive-images').upload(path, file);
-      if (!upErr) {
-        await supabase.from('archive_media').insert({ record_id: rec.id, media_type: 'image', storage_path: path });
-      }
+      if (upErr) { skipped.push(picked[i].name); continue; }
+      await supabase.from('archive_media').insert({ record_id: rec.id, media_type: 'image', storage_path: path });
     }
 
     const ytId = extractYouTubeId(ytUrl);
@@ -76,7 +81,7 @@ export default function NewArchiveRecord() {
       await supabase.from('archive_media').insert({ record_id: rec.id, media_type: 'youtube', youtube_id: ytId });
     }
 
-    setMsg('✓ บันทึกแล้ว — รอ Admin อนุมัติก่อนแสดงสาธารณะ');
+    setMsg('✓ บันทึกแล้ว — รอ Admin อนุมัติก่อนแสดงสาธารณะ' + (skipped.length ? ` (อัปโหลดรูปไม่สำเร็จ ${skipped.length} ไฟล์: ${skipped.join(', ')})` : ''));
     setBusy(false);
     setWho(''); setWhat(''); setWhenText(''); setWhenDate(''); setWhere(''); setDesc(''); setYtUrl(''); setFiles([]); setPos(null);
   }

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
+import { shrinkImage } from '../../lib/imgresize';
 import RankBadge from '../../components/RankBadge';
 import Avatar from '../../components/Avatar';
 
@@ -23,11 +24,14 @@ export default function ProfilePage() {
 
   function set(k, v) { setP(prev => ({ ...prev, [k]: v })); }
 
-  async function uploadAvatar(file) {
-    if (!file) return;
-    if (file.size > 3 * 1024 * 1024) { setMsg('⚠ รูปใหญ่เกิน 3MB'); return; }
+  async function uploadAvatar(raw) {
+    if (!raw) return;
     setUploading(true);
-    const ext = file.name.split('.').pop().toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+    setMsg('⏳ กำลังย่อรูป...');
+    const file = await shrinkImage(raw, 512, 0.85);   // รูปโปรไฟล์ไม่ต้องใหญ่
+    if (file.size > 3 * 1024 * 1024) { setMsg('⚠ รูปใหญ่เกินไป ลองรูปอื่น'); setUploading(false); return; }
+    const ext = file.type === 'image/jpeg' ? 'jpg'
+      : (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
     const filePath = `${user.id}/avatar_${Date.now()}.${ext}`;
     const { error: upErr } = await supabase.storage.from('avatars').upload(filePath, file);
     if (upErr) { setMsg('⚠ อัปโหลดไม่สำเร็จ: ' + upErr.message); setUploading(false); return; }

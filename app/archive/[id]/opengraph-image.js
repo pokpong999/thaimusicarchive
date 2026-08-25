@@ -38,19 +38,29 @@ export default async function OgImage({ params }) {
       { headers: { apikey: KEY } }
     );
     const media = await mres.json();
-    // ไล่ทีละรูปจนกว่าจะได้รูปที่ขนาดเหมาะกับการฝังในภาพแชร์
+    // ไล่ทีละรูปจนกว่าจะได้รูปที่ฝังในภาพแชร์ได้
+    // สำคัญ: ดึงผ่าน render/image ให้ Supabase ย่อรูปให้ก่อน (1200×630 ~150 KB)
+    // ของเดิมดึงไฟล์ต้นฉบับ รูปจากกล้อง 2–5 MB จึงถูกข้ามทุกใบ → การ์ดแชร์ไม่มีรูป
+    const BUCKET = 'archive-images';
+    const urlsFor = p => [
+      `${SB}/storage/v1/render/image/public/${BUCKET}/${p}?width=1200&height=630&resize=cover&quality=72`,
+      `${SB}/storage/v1/object/public/${BUCKET}/${p}`,
+    ];
     for (const m of (Array.isArray(media) ? media : [])) {
       if (!m?.storage_path) continue;
-      try {
-        const imgRes = await fetchT(`${SB}/storage/v1/object/public/archive-images/${m.storage_path}`, {}, 3500);
-        if (!imgRes.ok) continue;
-        const buf = Buffer.from(await imgRes.arrayBuffer());
-        if (buf.length > 1.6 * 1024 * 1024) continue;   // ใหญ่ไป ข้ามไปรูปถัดไป
-        const ct = imgRes.headers.get('content-type') || 'image/jpeg';
-        if (!/^image\/(jpeg|png|webp)/.test(ct)) continue;
-        photo = `data:${ct};base64,${buf.toString('base64')}`;
-        break;
-      } catch { /* รูปนี้ใช้ไม่ได้ ลองรูปถัดไป */ }
+      for (const url of urlsFor(m.storage_path)) {
+        try {
+          const imgRes = await fetchT(url, {}, 6000);
+          if (!imgRes.ok) continue;
+          const ct = imgRes.headers.get('content-type') || '';
+          if (!/^image\/(jpeg|png|webp|avif)/.test(ct)) continue;
+          const buf = Buffer.from(await imgRes.arrayBuffer());
+          if (buf.length > 5 * 1024 * 1024) continue;   // ใหญ่เกินจริง ๆ ข้ามไปรูปถัดไป
+          photo = `data:${ct.split(';')[0]};base64,${buf.toString('base64')}`;
+          break;
+        } catch { /* ลิงก์นี้ไม่ได้ ลองแบบถัดไป */ }
+      }
+      if (photo) break;
     }
   } catch {}
 

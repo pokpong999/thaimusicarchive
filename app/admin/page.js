@@ -138,9 +138,18 @@ export default function AdminPage() {
     const { data: mr } = await supabase.from('archive_records')
       .select('id, what_text, who_text, when_text, approved').order('created_at', { ascending: false }).limit(50);
     setMgRecords(mr ?? []);
+    // เดิมใช้ .select('*, profiles(display_name)') ซึ่งต้องมี foreign key
+    // comments.user_id → profiles.id  ถ้าไม่มี PostgREST ตอบ 400 แล้วรายการว่างเปล่า
     const { data: mc } = await supabase.from('comments')
-      .select('*, profiles(display_name)').order('created_at', { ascending: false }).limit(50);
-    setMgComments(mc ?? []);
+      .select('*').order('created_at', { ascending: false }).limit(50);
+    const cRows = mc ?? [];
+    const cIds = [...new Set(cRows.map(c => c.user_id).filter(Boolean))];
+    const cProf = {};
+    if (cIds.length) {
+      const { data: cp } = await supabase.from('profiles').select('id, display_name').in('id', cIds);
+      (cp ?? []).forEach(x => { cProf[x.id] = x; });
+    }
+    setMgComments(cRows.map(c => ({ ...c, profiles: cProf[c.user_id] ?? null })));
     const { data: mv } = await supabase.from('song_videos')
       .select('id, song_id, title, youtube_url, songs(name_th)').eq('approved', true)
       .order('created_at', { ascending: false }).limit(50);
@@ -302,7 +311,12 @@ export default function AdminPage() {
     await supabase.from('archive_records').update({ approved: !r.approved }).eq('id', r.id); loadAll();
   }
   async function deleteComment(id) {
-    await supabase.from('comments').delete().eq('id', id); loadAll();
+    if (!confirm('ลบความคิดเห็นนี้?')) return;
+    const c = mgComments.find(x => x.id === id);
+    const { error } = await supabase.from('comments').delete().eq('id', id);
+    if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+    if (c?.image_path) await supabase.storage.from('comment-images').remove([c.image_path]);
+    loadAll();
   }
   async function deleteVideo(id) {
     if (!confirm('ลบวิดีโอนี้ถาวร?')) return;
@@ -702,14 +716,25 @@ export default function AdminPage() {
           </div>
           <div className="card">
             <div style={{fontWeight:600,marginBottom:'0.6rem'}}>💬 ความคิดเห็น (50 ล่าสุด)</div>
-            {mgComments.map(c => (
-              <div key={c.id} style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'6px'}}>
-                <span style={{flex:1,fontSize:'0.8rem'}}>
-                  <b>{c.profiles?.display_name ?? '?'}</b> ({c.target_type}/{c.target_id}): {(c.body ?? '(รูปภาพ)').slice(0, 80)}
-                </span>
-                <button className="btn btn-danger btn-sm" onClick={() => deleteComment(c.id)}>🗑</button>
-              </div>
-            ))}
+            {mgComments.length === 0 &&
+              <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>ยังไม่มีความคิดเห็น</div>}
+            {mgComments.map(c => {
+              const href = c.target_type === 'archive' ? `/archive/${c.target_id}`
+                : c.target_type === 'song' ? `/songs/${c.target_id}` : '#';
+              return (
+                <div key={c.id} style={{display:'flex',gap:'8px',alignItems:'flex-start',marginBottom:'8px'}}>
+                  <span style={{flex:1,fontSize:'0.8rem',lineHeight:1.6}}>
+                    <b>{c.profiles?.display_name ?? 'สมาชิก'}</b>
+                    <span style={{color:'var(--muted)',fontSize:'0.72rem',marginLeft:'6px'}}>
+                      {new Date(c.created_at).toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'numeric' })}
+                    </span>
+                    <br/>{(c.body ?? '(รูปภาพ)').slice(0, 120)}
+                  </span>
+                  <a href={href} target="_blank" style={{fontSize:'0.72rem',color:'var(--jade)',whiteSpace:'nowrap'}}>ดู↗</a>
+                  <button className="btn btn-danger btn-sm" onClick={() => deleteComment(c.id)}>🗑</button>
+                </div>
+              );
+            })}
           </div>
         </>
       )}

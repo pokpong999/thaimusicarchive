@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState, createContext, useContext } from 'react';
 import { supabase } from '../lib/supabase';
+import { shrinkImage } from '../lib/imgresize';
 import { useMe } from './Gate';
 
 const Ctx = createContext({ map: {}, ready: false, reload: () => {} });
@@ -93,11 +94,13 @@ export function EImage({ k, alt = '', style, className, height = 220 }) {
   const path = map[k]?.image_path;
   const url = imgUrl(path);
 
-  async function upload(file) {
-    if (!file) return;
-    if (file.size > 5 * 1024 * 1024) { alert('รูปใหญ่เกิน 5MB'); return; }
+  async function upload(raw) {
+    if (!raw) return;
     setBusy(true);
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
+    const file = await shrinkImage(raw, 2000, 0.85);
+    if (file.size > 5 * 1024 * 1024) { alert('รูปใหญ่เกินไป ลองรูปอื่น'); setBusy(false); return; }
+    const ext = file.type === 'image/jpeg' ? 'jpg'
+      : (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g,'');
     const p = `${k.replace(/[^\w.-]/g,'_')}_${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from('site-images').upload(p, file);
     if (error) { alert('อัปโหลดไม่สำเร็จ: ' + error.message); setBusy(false); return; }

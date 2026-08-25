@@ -485,8 +485,8 @@ export default function SongDetailClient() {
           )}
         </>
       )}
-      {can('comments') ? <CommentSection targetType="song" targetId={id} />
-        : <div style={{fontSize:'0.75rem',color:'var(--muted)',margin:'1rem 0'}}>เข้าสู่ระบบเพื่อแสดงความคิดเห็น</div>}
+      {/* อ่านความคิดเห็นได้ทุกคน · เขียนได้ตามสิทธิ์ can('comments') */}
+      <CommentSection targetType="song" targetId={id} canPost={can('comments')} />
     </main>
   );
 }

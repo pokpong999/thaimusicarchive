@@ -2,9 +2,28 @@
 import { useState } from 'react';
 import { countShare } from '../lib/stats';
 
+// ── รุ่นของภาพแชร์ ───────────────────────────────────────────────
+// Facebook/LINE เก็บภาพแชร์ของแต่ละลิงก์ไว้ในแคช ถ้าลิงก์เดิมเคยถูกแชร์
+// ตอนที่ภาพยังไม่มีรูป มันจะใช้ของเก่าตลอดจนกว่าจะไปกด Scrape Again เอง
+// การพ่วง ?v= ทำให้เป็น "ลิงก์ใหม่" ในสายตาโซเชียล → ดึงภาพแชร์สดทุกครั้ง
+// ⚠️ ถ้าแก้หน้าตาภาพแชร์อีกในอนาคต ให้บวกเลขนี้ขึ้น 1 แล้วจบ ไม่ต้องแตะ Facebook
+const SHARE_V = '2';
+
+function shareUrl() {
+  if (typeof window === 'undefined') return '';
+  try {
+    const u = new URL(window.location.href);
+    u.hash = '';
+    u.searchParams.set('v', SHARE_V);
+    return u.toString();
+  } catch {
+    return window.location.href;
+  }
+}
+
 export default function ShareBar({ title, statType, statId }) {
   const [copied, setCopied] = useState(false);
-  const url = typeof window !== 'undefined' ? window.location.href : '';
+  const url = shareUrl();
   const enc = encodeURIComponent(url);
   const encTitle = encodeURIComponent(title ?? 'หอจดหมายเหตุดนตรีไทย');
 
