@@ -14,6 +14,7 @@
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { NotationEngine } from '../lib/notation-engine';
+import NotationImport from './NotationImport';
 import { textToVerses, versesToRows, hasSound } from '../lib/notation-core';
 import { loadGongSamples, playSampleNote } from '../lib/sampler';
 import { parsePattern, playPercussion, playHit, loadSetBanks, loadDrumBank, loadNathabLibrary, nathabNames, findPattern, approvedRows, DRUMS, drumLabel } from '../lib/nathab';
@@ -54,6 +55,7 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
   const draftKey = options.draftKey || null;
   const [draft, setDraft] = useState(null);
   const [showStaff, setShowStaff] = useState(false);
+  const [showImport, setShowImport] = useState(false);   // 📥 นำเข้าไฟล์ / แปลงโน้ต (2026-08-25)
   const showStaffRef = useRef(false);
   const [staffRows, setStaffRows] = useState([]);
   const [cursor, setCursor] = useState(null);
@@ -181,6 +183,22 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
           <button className="btn btn-outline btn-sm" type="button" onClick={() => setShowStaff(s => !s)}>
             {showStaff ? '▾ ซ่อนโน้ตสากล' : '▸ โน้ตสากล 5 เส้น'}
           </button>
+          {!options.readOnly && (
+            <button className="btn btn-outline btn-sm" type="button" style={{marginLeft:8}} onClick={() => setShowImport(true)}
+              title="นำเข้าจาก PDF / Word / Excel / รูปภาพ / MusicXML / MIDI · แปลงเป็นโน้ตสากล">📥 นำเข้าไฟล์ / 🔁 แปลงโน้ต</button>
+          )}
+          {showImport && (
+            <NotationImport open onClose={() => setShowImport(false)}
+              base={options.base || 4} lineHong={options.lineHong || 8}
+              getVerses={() => engRef.current ? engRef.current.getVerses() : []}
+              onImport={(vs, { mode }) => {
+                const eng = engRef.current; if (!eng) return;
+                eng.pushUndo();
+                const cur = eng.getVerses().filter(hasSound);
+                eng.setVerses(mode === 'append' && cur.length ? [...cur, ...vs] : vs);
+                eng.emit();
+              }} />
+          )}
           {showStaff && (
             <div style={{marginTop:'0.6rem'}}>
               {staffRows.length

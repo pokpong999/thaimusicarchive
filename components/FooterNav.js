@@ -7,6 +7,7 @@ export default function FooterNav() {
   const links = [
     can('page_krasuan') && ['/krasuan', 'ค้นกระสวน'],
     can('page_nathab') && ['/nathab', 'คลังหน้าทับ'],
+    ['/convert', '🔁 แปลงโน้ต'],
     can('page_people') && ['/people', 'ครูดนตรี'],
     can('page_timeline') && ['/timeline', 'เส้นเวลา'],
     can('page_compare') && ['/compare', 'เปรียบเทียบเพลง'],
