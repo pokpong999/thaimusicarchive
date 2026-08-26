@@ -238,7 +238,7 @@ export default function AdminPage() {
       section: r.section ?? null, line_no: r.line_no ?? null,
       combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null, third_hand: r.third_hand ?? null, notation_system: r.notation_system ?? null,
       krasuan: r.krasuan ?? null, luktok: r.luktok ?? null,
-      level: r.level ?? null, ching: r.ching ?? null,
+      level: r.level ?? null, ching: r.ching ?? null, marks: r.marks ?? null,
       approved: true, submitted_by: sub.submitted_by,
     }));
     const { error } = await supabase.from('song_melody').insert(rows);

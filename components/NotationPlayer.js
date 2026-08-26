@@ -16,7 +16,7 @@ const NOTE_STEP = { 'ด':0, 'ร':1, 'ม':2, 'ฟ':3, 'ซ':4, 'ล':5, 'ท':
 const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
-import { buildVoices, SABAT_GAP_DEFAULT } from '../lib/notation-core';
+import { buildVoices, SABAT_GAP_DEFAULT, kroSpans, kroStrikes, KRO_GAP_DEFAULT, DAMP_DUR_DEFAULT, CHAR_MARK } from '../lib/notation-core';
 import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
 import { stepOf, noteOfStep } from '../lib/instruments';
@@ -93,6 +93,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const [tunes, setTunes] = useState([]);              // ชุดความถี่ในตาราง tunings
   const [tuning, setTuning] = useState(DEFAULT_TUNING); // slug ของชุดที่เลือก
   const [sabatGap, setSabatGap] = useState(SABAT_DEFAULT);
+  const [kroGap, setKroGap] = useState(KRO_GAP_DEFAULT);   // ความถี่การกรอ (วินาทีต่อไม้)
   const [bpm, setBpm] = useState(120);
   const [hongsPerLine, setHongsPerLine] = useState(8);
   const [nathab, setNathab] = useState('none');       // none | auto (ตามที่เพลงกำหนด) | ชื่อหน้าทับในคลัง
@@ -224,8 +225,11 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       const lh = parseVerse(v.left_hand);
       const xh = parseVerse(v.third_hand);
       const len = Math.max(cb.length, rh.length, lh.length, xh.length, 4);
+      // เครื่องหมายวิธีบรรเลงรายตำแหน่ง (song_melody.marks · sql/19): 'kro' กรอ · 'damp' ประคบ
+      const marks = new Array(len).fill('');
+      if (v.marks) [...String(v.marks)].forEach((c, i) => { if (i < len && CHAR_MARK[c]) marks[i] = CHAR_MARK[c]; });
       const item = {
-        v, len, offset,
+        v, len, offset, marks,
         cb: padTo(cb, len), rh: padTo(rh, len), lh: padTo(lh, len), xh: padTo(xh, len),
         useHands: !!(v.right_hand || v.left_hand || v.third_hand),
       };
@@ -261,6 +265,20 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   }, [baseParsed, viewShift]);
 
   const totalSteps = parsed.length ? parsed[parsed.length-1].offset + parsed[parsed.length-1].len : 0;
+
+  // เครื่องหมายวิธีบรรเลงสำหรับวาดบนตาราง: ประคบ = ตัวหนา · กรอ = คลื่นคลุมตั้งแต่ช่องนั้นถึงก่อนเสียงถัดไป
+  const marksView = useMemo(() => {
+    const markOf = st => { const pv = parsed.find(p => st >= p.offset && st < p.offset + p.len); return pv ? (pv.marks?.[st - pv.offset] || '') : ''; };
+    const notesOf = st => {
+      const pv = parsed.find(p => st >= p.offset && st < p.offset + p.len);
+      if (!pv) return [];
+      const i = st - pv.offset;
+      return ['cb', 'rh', 'lh', 'xh'].flatMap(k => (pv[k][i] || []).map(n => ({ ch: n.ch, reg: n.register || 0 })));
+    };
+    const cover = new Set();
+    kroSpans({ total: totalSteps, markOf, notesOf }).forEach(sp => { for (let k = sp.start; k < sp.end; k++) cover.add(k); });
+    return { markOf, cover };
+  }, [parsed, totalSteps]);
 
   useEffect(() => () => {
     playIdRef.current++;
@@ -304,13 +322,14 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     const q = (t, fn) => { if (Number.isFinite(t)) soundEvents.push({ t, fn }); };
 
     // vel = น้ำหนักมือ (สะบัดตัวนำเบากว่าตัวลง)
-    function scheduleNote(n, noteTime, vel = 1) {
+    function scheduleNote(n, noteTime, vel = 1, damp = false) {
       let played = false;
-      if (useReal) played = playMelodyNote(ctx, buffers, n.ch, n.register, noteTime, 0.85 * vel, soundShift, instNow.transpose || 0, tuneOpts);
+      if (useReal) played = playMelodyNote(ctx, buffers, n.ch, n.register, noteTime, 0.85 * vel, soundShift, instNow.transpose || 0,
+        { ...tuneOpts, damp, dampDur: DAMP_DUR_DEFAULT });
       if (!played) {
         const o = noteOfStep(stepOf(n.ch, n.register || 0) + soundShift);
         const f = hzOf(tuneNow, o.ch, o.reg);   // ความถี่จริงตามระบบเสียง + ทางที่เลือก
-        if (f) synthNote(ctx, f, noteTime, stepDur * 2.2, 0.45 * vel);
+        if (f) synthNote(ctx, f, noteTime, damp ? DAMP_DUR_DEFAULT : stepDur * 2.2, 0.45 * vel);
       }
     }
 
@@ -328,7 +347,23 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
 
     // ── สะบัด + สองมือ: กฎอยู่ที่ lib/notation-core.js (ที่เดียวกับกระดานโน้ต) ──
     const { runs, consumed } = buildVoices(G);
+
+    /* กรอ / ประคบ (Pk 2026-08-26) — เครื่องหมายอยู่ที่ตำแหน่ง ไม่ใช่ที่มือ
+       กรอ: ตีสลับสองมือถี่ ๆ ตั้งแต่ช่องที่ติดเครื่องหมายไปจนถึงเสียงถัดไป เริ่มต่ำจบสูง
+       เสียงที่ใช้มาจากทุกแนวที่ตำแหน่งนั้น (ไม่เดาคู่ให้) · มีเสียงเดียว = กรอเสียงเดียว     */
+    const markOfStep = st => { const pv = parsed.find(p => st >= p.offset && st < p.offset + p.len); return pv ? (pv.marks?.[st - pv.offset] || '') : ''; };
+    const notesOfStep = st => G.reduce((acc, g) => acc.concat((g[st] || []).map(n => ({ ch: n.ch, reg: n.register || 0 }))), []);
+    const spans = kroSpans({ total: totalSteps, markOf: markOfStep, notesOf: notesOfStep });
+    const kroAt = new Map(spans.map(sp => [sp.start, sp]));
+
     const scheduleMelodyAt = (s, t) => {
+      const sp = kroAt.get(s);
+      if (sp) {
+        kroStrikes({ dur: (sp.end - sp.start) * stepDur, gap: kroGap, low: sp.low, high: sp.high })
+          .forEach(k => { const tt = t + k.t; q(tt, () => scheduleNote({ ch: k.note.ch, register: k.note.reg }, tt, 0.95 * k.vel)); });
+        return;
+      }
+      const damp = markOfStep(s) === 'damp';
       for (let li = 0; li < consumed.length; li++) {   // ทุกบรรทัดตามระบบบันทึก (ขิม/จะเข้ = 3)
         if (consumed[li][s]) continue;
         const run = runs.get(li * totalSteps + s);
@@ -338,10 +373,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
             const back = run.notes.length - 1 - ni;
             const tt = t - back * sabatGap;
             const vel = back === 0 ? 1 : back === 1 ? 0.8 : 0.6;
-            q(tt, () => scheduleNote(n, tt, vel));
+            q(tt, () => scheduleNote(n, tt, vel, damp));
           });
         } else {
-          G[li][s].forEach(n => q(t, () => scheduleNote(n, t)));
+          G[li][s].forEach(n => q(t, () => scheduleNote(n, t, 1, damp)));
         }
       }
     };
@@ -503,8 +538,15 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
 
   function renderCell(notes, vi, p) {
     const isSabat = notes.length > 1;
+    const step = (parsed[vi]?.offset ?? 0) + p;
+    const mk = marksView.markOf(step);
+    const cls = 'np-cell'
+      + (mk === 'damp' ? ' np-damp' : '')
+      + (mk === 'kro' ? ' np-kro' : '')
+      + (marksView.cover.has(step) ? ' np-krocover' : '');
     return (
-      <span onClick={() => seek(vi, p)} title="กดเพื่อเล่นจากห้องนี้" data-cell={`${vi}-${p}`} className="np-cell" style={{
+      <span onClick={() => seek(vi, p)} title={mk === 'kro' ? 'กรอ — ตีสลับสองมือถึงเสียงถัดไป' : mk === 'damp' ? 'ประคบ — กดให้เสียงสั้น' : 'กดเพื่อเล่นจากห้องนี้'}
+        data-cell={`${vi}-${p}`} data-mark={mk || undefined} className={cls} style={{
         display:'inline-block', minWidth:'26px', textAlign:'center',
         padding:'2px 1px', borderRadius:'3px', fontSize:'1.05rem',
         fontFamily:'THNotation', lineHeight:1.6,
@@ -616,6 +658,16 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           <option value="0.1">สะบัดหนืด (100 ms)</option>
           <option value="0.12">สะบัดช้า (120 ms)</option>
         </select>
+        {marksView.cover.size > 0 && (
+          <select className="filter-select" value={String(kroGap)} onChange={e => setKroGap(parseFloat(e.target.value))}
+            disabled={playState !== 'stopped'} title="ความถี่ของการกรอ (วินาทีต่อไม้) — ยิ่งน้อยยิ่งตีถี่">
+            <option value="0.045">〰 กรอถี่มาก (45 ms)</option>
+            <option value="0.055">〰 กรอถี่ (55 ms)</option>
+            <option value="0.07">〰 กรอปกติ (70 ms)</option>
+            <option value="0.09">〰 กรอห่าง (90 ms)</option>
+            <option value="0.12">〰 กรอห่างมาก (120 ms)</option>
+          </select>
+        )}
         <select className="filter-select" value={tuning} onChange={e => setTuning(e.target.value)} disabled={playState !== 'stopped'}
           title="ระบบเสียง: ความถี่จริงของโน้ตแต่ละเสียง (ตารางความถี่เสียงดนตรีไทย กรมศิลปากร)">
           {(tunes.length ? tunes : [{ slug: DEFAULT_TUNING, name_th: 'กรมศิลปากร — เครื่องสาย / มโหรี' }])
@@ -705,7 +757,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>💡 กดที่ห้องใดก็ได้เพื่อเล่นจากตรงนั้น</span>
       </div>
 
-      <style>{`.np-cell.np-on{background:rgba(201,168,76,0.4)}`}</style>
+      <style>{`.np-cell.np-on{background:rgba(201,168,76,0.4)}
+        .np-damp{font-weight:800}
+        .np-damp::after{content:'';position:absolute;left:50%;bottom:0;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:var(--gold2)}
+        .np-krocover{background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='7'%3E%3Cpath d='M0 5 q 3.5 -4.5 7 0 t 7 0' fill='none' stroke='%23e8c96a' stroke-width='1.4'/%3E%3C/svg%3E");
+          background-repeat:repeat-x;background-position:left top;padding-top:7px !important}
+        .np-kro{color:var(--gold2)}`}</style>
       {mode === 'staff' ? <StaffNotation verses={verses} cursor={cursor} /> :
       <div ref={gridRef} style={{background:'var(--navy3)',border:'1px solid var(--border)',borderRadius:'8px',
         padding:'1rem',overflowX:'auto',display:'flex',flexDirection:'column',gap:'0.7rem'}}>
