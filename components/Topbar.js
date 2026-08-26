@@ -54,6 +54,7 @@ export default function Topbar() {
         <Link href="/leaderboard">{t("nav_board")}</Link>
         {user && <Link href="/songs/new">{t("nav_add")}</Link>}
         {user && <Link href="/dashboard">{t("nav_mine")}</Link>}
+        {user && <Link href="/diary" title="ไดอารี่ดนตรี → แฟ้มผลงาน">{t("nav_diary")}</Link>}
         <Link href="/search" title="search">🔍</Link>
         <span onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
           style={{cursor:'pointer',fontSize:'0.72rem',border:'1px solid var(--border)',

@@ -133,6 +133,16 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* ไดอารี่ → แฟ้มผลงาน (2026-08-25) */}
+      <div className="card" style={{display:'flex',gap:'12px',alignItems:'center',flexWrap:'wrap',borderColor:'rgba(201,168,76,0.25)'}}>
+        <div style={{flex:1,minWidth:'240px',fontSize:'0.8rem',lineHeight:1.7}}>
+          <b>📔 ไดอารี่ดนตรี → 📁 แฟ้มผลงาน</b><br/>
+          <span style={{color:'var(--muted)'}}>เขียนบันทึกส่วนตัวเก็บไว้ทุกวัน แล้ววันหนึ่งเลือกบันทึกที่ภูมิใจ + เหตุการณ์ที่โพสต์ มาทำเป็นเล่มสวย ๆ พิมพ์เป็น PDF ได้</span>
+        </div>
+        <Link href="/diary"><button className="btn btn-outline btn-sm">📔 เขียนไดอารี่</button></Link>
+        <Link href="/portfolio"><button className="btn btn-primary btn-sm">📁 แฟ้มผลงาน</button></Link>
+      </div>
+
       <Section title="📜 บันทึกจดหมายเหตุ" items={records} table="archive_records"
         render={r => <Link href={`/archive/${r.id}`}><span style={{cursor:'pointer'}}>{r.what_text} <span style={{color:'var(--muted)'}}>· {r.when_text}</span></span></Link>} />
       <Section title="🎬 วิดีโอเพลง" items={videos} table="song_videos"
