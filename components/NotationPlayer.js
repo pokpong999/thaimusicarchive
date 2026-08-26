@@ -109,13 +109,20 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     setTunes(list);
     setTuning(cur => list.some(t => t.slug === cur) ? cur : (list.find(t => t.is_default) || list[0])?.slug || DEFAULT_TUNING);
   }).catch(() => {}); }, []);
-  // เพลงที่ตั้งหน้าทับไว้แล้ว → เปิดกลองให้อัตโนมัติ (ถ้าผู้ฟังยังไม่ได้เลือกเอง)
+  // ── ค่าเริ่มต้นของเพลง (Pk 2026-08-26) ──
+  // เพลงที่บันทึกฉิ่ง/กลอง/ความเร็วไว้แล้ว → กดเล่นแล้วต้องได้ยินตามนั้นทันที "กับผู้ฟังทุกคน"
+  // (หน้าทับที่เพลงกำหนดไว้ไม่ติดสิทธิ์ player_perc — สิทธิ์คุมแค่การ "เลือกหน้าทับเอง")
+  const songDefaultsRef = useRef(false);
   useEffect(() => {
-    if (!nathabRules?.length || nathabTouchedRef.current) return;
-    if (can('player_perc')) setNathab('auto');
+    if (!nathabRules?.length || songDefaultsRef.current) return;
+    songDefaultsRef.current = true;
     const main = nathabRules.find(r => !r.section);
+    if (!nathabTouchedRef.current && (main?.nathab && main.nathab !== '-' || nathabRules.some(r => r.section))) setNathab('auto');
     if (main?.drum && DRUMS.includes(main.drum)) setDrumInst(main.drum);
-  }, [nathabRules, can]);
+    if (main?.level) setLevel(main.level);
+    if (main?.ching) setChingOn(true);
+    if (main?.bpm) setBpm(main.bpm);
+  }, [nathabRules]);
   const [drumInst, setDrumInst] = useState('ตะโพน');
   const [level, setLevel] = useState('สองชั้น');
   const [chingOn, setChingOn] = useState(false);
@@ -153,7 +160,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     if (!can('player_khim') && mode === 'khim') setMode('combined');
     if (!can('player_vocal') && mode === 'vocal') setMode('combined');
     if (!can('player_real') && sound === 'real') setSound('synth');
-    if (!can('player_perc') && nathab !== 'none') setNathab('none');
+    // 'auto' = หน้าทับที่เจ้าของเพลงบันทึกไว้ — เล่นให้ทุกคน · สิทธิ์คุมเฉพาะการเลือกหน้าทับเอง
+    if (!can('player_perc') && nathab !== 'none' && nathab !== 'auto') setNathab('none');
     if (nathab === 'auto' && !nathabRules?.length) setNathab('none');
   }, [can, mode, sound, nathab, nathabRules]);
 
@@ -638,13 +646,14 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           <option value="L">🔊 {lineName(1)}</option>
           {rec3 && <option value="X">🔊 {lineName(2)}</option>}
         </select>
-        {can('player_perc') && <select className="filter-select" value={nathab} disabled={playState !== 'stopped'}
+        {/* เพลงที่กำหนดหน้าทับไว้ ทุกคนได้ยิน (และปิดเองได้) · เลือกหน้าทับอื่นเองต้องมีสิทธิ์ player_perc */}
+        {(can('player_perc') || nathabRules?.length > 0) && <select className="filter-select" value={nathab} disabled={playState !== 'stopped'}
           onChange={e => { nathabTouchedRef.current = true; setNathab(e.target.value); }} title="หน้าทับจากคลังกลาง (/nathab)">
           <option value="none">🥁 ไม่มีกลอง</option>
           {nathabRules?.length > 0 && <option value="auto">🥁 ตามที่เพลงกำหนด ({nathabRules.find(r => !r.section)?.nathab ?? 'รายท่อน'})</option>}
-          {(libNames.length ? libNames : ['ปรบไก่', 'สองไม้']).map(n => <option key={n} value={n}>หน้าทับ{n}</option>)}
+          {can('player_perc') && (libNames.length ? libNames : ['ปรบไก่', 'สองไม้']).map(n => <option key={n} value={n}>หน้าทับ{n}</option>)}
         </select>}
-        {nathab !== 'none' && (
+        {nathab !== 'none' && can('player_perc') && (
           <select className="filter-select" value={drumInst} onChange={e => setDrumInst(e.target.value)} disabled={playState !== 'stopped'}>
             {DRUMS.map(d => <option key={d} value={d}>{drumLabel(d)}</option>)}
           </select>
@@ -688,6 +697,11 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
             </span>
           );
         })()}
+        {nathabRules?.length > 0 && (
+          <span style={{fontSize:'0.68rem',color:'var(--jade)'}} title="ฉิ่ง–ฉับ · หน้าทับกลอง · ความเร็ว ที่เจ้าของเพลงบันทึกไว้ ตั้งให้อัตโนมัติแล้ว">
+            🥁 ตั้งจังหวะตามที่เพลงบันทึกไว้ให้แล้ว — กดเล่นได้เลย
+          </span>
+        )}
         <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>💡 กดที่ห้องใดก็ได้เพื่อเล่นจากตรงนั้น</span>
       </div>
 

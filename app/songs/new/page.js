@@ -1,11 +1,15 @@
 'use client';
 // app/songs/new/page.js — เพิ่มเพลงใหม่เข้าฐาน (ใช้กระดานโน้ตไทย)
-import { useEffect, useRef, useState } from 'react';
+//   ระบบร่าง (Pk 2026-08-26): เก็บร่างอัตโนมัติลงตาราง drafts ทุก ~2 วิ + ปุ่ม 💾 บันทึกร่าง
+//   เปิดร่างเดิมมาแก้ต่อได้ด้วย ?draft=<id> (ลิงก์จากหน้า "จดหมายเหตุของฉัน") · ส่งสำเร็จ = ลบร่างทิ้ง
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../../../lib/supabase';
 import NotationInput from '../../../components/NotationInput';
 import RankGate from '../../../components/RankGate';
-import { versesToRows, versesToText, checkVerses, hasSound } from '../../../lib/notation-core';
+import DraftBar from '../../../components/DraftBar';
+import { versesToRows, versesToText, checkVerses, hasSound, rowsToVerses } from '../../../lib/notation-core';
+import { listDrafts, getDraft, saveDraft, deleteDraft, makeAutoSaver } from '../../../lib/drafts';
 
 const TYPES = ['🟢 แปรทำนอง', '🟠 บังคับทาง', '🟡 กึ่งบังคับทาง'];
 const INSTS = ['ทำนองหลัก','ระนาดเอก','ระนาดทุ้ม','ฆ้องวงใหญ่','ฆ้องวงเล็ก','ปี่ใน','ขลุ่ยเพียงออ','ซอด้วง','ซออู้','ซอสามสาย','จะเข้','ขิม'];
@@ -21,6 +25,17 @@ export default function NewSongPage() {
   const [summary, setSummary] = useState({ verses: 0, warn: 0 });
   const padRef = useRef(null);
 
+  // ── ร่าง ──
+  const draftIdRef = useRef(null);
+  const [draftId, setDraftId] = useState(null);
+  const [savedAt, setSavedAt] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [draftErr, setDraftErr] = useState('');
+  const [others, setOthers] = useState([]);
+  const [ready, setReady] = useState(false);          // โหลดร่างเดิมเสร็จแล้วค่อยเริ่มเก็บร่าง
+  const formRef = useRef({ name: '', songType: TYPES[0], instrument: 'ทำนองหลัก', note: '' });
+  formRef.current = { name, songType, instrument, note };
+
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data.user)); }, []);
   // ?mode=import → เปิดหน้าต่างนำเข้าไฟล์ทันที (ลิงก์จาก /convert และปุ่มเลือกวิธีด้านบน)
   const [wantImport, setWantImport] = useState(false);
@@ -31,9 +46,98 @@ export default function NewSongPage() {
     return () => clearInterval(t);
   }, [wantImport, user]);
 
+  const applyDraft = useCallback(d => {
+    const p = d?.payload ?? {};
+    draftIdRef.current = d?.id ?? null; setDraftId(d?.id ?? null);
+    setName(p.name ?? ''); setSongType(p.songType ?? TYPES[0]);
+    setInstrument(p.instrument ?? 'ทำนองหลัก'); setNote(p.note ?? '');
+    setSavedAt(d?.updated_at ?? null);
+    // โน้ตกลับเข้ากระดาน (รอกระดานพร้อมก่อน)
+    if (Array.isArray(p.rows) && p.rows.length) {
+      let n = 0;
+      const t = setInterval(() => {
+        if (padRef.current?.loadVerses) { padRef.current.loadVerses(rowsToVerses(p.rows)); clearInterval(t); }
+        else if (++n > 25) clearInterval(t);
+      }, 200);
+    }
+    try { const u = new URL(window.location.href); if (d?.id) u.searchParams.set('draft', d.id); else u.searchParams.delete('draft'); window.history.replaceState(null, '', u.toString()); } catch (e) {}
+  }, []);
+
+  // โหลดร่าง: ?draft=<id> เปิดร่างนั้น · ไม่มีก็แค่ดึงรายการร่างค้างมาโชว์
+  useEffect(() => {
+    if (!user) return;
+    (async () => {
+      const wanted = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('draft') : null;
+      const { drafts } = await listDrafts('song');
+      if (wanted) {
+        const { draft } = await getDraft(wanted);
+        if (draft) applyDraft(draft);
+      }
+      setOthers(drafts.filter(d => String(d.id) !== String(wanted)));
+      setReady(true);
+    })();
+  }, [user, applyDraft]);
+
+  const payloadNow = useCallback(() => {
+    const f = formRef.current;
+    const verses = padRef.current?.getVerses?.() ?? [];
+    const st = padRef.current?.getState?.() ?? {};
+    const rows = verses.length ? versesToRows(verses, { lines: st.lines, system: st.system }) : [];
+    return { ...f, rows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, system: st.system, lines: st.lines,
+             tang: st.tangHome, notation_ensemble: st.notEns, ensemble: st.ensemble, level: st.level,
+             ching: st.chingOn, nathab: st.nathab, drum: st.drum, bpm: st.bpm };
+  }, []);
+
+  const saverRef = useRef(null);
+  if (!saverRef.current) saverRef.current = makeAutoSaver({
+    kind: 'song',
+    getId: () => draftIdRef.current,
+    setId: id => { draftIdRef.current = id; setDraftId(id); try { const u = new URL(window.location.href); u.searchParams.set('draft', id); window.history.replaceState(null, '', u.toString()); } catch (e) {} },
+    onSaved: (id, at) => { setSaving(false); setSavedAt(at); setDraftErr(''); },
+    onError: e => { setSaving(false); setDraftErr(e?.message ?? String(e)); },
+  });
+
+  const touch = useCallback(() => {
+    if (!ready || !user) return;
+    const p = payloadNow();
+    if (!p.name && !p.rows.length && !p.note) return;    // ยังไม่มีอะไรเลย ไม่ต้องสร้างร่างเปล่า
+    setSaving(true);
+    saverRef.current.push(p, p.name || '(ยังไม่ตั้งชื่อเพลง)');
+  }, [ready, user, payloadNow]);
+
+  useEffect(() => { touch(); }, [name, songType, instrument, note, touch]);
+  // ปิดแท็บ/รีเฟรช → รีบเขียนร่างที่ค้าง
+  useEffect(() => {
+    const h = () => saverRef.current?.flush();
+    window.addEventListener('pagehide', h);
+    return () => { window.removeEventListener('pagehide', h); };
+  }, []);
+
+  async function saveNow() {
+    if (!user) return;
+    setSaving(true); setDraftErr('');
+    const p = payloadNow();
+    const { id, error } = await saveDraft({ id: draftIdRef.current, kind: 'song', title: p.name || '(ยังไม่ตั้งชื่อเพลง)', payload: p });
+    setSaving(false);
+    if (error) { setDraftErr(error.message); return; }
+    if (id && id !== draftIdRef.current) { draftIdRef.current = id; setDraftId(id); }
+    setSavedAt(new Date());
+    setMsg('📝 บันทึกร่างแล้ว — กลับมาแก้ต่อได้จากหน้า "จดหมายเหตุของฉัน"');
+  }
+  async function discardDraft() {
+    if (!draftIdRef.current) return;
+    if (!confirm('ทิ้งร่างนี้? (โน้ตที่พิมพ์ไว้ยังอยู่บนกระดาน แต่จะไม่ถูกเก็บเป็นร่างอีก)')) return;
+    saverRef.current.cancel();
+    await deleteDraft(draftIdRef.current);
+    draftIdRef.current = null; setDraftId(null); setSavedAt(null);
+    try { const u = new URL(window.location.href); u.searchParams.delete('draft'); window.history.replaceState(null, '', u.toString()); } catch (e) {}
+    setMsg('ทิ้งร่างแล้ว');
+  }
+
   function onChange({ verses, base }) {
     const ck = checkVerses(verses, { base });
     setSummary({ verses: verses.filter(hasSound).length, warn: ck.filter(c => c.kind === 'warn').length });
+    touch();
   }
 
   async function submit() {
@@ -43,19 +147,26 @@ export default function NewSongPage() {
     if (!verses.filter(hasSound).length) { setMsg('⚠ กรอกโน้ตอย่างน้อย 1 วรรค'); return; }
     if (padRef.current.stop) padRef.current.stop();
     setBusy(true); setMsg('กำลังส่ง…');
+    saverRef.current.cancel();
     const rows = versesToRows(verses, { lines: st.lines, system: st.system });
     const { error } = await supabase.from('song_submissions').insert({
       name_th: name.trim(), song_type: songType, instrument,
       notation_text: versesToText(verses, { lines: st.lines }),   // อ่านได้ด้วยตา + ระบบเก่ายังอ่านออก
       notation_json: { rows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, system: st.system, lines: st.lines,
                        tang: st.tangHome, notation_ensemble: st.notEns,
-                       ensemble: st.ensemble, level: st.level },       // ระบบใหม่ใช้ตัวนี้
+                       ensemble: st.ensemble, level: st.level,
+                       // ฉิ่ง/กลอง/ความเร็วที่ตั้งบนกระดาน → ผู้ดูแลอนุมัติแล้วกลายเป็นค่าเริ่มต้นของเพลง
+                       ching: st.chingOn, nathab: st.nathab, drum: st.drum, bpm: st.bpm },
       note: note || null, submitted_by: user.id,
     });
     setBusy(false);
     if (error) { setMsg(error.message.includes('row-level security')
       ? '⚠ บัญชีของคุณยังไม่ถึงบรรดาศักดิ์ ขุน (300 ศักดินา) จึงยังใช้ระบบบันทึกโน้ตไม่ได้ — ร่วมบันทึกเหตุการณ์จดหมายเหตุเพื่อสะสมศักดินาก่อน'
       : '⚠ ' + error.message); return; }
+    // ส่งสำเร็จ → ร่างหมดหน้าที่
+    await deleteDraft(draftIdRef.current);
+    draftIdRef.current = null; setDraftId(null); setSavedAt(null);
+    try { const u = new URL(window.location.href); u.searchParams.delete('draft'); window.history.replaceState(null, '', u.toString()); } catch (e) {}
     setMsg(`✓ ส่งเพลง "${name}" (${rows.length} วรรค) แล้ว — รอผู้ดูแลตรวจสอบและอนุมัติ (+10 ศักดินาเมื่อผ่าน)`);
     padRef.current.clearDraft();
     setName(''); setNote('');
@@ -80,6 +191,10 @@ export default function NewSongPage() {
         <div style={{fontSize:'0.75rem',color:'var(--muted)',marginBottom:'1.1rem'}}>
           พิมพ์โน้ตด้วยแป้น TH Notation (a s d f g h j = ด ร ม ฟ ซ ล ท) · ผู้ดูแลตรวจสอบก่อนเผยแพร่ · เครดิตชื่อผู้เพิ่มแสดงในหน้าเพลง
         </div>
+
+        <DraftBar kind="song" draftId={draftId} savedAt={savedAt} saving={saving} error={draftErr} others={others}
+          onSave={saveNow} onDiscard={discardDraft}
+          onOpen={d => { applyDraft(d); setOthers(o => o.filter(x => x.id !== d.id)); setMsg('เปิดร่าง "' + (d.title ?? '') + '" มาแก้ต่อแล้ว'); }} />
 
         <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:'0.8rem'}}>
           <div className="form-group">
@@ -123,6 +238,7 @@ export default function NewSongPage() {
         </div>
         <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}}>
           <button className="btn btn-jade" onClick={submit} disabled={busy}>✓ ส่งเพลง — รอผู้ดูแลตรวจสอบ</button>
+          <button className="btn btn-outline" type="button" onClick={saveNow} disabled={saving}>💾 เก็บเป็นร่างไว้ก่อน</button>
           <span style={{fontSize:'0.75rem',color:'var(--muted)'}}>
             {summary.verses} วรรค{summary.warn ? ` · ⚑ มี ${summary.warn} จุดที่ระบบทักไว้ (ส่งได้ ผู้ดูแลจะเห็นธง)` : ''}
           </span>

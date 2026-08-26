@@ -5,7 +5,7 @@ import { supabase, extractYouTubeId } from '../../lib/supabase';
 import { textToVerses, versesToRows, rowsToVerses } from '../../lib/notation-core';
 import NotationInput from '../../components/NotationInput';
 import { NathabPreview } from '../../components/NathabEditor';
-import { invalidateNathabLibrary } from '../../lib/nathab';
+import { invalidateNathabLibrary, saveSongDefaults } from '../../lib/nathab';
 import { fmtDT, ago } from '../../lib/fmtdate';
 
 // กระดานอ่านอย่างเดียวสำหรับดู/ฟังโน้ตที่ส่งมาก่อนอนุมัติ
@@ -336,6 +336,11 @@ export default function AdminPage() {
     }));
     const { error: e2 } = await supabase.from('song_melody').insert(rows);
     if (e2) { alert('บันทึกโน้ตไม่สำเร็จ: ' + e2.message); return; }
+    // ฉิ่ง/กลอง/ความเร็วที่ผู้ส่งตั้งไว้บนกระดาน → ค่าเริ่มต้นของเพลง (Pk 2026-08-26 · ต้องรัน sql/18)
+    try {
+      const j = sub.notation_json || {};
+      await saveSongDefaults(sid, { nathab: j.nathab, level: j.level, drum: j.drum, ching: j.ching, bpm: j.bpm });
+    } catch (e) { /* ยังไม่ได้รัน sql/18 ก็ยังอนุมัติเพลงได้ตามปกติ */ }
     await supabase.from('song_submissions').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(), assigned_song_id: sid,
     }).eq('id', sub.id);

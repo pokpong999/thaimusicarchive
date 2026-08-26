@@ -52,7 +52,8 @@ export default function SongNathab({ song, verses, onRules }) {
 
   function startEdit() {
     setDraft({
-      main: { nathab: main?.nathab ?? (names[0] ?? ''), level: main?.level ?? '', drum: main?.drum ?? '' },
+      main: { nathab: main?.nathab ?? (names[0] ?? ''), level: main?.level ?? '', drum: main?.drum ?? '',
+              ching: !!main?.ching, bpm: main?.bpm ? String(main.bpm) : '' },
       extra: extra.map(r => ({ section: r.section, nathab: r.nathab, level: r.level ?? '', drum: r.drum ?? '', scope: r.scope === 'from' ? 'from' : 'only' })),
     });
     setOpen(true);
@@ -61,9 +62,12 @@ export default function SongNathab({ song, verses, onRules }) {
     if (!draft.main.nathab) { setMsg('⚠ เลือกหน้าทับหลักก่อน'); return; }
     const keys = draft.extra.map(x => x.section.trim()).filter(Boolean);
     if (new Set(keys).size !== keys.length) { setMsg('⚠ มีชื่อท่อนซ้ำกันในกฎ'); return; }
+    const bpm = draft.main.bpm ? parseInt(draft.main.bpm, 10) : null;
+    if (bpm != null && (!Number.isFinite(bpm) || bpm < 30 || bpm > 300)) { setMsg('⚠ ความเร็วต้องอยู่ระหว่าง 30–300'); return; }
     setBusy(true); setMsg('');
     const out = [
-      { song_id: songId, section: null, nathab: draft.main.nathab, level: draft.main.level || null, drum: draft.main.drum || null, scope: 'only' },
+      { song_id: songId, section: null, nathab: draft.main.nathab, level: draft.main.level || null, drum: draft.main.drum || null, scope: 'only',
+        ching: !!draft.main.ching, bpm },
       ...draft.extra.filter(x => x.section.trim() && x.nathab).map(x => ({ song_id: songId, section: x.section.trim(), nathab: x.nathab, level: x.level || null, drum: x.drum || null, scope: x.scope === 'from' ? 'from' : 'only' })),
     ];
     // ชุดใหม่แทนชุดเก่าทั้งหมด (ตารางเล็ก แถวต่อเพลงไม่กี่แถว)
@@ -115,6 +119,8 @@ export default function SongNathab({ song, verses, onRules }) {
             <b style={{ color: 'var(--gold)' }}>{main.nathab}</b>
             {main.level && <span style={{ color: 'var(--muted)' }}> · {main.level}</span>}
             {main.drum && <span style={{ color: 'var(--muted)' }}> · {main.drum}</span>}
+            {main.ching && <span style={{ color: 'var(--jade)' }}> · ฉิ่ง–ฉับ</span>}
+            {main.bpm && <span style={{ color: 'var(--muted)' }}> · {main.bpm} bpm</span>}
             {extra.map(r => (
               <span key={r.id} style={{ marginLeft: 10, fontSize: '0.74rem', color: 'var(--muted)' }}>
                 {r.section}{r.scope === 'from' ? ' ▸' : ''} → <span style={{ color: 'var(--cream)' }}>{r.nathab}</span>{r.level ? ` (${r.level})` : ''}
@@ -140,6 +146,20 @@ export default function SongNathab({ song, verses, onRules }) {
             <select className="filter-select" value={draft.main.drum} onChange={e => setMain({ drum: e.target.value })} title="เครื่องกำกับจังหวะที่แนะนำ">
               <option value="">เครื่องใดก็ได้</option>{DRUMS.map(d => <option key={d} value={d}>{drumLabel(d)}</option>)}
             </select>
+          </div>
+          {/* ค่าเริ่มต้นของเพลง (Pk 2026-08-26): ทุกคนกดเล่นแล้วได้ยินตามนี้ทันที */}
+          <div className="sn-defaults" style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 6 }}>
+            <span style={{ fontSize: '0.76rem', width: 110 }}>ตอนกดเล่น</span>
+            <label style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: '0.78rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={!!draft.main.ching} onChange={e => setMain({ ching: e.target.checked })} style={{ accentColor: 'var(--gold)' }} />
+              เปิดฉิ่ง–ฉับ ให้อัตโนมัติ
+            </label>
+            <label style={{ display: 'flex', gap: 5, alignItems: 'center', fontSize: '0.78rem' }}>
+              ความเร็ว
+              <input className="form-input" type="number" min="30" max="300" style={{ width: 78, fontSize: '0.8rem' }}
+                value={draft.main.bpm} placeholder="—" onChange={e => setMain({ bpm: e.target.value })} />
+              <span style={{ color: 'var(--muted)' }}>bpm (เว้นว่าง = ตามค่าเครื่องเล่น)</span>
+            </label>
           </div>
           {draft.extra.map((x, i) => (
             <div key={i} style={{ marginTop: 6 }}>

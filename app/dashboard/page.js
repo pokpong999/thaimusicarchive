@@ -5,6 +5,8 @@ import { supabase } from '../../lib/supabase';
 import RankBadge from '../../components/RankBadge';
 import Avatar from '../../components/Avatar';
 import { getRank, getNextRank } from '../../lib/ranks';
+import { listDrafts, deleteDraft, draftSummary } from '../../lib/drafts';
+import { fmtDT } from '../../lib/fmtdate';
 
 const Status = ({ ok }) => (
   <span className="badge" style={{
@@ -23,6 +25,7 @@ export default function DashboardPage() {
   const [pdfs, setPdfs] = useState([]);
   const [songs, setSongs] = useState([]);
   const [comments, setComments] = useState([]);
+  const [drafts, setDrafts] = useState([]);        // ฉบับร่างที่ยังไม่ได้ส่ง (Pk 2026-08-26)
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -52,7 +55,16 @@ export default function DashboardPage() {
     setProfile(p.data); setRecords(r.data ?? []); setVideos(v.data ?? []);
     setTangs(t.data ?? []); setPdfs(f.data ?? []); setSongs(s.data ?? []);
     setComments(c.data ?? []);
+    // ร่างอ่านแยก — ถ้ายังไม่ได้รัน sql/18 ให้เงียบ ๆ ไป ไม่ให้หน้าพัง
+    try { const { drafts: dl } = await listDrafts(); setDrafts(dl ?? []); } catch (e) { setDrafts([]); }
     setLoading(false);
+  }
+
+  async function delDraft(id) {
+    if (!confirm('ทิ้งร่างนี้? (ลบแล้วเรียกคืนไม่ได้)')) return;
+    const { error } = await deleteDraft(id);
+    if (error) { alert('ลบไม่สำเร็จ: ' + error.message); return; }
+    setDrafts(d => d.filter(x => x.id !== id));
   }
 
   async function del(table, id, item) {
@@ -141,6 +153,34 @@ export default function DashboardPage() {
         </div>
         <Link href="/diary"><button className="btn btn-outline btn-sm">📔 เขียนไดอารี่</button></Link>
         <Link href="/portfolio"><button className="btn btn-primary btn-sm">📁 แฟ้มผลงาน</button></Link>
+      </div>
+
+      {/* ── ฉบับร่าง: ยังไม่ได้ส่ง เห็นคนเดียว (Pk 2026-08-26) ── */}
+      <div className="card" id="drafts" style={{borderColor: drafts.length ? 'rgba(76,154,132,0.45)' : 'var(--border)'}}>
+        <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',marginBottom:'0.7rem'}}>
+          <div style={{fontWeight:600}}>📝 ฉบับร่าง ({drafts.length})</div>
+          <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>ยังไม่ได้ส่ง — เห็นคนเดียว ไม่นับศักดินา</span>
+          <span style={{flex:1}} />
+          <Link href="/songs/new"><button className="btn btn-outline btn-sm">＋ ร่างเพลงใหม่</button></Link>
+          <Link href="/archive/new"><button className="btn btn-outline btn-sm">＋ ร่างเหตุการณ์ใหม่</button></Link>
+        </div>
+        {drafts.length === 0
+          ? <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>ยังไม่มีร่างค้างอยู่ — เริ่มเขียนแล้วปิดหน้าไปได้เลย ระบบเก็บร่างให้อัตโนมัติ</div>
+          : drafts.map(d => (
+            <div key={d.id} style={{display:'flex',gap:'8px',alignItems:'center',padding:'6px 0',
+              borderBottom:'1px solid rgba(42,63,92,0.35)',flexWrap:'wrap'}}>
+              <div style={{flex:1,minWidth:'220px',fontSize:'0.83rem'}}>
+                <span className="badge badge-fixed" style={{marginRight:6}}>{d.kind === 'song' ? '🎼 เพลง' : '📜 เหตุการณ์'}</span>
+                {d.title || '(ยังไม่ตั้งชื่อ)'}
+                <span style={{color:'var(--muted)'}}> · {draftSummary(d)}</span>
+                <div style={{fontSize:'0.68rem',color:'var(--muted)'}}>แก้ล่าสุด {fmtDT(d.updated_at)}</div>
+              </div>
+              <Link href={d.kind === 'song' ? `/songs/new?draft=${d.id}` : `/archive/new?draft=${d.id}`}>
+                <button className="btn btn-primary btn-sm">✏️ แก้ต่อ / ส่ง</button>
+              </Link>
+              <button className="btn btn-danger btn-sm" onClick={() => delDraft(d.id)}>🗑 ลบร่าง</button>
+            </div>
+          ))}
       </div>
 
       <Section title="📜 บันทึกจดหมายเหตุ" items={records} table="archive_records"
