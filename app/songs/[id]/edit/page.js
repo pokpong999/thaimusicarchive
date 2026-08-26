@@ -73,7 +73,8 @@ export default function EditMelodyPage() {
       const { error } = await supabase.from('melody_submissions').insert({
         song_id: id, instrument, submitted_by: me.user.id,
         notation_text: versesToText(verses, { lines: st.lines }),
-        notation_json: { rows: newRows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, system: st.system, lines: st.lines, ensemble: st.ensemble, level: st.level },
+        notation_json: { rows: newRows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, system: st.system, lines: st.lines, ensemble: st.ensemble,
+                         tang: st.tangHome, notation_ensemble: st.notEns, level: st.level },
       });
       setBusy(false);
       if (error) { setMsg('⚠ ' + error.message); return; }
@@ -153,7 +154,8 @@ export default function EditMelodyPage() {
         </div>
 
         <NotationInput ref={padRef} initialVerses={initialVerses} onChange={onChange}
-          options={{ base: 4, lineHong: 8, twoHands, system, instrument, draftKey: `edit:${id}:${instrument}${isNew ? ':new' : ''}` }} />
+          options={{ base: 4, lineHong: 8, twoHands, system, instrument,
+                     draftKey: `edit:${id}:${instrument}${isNew ? ':new' : ''}` }} />
 
         <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',marginTop:'1rem'}}>
           <button className="btn btn-jade" onClick={save} disabled={busy || (!dirty && !isNew)}>
