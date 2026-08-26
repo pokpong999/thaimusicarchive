@@ -98,7 +98,8 @@ export default function EditMelodyPage() {
     for (const nr of newRows) {
       const payload = { ...base, verse_no: nr.verse_no, section: nr.section, line_no: nr.line_no,
         combined: nr.combined, right_hand: nr.right_hand, left_hand: nr.left_hand, third_hand: nr.third_hand ?? null,
-        notation_system: nr.notation_system ?? null, krasuan: nr.krasuan, luktok: nr.luktok, level: nr.level ?? null, ching: nr.ching ?? null };
+        notation_system: nr.notation_system ?? null, krasuan: nr.krasuan, luktok: nr.luktok, level: nr.level ?? null, ching: nr.ching ?? null,
+        marks: nr.marks ?? null };
       const old = existing.get(nr.verse_no);
       if (old) {
         const { error } = await supabase.from('song_melody').update(payload).eq('id', old.id);
