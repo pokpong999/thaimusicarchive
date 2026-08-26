@@ -286,7 +286,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     // ── สะบัด + สองมือ: กฎอยู่ที่ lib/notation-core.js (ที่เดียวกับกระดานโน้ต) ──
     const { runs, consumed } = buildVoices(G);
     const scheduleMelodyAt = (s, t) => {
-      for (let li = 0; li < 2; li++) {
+      for (let li = 0; li < consumed.length; li++) {   // ทุกบรรทัดตามระบบบันทึก (ขิม/จะเข้ = 3)
         if (consumed[li][s]) continue;
         const run = runs.get(li * totalSteps + s);
         if (run) {
