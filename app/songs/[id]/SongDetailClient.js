@@ -41,11 +41,12 @@ export default function SongDetailClient() {
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   // แท็บจำไว้ใน #hash (รีเฟรชแล้วกลับมาแท็บเดิม — Pk 2026-08-25) · ทางเครื่องใน ?inst= · ตำแหน่งเลื่อนใน sessionStorage
-  const TAB_KEYS = ['history', 'notation', 'analysis', 'audio', 'videos'];
+  // กดชื่อเพลงแล้วต้องเจอ "โน้ตเพลง" เป็นหน้าแรกทันที (Pk 2026-08-26) — ประวัติเพลงย้ายไปแท็บถัดไป
+  const TAB_KEYS = ['notation', 'history', 'analysis', 'audio', 'videos'];
   const [tab, setTabState] = useState(() => {
-    if (typeof window === 'undefined') return 'history';
+    if (typeof window === 'undefined') return 'notation';
     const h = window.location.hash.replace('#', '');
-    return TAB_KEYS.includes(h) ? h : 'history';
+    return TAB_KEYS.includes(h) ? h : 'notation';
   });
   const setTab = k => { setTabState(k); try { window.history.replaceState(null, '', window.location.pathname + window.location.search + '#' + k); } catch (e) {} };
   const scrollKey = typeof window !== 'undefined' ? 'thma-scroll:' + window.location.pathname : '';
@@ -216,8 +217,8 @@ export default function SongDetailClient() {
   }
 
   const TABS_ALL = [
-    ['history', '📜 ประวัติเพลง'],
     ['notation', '♪ โน้ตเพลง'],
+    ['history', '📜 ประวัติเพลง'],
     ['videos', `🎬 วิดีโอ (${videos.length})`],
     ['analysis', '📊 วิเคราะห์'],
     ['audio', `🔊 เสียง (${audios.length})`],
