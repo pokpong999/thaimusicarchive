@@ -7,8 +7,13 @@ import Link from 'next/link';
 import NotationInput from '../../components/NotationInput';
 import NotationImport from '../../components/NotationImport';
 import { hasSound } from '../../lib/notation-core';
+import { AdminOnlyPage } from '../../components/Gate';   // เปิดเฉพาะแอดมินก่อน (Pk 2026-08-26) — อนาคตค่อยเปิดทั่วไป
 
 export default function ConvertPage() {
+  return <AdminOnlyPage><ConvertTool /></AdminOnlyPage>;
+}
+
+function ConvertTool() {
   const padRef = useRef(null);
   const [stat, setStat] = useState({ verses: 0 });
   return (

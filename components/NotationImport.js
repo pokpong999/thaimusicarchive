@@ -9,6 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
+import { useMe } from './Gate';
 import { TONICS, LAYOUTS, importText, parseMusicXML, parseMidi, versesToMusicXML, versesToMidi, versesToThaiText, versesToWesternGrid, detectFormat, detectLayout, midiToNoteName } from '../lib/notation-import';
 import { readNotationFile, aiReadImages, downloadBlob, ACCEPT, kindOf, imageToBase64 } from '../lib/notation-files';
 import { hasSound, hongOf } from '../lib/notation-core';
@@ -35,6 +36,7 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
   const [expTonic, setExpTonic] = useState('C');
   const fileRef = useRef(null);
   const [drag, setDrag] = useState(false);
+  const { isAdmin } = useMe();
 
   useEffect(() => { if (!open) { setErr(''); setBusy(''); } }, [open]);
 
@@ -256,7 +258,7 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
           <pre style={{ margin: '8px 0 0', fontSize: '0.78rem', lineHeight: 1.7, background: 'var(--navy3)', padding: '6px 8px', borderRadius: 6, whiteSpace: 'pre-wrap', color: 'var(--muted)' }}>{expPreview || 'กระดานยังว่าง'}</pre>
           <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginTop: 6, lineHeight: 1.7 }}>
             โน้ตสากล: 1 ตำแหน่ง = เขบ็ตหนึ่งชั้น · 1 ห้อง = 2/4 · ตำแหน่งท้ายห้องไทย = จังหวะตกต้นห้องสากล (เลื่อนให้อัตโนมัติ) · คู่สะบัด = เขบ็ตสองชั้น 2 ตัว · มือซ้าย+ขวา = คอร์ด · ตัวโน้ตลากเสียงถึงตัวถัดไป (สูงสุด 4 ตำแหน่ง)
-            {!embedded && <> · <Link href="/convert" style={{ color: 'var(--gold2)' }}>หน้าแปลงโน้ตแบบเต็ม ↗</Link></>}
+            {!embedded && isAdmin && <> · <Link href="/convert" style={{ color: 'var(--gold2)' }}>หน้าแปลงโน้ตแบบเต็ม (แอดมิน) ↗</Link></>}
           </div>
         </div>
       )}

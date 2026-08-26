@@ -1,13 +1,14 @@
 'use client';
-import { usePermissions } from './Gate';
+import { usePermissions, useMe } from './Gate';
 import { EText } from './Editable';
 
 export default function FooterNav() {
   const { can } = usePermissions();
+  const { isAdmin } = useMe();
   const links = [
     can('page_krasuan') && ['/krasuan', 'ค้นกระสวน'],
     can('page_nathab') && ['/nathab', 'คลังหน้าทับ'],
-    ['/convert', '🔁 แปลงโน้ต'],
+    isAdmin && ['/convert', '🔁 แปลงโน้ต'],   // เฉพาะแอดมินก่อน
     can('page_people') && ['/people', 'ครูดนตรี'],
     can('page_timeline') && ['/timeline', 'เส้นเวลา'],
     can('page_compare') && ['/compare', 'เปรียบเทียบเพลง'],

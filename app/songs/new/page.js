@@ -75,7 +75,7 @@ export default function NewSongPage() {
     <main className="container" style={{maxWidth:'1180px'}}>
       <Link href="/"><span style={{color:'var(--muted)',fontSize:'0.8rem'}}>← กลับรายการเพลง</span></Link>
       <div className="card" style={{marginTop:'1rem'}}>
-        <div className="section-title" style={{fontSize:'1.1rem'}}>เพิ่มเพลงใหม่เข้าฐานข้อมูล</div>
+        <div className="section-title" style={{fontSize:'1.1rem'}}>TH Notation+ <span style={{fontWeight:400,color:'var(--muted)',fontSize:'0.9rem'}}>· เพิ่มเพลงใหม่เข้าฐานข้อมูล</span></div>
         <div style={{fontSize:'0.75rem',color:'var(--muted)',marginBottom:'1.1rem'}}>
           พิมพ์โน้ตด้วยแป้น TH Notation (a s d f g h j = ด ร ม ฟ ซ ล ท) · ผู้ดูแลตรวจสอบก่อนเผยแพร่ · เครดิตชื่อผู้เพิ่มแสดงในหน้าเพลง
         </div>
