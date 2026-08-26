@@ -14,7 +14,7 @@ import { TONICS, LAYOUTS, importText, parseMusicXML, parseMidi, versesToMusicXML
 import { readNotationFile, aiReadImages, downloadBlob, ACCEPT, kindOf, imageToBase64 } from '../lib/notation-files';
 import { hasSound, hongOf } from '../lib/notation-core';
 
-const SRC_LABEL = { 'pdf-text': 'PDF (ข้อความ)', 'pdf-scan': 'PDF (ภาพสแกน → AI)', docx: 'Word', sheet: 'Excel/CSV', image: 'รูปภาพ → AI', musicxml: 'MusicXML', mxl: 'MusicXML (.mxl)', midi: 'MIDI', text: 'ข้อความ', paste: 'วางข้อความ' };
+const SRC_LABEL = { 'pdf-grid': 'PDF (ตารางโน้ต)', 'pdf-text': 'PDF (ข้อความ)', 'pdf-scan': 'PDF (ภาพสแกน → AI)', docx: 'Word', sheet: 'Excel/CSV', image: 'รูปภาพ → AI', musicxml: 'MusicXML', mxl: 'MusicXML (.mxl)', midi: 'MIDI', text: 'ข้อความ', paste: 'วางข้อความ' };
 const FMT_LABEL = { thai: 'อักษรไทย', thn: 'TH Notation (รหัสแป้น)', western: 'โน้ตสากล', unknown: 'ไม่ทราบ' };
 
 export default function NotationImport({ open = true, onClose, getVerses, onImport, base = 4, lineHong = 8, embedded = false, title = '📥 นำเข้าโน้ต / 🔁 แปลงโน้ต' }) {
