@@ -16,6 +16,7 @@ const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
 import { buildVoices, SABAT_GAP_DEFAULT } from '../lib/notation-core';
+import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 const SABAT_DEFAULT = SABAT_GAP_DEFAULT; // 80 ms — ค่าเดียวกับกระดานโน้ต (Pk เคาะ 2026-08-24)
 
 function noteFreq(ch, register) {
@@ -496,6 +497,14 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   //   บน = สูง (หย่องซ้าย) = right_hand · กลาง = left_hand · ล่าง = ต่ำ (หย่องขวา) = third_hand
   //   ถ้าไม่ได้บันทึกแยก ใช้วิธีเดิม: แยกทำนองรวมตามช่วงเสียง
   const rec3 = useMemo(() => parsed.some(pv => pv.xh.some(c => c.length)), [parsed]);
+  // ชื่อบรรทัดตามระบบบันทึกที่เพลงนี้ใช้ (ขิม = สูง/กลาง/ต่ำ · จะเข้ = สายเอก/ทุ้ม/ลวด · ระนาด = มือขวา/มือซ้าย)
+  const sysKey = useMemo(() => {
+    const hint = (verses ?? []).find(v => v.notation_system)?.notation_system;
+    const n = rec3 ? 3 : (verses ?? []).some(v => (v.left_hand ?? '').trim()) ? 2 : 1;
+    return systemForLines(n, hint);
+  }, [verses, rec3]);
+  const sysLines = useMemo(() => linesOf(sysKey), [sysKey]);
+  const lineName = i => sysLines[i]?.label || sysLines[i]?.tag || ['บน', 'กลาง', 'ล่าง'][i];
   function khimRow(pv, reg) {
     if (rec3) return reg === '1' ? pv.rh : reg === '0' ? pv.lh : pv.xh;
     return pv.cb.map(notes => notes.filter(n => String(n.register) === reg));
@@ -560,16 +569,16 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         <select className="filter-select" value={mode} onChange={e => setMode(e.target.value)}>
           <option value="combined">บรรทัดเดียว (ทำนองรวม)</option>
           {can('player_hands') && <option value="hands">สองบรรทัด (แยกมือ R/L)</option>}
-          {can('player_khim') && <option value="khim">สามบรรทัด (แบบขิม)</option>}
+          {can('player_khim') && <option value="khim">{rec3 ? `สามบรรทัด (${systemOf(sysKey).short})` : 'สามบรรทัด (แบบขิม)'}</option>}
           {can('player_vocal') && <option value="vocal">โน้ตขับร้อง (มีเนื้อ)</option>}
           {can('player_staff') && <option value="staff">โน้ตสากล 5 เส้น</option>}
         </select>
         <select className="filter-select" value={hand} onChange={e => setHand(e.target.value)} disabled={playState !== 'stopped'}
           title={rec3 ? 'เลือกแนวที่จะให้ดัง (โน้ตนี้บันทึก 3 บรรทัด)' : 'เลือกมือที่จะให้ดัง'}>
           <option value="both">🔊 {rec3 ? 'ทุกบรรทัด' : 'ทั้งสองมือ'}</option>
-          <option value="R">🔊 {rec3 ? 'บรรทัดบน (สูง)' : 'มือขวา'}</option>
-          <option value="L">🔊 {rec3 ? 'บรรทัดกลาง' : 'มือซ้าย'}</option>
-          {rec3 && <option value="X">🔊 บรรทัดล่าง (ต่ำ)</option>}
+          <option value="R">🔊 {lineName(0)}</option>
+          <option value="L">🔊 {lineName(1)}</option>
+          {rec3 && <option value="X">🔊 {lineName(2)}</option>}
         </select>
         {can('player_perc') && <select className="filter-select" value={nathab} disabled={playState !== 'stopped'}
           onChange={e => { nathabTouchedRef.current = true; setNathab(e.target.value); }} title="หน้าทับจากคลังกลาง (/nathab)">
@@ -643,11 +652,11 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
               </div>
               {mode === 'combined' && renderMulti(segs(pv => pv.cb), null)}
               {mode === 'hands' && <>
-                {renderMulti(segs(pv => pv.rh), 'R')}
-                {renderMulti(segs(pv => pv.lh), 'L')}
+                {renderMulti(segs(pv => pv.rh), sysLines[0]?.tag || 'R')}
+                {renderMulti(segs(pv => pv.lh), sysLines[1]?.tag || 'L')}
               </>}
-              {mode === 'khim' && ['1','0','-1'].map(reg =>
-                <div key={reg}>{renderMulti(group.map(vi => ({ positions: khimRow(parsed[vi], reg), vi })), REG_LABEL[reg])}</div>
+              {mode === 'khim' && ['1','0','-1'].map((reg, li) =>
+                <div key={reg}>{renderMulti(group.map(vi => ({ positions: khimRow(parsed[vi], reg), vi })), rec3 ? (sysLines[li]?.tag || REG_LABEL[reg]) : REG_LABEL[reg])}</div>
               )}
               {mode === 'vocal' && renderMulti(segs(pv => pv.cb), '♪')}
             </div>
