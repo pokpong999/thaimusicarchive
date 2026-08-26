@@ -10,6 +10,7 @@ import { supabase } from '../../../../lib/supabase';
 import { useMe } from '../../../../components/Gate';
 import NotationInput from '../../../../components/NotationInput';
 import { rowsToVerses, versesToRows, versesToText, checkVerses, hasSound } from '../../../../lib/notation-core';
+import { loadSongNathab, mainRule, saveSongDefaults } from '../../../../lib/nathab';
 
 const INSTS = ['ระนาดเอก','ระนาดทุ้ม','ฆ้องวงใหญ่','ฆ้องวงเล็ก','ปี่ใน','ขลุ่ยเพียงออ','ซอด้วง','ซออู้','ซอสามสาย','จะเข้','ขิม','อื่น ๆ'];
 
@@ -27,6 +28,9 @@ export default function EditMelodyPage() {
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [summary, setSummary] = useState({ verses: 0, warn: 0 });
+  // ค่าเริ่มต้นของเพลง (ฉิ่ง/กลอง/ความเร็ว) ที่บันทึกไว้ — ใส่กลับเข้ากระดาน แล้วบันทึกทับตอนกดบันทึกโน้ต
+  const [defaults, setDefaults] = useState(null);
+  const [saveDefaults, setSaveDefaults] = useState(true);
   const padRef = useRef(null);
 
   useEffect(() => {
@@ -34,6 +38,10 @@ export default function EditMelodyPage() {
     (async () => {
       const { data: s } = await supabase.from('songs').select('id, name_th, contributed_by').eq('id', id).single();
       setSong(s || null);
+      try {
+        const m = mainRule(await loadSongNathab(id));
+        setDefaults(m ? { nathab: m.nathab && m.nathab !== '-' ? m.nathab : 'none', drum: m.drum || undefined, ching: !!m.ching, bpm: m.bpm || undefined, level: m.level || undefined } : {});
+      } catch (e) { setDefaults({}); }
       if (isNew) { setRows([]); setCanEdit(!!me.user); setWhy(me.user ? '' : 'ต้องเข้าสู่ระบบก่อน'); return; }
       const { data: r } = await supabase.from('song_melody').select('*')
         .eq('song_id', id).eq('instrument', instrument).order('verse_no');
@@ -105,16 +113,23 @@ export default function EditMelodyPage() {
       const { error } = await supabase.from('song_melody').delete().in('id', extra);
       if (error) errs.push('ลบวรรคเกิน: ' + error.message);
     }
+    // ฉิ่ง/กลอง/ความเร็วที่ตั้งบนกระดาน → ค่าเริ่มต้นของเพลง (Pk 2026-08-26)
+    let defMsg = '';
+    if (saveDefaults) {
+      const { error: eD, skipped } = await saveSongDefaults(id, { nathab: st.nathab, level: st.level, drum: st.drum, ching: st.chingOn, bpm: st.bpm });
+      if (eD) defMsg = ' · ⚠ จำค่าฉิ่ง/กลองไม่สำเร็จ: ' + eD.message;
+      else if (!skipped) defMsg = ' · จำฉิ่ง/กลอง/ความเร็วเป็นค่าเริ่มต้นของเพลงแล้ว';
+    }
     setBusy(false);
     if (errs.length) { setMsg('⚠ บันทึกไม่ครบ — ' + errs.slice(0, 3).join(' · ') + (errs.length > 3 ? ' …' : '')); return; }
     setDirty(false); padRef.current.clearDraft();
-    setMsg('✓ บันทึกแล้ว ' + newRows.length + ' วรรค' + (approved ? '' : ' (รอผู้ดูแลอนุมัติ)'));
+    setMsg('✓ บันทึกแล้ว ' + newRows.length + ' วรรค' + (approved ? '' : ' (รอผู้ดูแลอนุมัติ)') + defMsg);
     const { data: r2 } = await supabase.from('song_melody').select('*').eq('song_id', id).eq('instrument', instrument).order('verse_no');
     setRows(r2 || []);
   }
 
   const wait = <main className="container" style={{textAlign:'center',paddingTop:'4rem',color:'var(--muted)'}}>กำลังโหลด...</main>;
-  if (me.loading || rows === null || !song) return wait;
+  if (me.loading || rows === null || !song || defaults === null) return wait;
 
   if (!canEdit) return (
     <main className="container" style={{maxWidth:'560px',textAlign:'center',paddingTop:'3rem'}}>
@@ -155,7 +170,17 @@ export default function EditMelodyPage() {
 
         <NotationInput ref={padRef} initialVerses={initialVerses} onChange={onChange}
           options={{ base: 4, lineHong: 8, twoHands, system, instrument,
+                     nathab: defaults.nathab, drum: defaults.drum, ching: undefined,
+                     chingOn: defaults.ching, bpm: defaults.bpm, level: defaults.level,
                      draftKey: `edit:${id}:${instrument}${isNew ? ':new' : ''}` }} />
+
+        {!isNew && (
+          <label style={{display:'flex',gap:'8px',alignItems:'center',marginTop:'0.9rem',fontSize:'0.8rem',cursor:'pointer'}}>
+            <input type="checkbox" checked={saveDefaults} onChange={e => setSaveDefaults(e.target.checked)} style={{accentColor:'var(--gold)'}} />
+            <span>จำ <b>ฉิ่ง–ฉับ · หน้าทับกลอง · ความเร็ว</b> ที่ตั้งไว้บนกระดาน เป็นค่าเริ่มต้นของเพลงนี้
+              <span style={{color:'var(--muted)'}}> — ทุกคนกดเล่นในหน้าเพลงแล้วจะได้ยินตามนี้ทันที</span></span>
+          </label>
+        )}
 
         <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',marginTop:'1rem'}}>
           <button className="btn btn-jade" onClick={save} disabled={busy || (!dirty && !isNew)}>
