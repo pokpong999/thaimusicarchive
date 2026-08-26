@@ -63,7 +63,7 @@ export default function EditMelodyPage() {
   async function save() {
     const verses = padRef.current.getVerses();
     const st = padRef.current.getState();
-    const newRows = versesToRows(verses, { twoHands: st.twoHands });
+    const newRows = versesToRows(verses, { lines: st.lines, system: st.system });
     if (!newRows.length) { setMsg('⚠ ยังไม่มีโน้ต'); return; }
     if (padRef.current.stop) padRef.current.stop();
     setBusy(true); setMsg('กำลังบันทึก…');
@@ -72,8 +72,8 @@ export default function EditMelodyPage() {
     if (isNew && !me.isAdmin) {
       const { error } = await supabase.from('melody_submissions').insert({
         song_id: id, instrument, submitted_by: me.user.id,
-        notation_text: versesToText(verses, { twoHands: st.twoHands }),
-        notation_json: { rows: newRows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, ensemble: st.ensemble, level: st.level },
+        notation_text: versesToText(verses, { lines: st.lines }),
+        notation_json: { rows: newRows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, system: st.system, lines: st.lines, ensemble: st.ensemble, level: st.level },
       });
       setBusy(false);
       if (error) { setMsg('⚠ ' + error.message); return; }
@@ -88,8 +88,8 @@ export default function EditMelodyPage() {
     const errs = [];
     for (const nr of newRows) {
       const payload = { ...base, verse_no: nr.verse_no, section: nr.section, line_no: nr.line_no,
-        combined: nr.combined, right_hand: nr.right_hand, left_hand: nr.left_hand,
-        krasuan: nr.krasuan, luktok: nr.luktok, level: nr.level ?? null, ching: nr.ching ?? null };
+        combined: nr.combined, right_hand: nr.right_hand, left_hand: nr.left_hand, third_hand: nr.third_hand ?? null,
+        notation_system: nr.notation_system ?? null, krasuan: nr.krasuan, luktok: nr.luktok, level: nr.level ?? null, ching: nr.ching ?? null };
       const old = existing.get(nr.verse_no);
       if (old) {
         const { error } = await supabase.from('song_melody').update(payload).eq('id', old.id);
@@ -131,6 +131,8 @@ export default function EditMelodyPage() {
 
   const initialVerses = rows.length ? rowsToVerses(rows) : null;
   const twoHands = rows.some(r => (r.right_hand || '').trim() || (r.left_hand || '').trim());
+  const system = rows.find(r => r.notation_system)?.notation_system
+    || (rows.some(r => (r.third_hand || '').trim()) ? 'khim3' : twoHands ? 'hands2' : 'melody1');
 
   return (
     <main className="container" style={{maxWidth:'1180px'}}>
@@ -151,7 +153,7 @@ export default function EditMelodyPage() {
         </div>
 
         <NotationInput ref={padRef} initialVerses={initialVerses} onChange={onChange}
-          options={{ base: 4, lineHong: 8, twoHands, draftKey: `edit:${id}:${instrument}${isNew ? ':new' : ''}` }} />
+          options={{ base: 4, lineHong: 8, twoHands, system, instrument, draftKey: `edit:${id}:${instrument}${isNew ? ':new' : ''}` }} />
 
         <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',marginTop:'1rem'}}>
           <button className="btn btn-jade" onClick={save} disabled={busy || (!dirty && !isNew)}>
