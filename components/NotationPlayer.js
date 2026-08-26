@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadMelodyBank, playMelodyNote } from '../lib/melodybank';
 import { loadInstruments } from '../lib/instruments';
+import { loadTunings, loadInstrumentNotes, notesToHzMap, tuningBySlug, tuningForEnsemble, hzOf, DEFAULT_TUNING } from '../lib/tuning';
 import { CHING_PATTERNS, DRUMS, drumLabel, parsePattern, playPercussion, playHit, loadSetBanks, loadDrumBank,
          loadNathabLibrary, nathabNames, findPattern, planSongNathab } from '../lib/nathab';
 const TH_COLS = ['ด','ร','ม','ฟ','ซ','ล','ท'];
@@ -85,7 +86,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const [hand, setHand] = useState('both');
   const [sound, setSound] = useState('real');          // 'synth' หรือ slug เครื่องดนตรี ('real' = ยังไม่รู้ → ใช้เครื่องแรกในทะเบียน)
   const [insts, setInsts] = useState([]);              // ทะเบียนเครื่องดำเนินทำนอง (โหลดสดจากฐาน)
-  const [ensemble, setEnsemble] = useState('khrueangsai'); // khrueangsai | piphat
+  const [tunes, setTunes] = useState([]);              // ชุดความถี่ในตาราง tunings
+  const [tuning, setTuning] = useState(DEFAULT_TUNING); // slug ของชุดที่เลือก
   const [sabatGap, setSabatGap] = useState(SABAT_DEFAULT);
   const [bpm, setBpm] = useState(120);
   const [hongsPerLine, setHongsPerLine] = useState(8);
@@ -98,6 +100,11 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     setInsts(list);
     setSound(cur => (cur === 'real' && list.length) ? list[0].slug : cur);
   }).catch(() => {}); }, []);   // โหลดสดทุกครั้งที่เปิดเครื่องเล่น → หน้าทับที่เพิ่งสร้างเลือกได้ทันที
+  // ระบบเสียง (ความถี่จริง) — เพิ่มชุดใหม่ในฐานแล้วเลือกได้ที่นี่ทันที
+  useEffect(() => { loadTunings({ force: true }).then(list => {
+    setTunes(list);
+    setTuning(cur => list.some(t => t.slug === cur) ? cur : (list.find(t => t.is_default) || list[0])?.slug || DEFAULT_TUNING);
+  }).catch(() => {}); }, []);
   // เพลงที่ตั้งหน้าทับไว้แล้ว → เปิดกลองให้อัตโนมัติ (ถ้าผู้ฟังยังไม่ได้เลือกเอง)
   useEffect(() => {
     if (!nathabRules?.length || nathabTouchedRef.current) return;
@@ -220,7 +227,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   }, []);
 
   async function startFrom(startStep) {
-    const pitchShift = ensemble === 'piphat' ? 1 : 0;
+    const tuneNow = tuningBySlug(tunes, tuning);
     playIdRef.current++;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (ctxRef.current) { ctxRef.current.close().catch(() => {}); }
@@ -229,6 +236,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     await ctx.resume();
 
     const instNow = insts.find(i => i.slug === sound) || (sound !== 'synth' ? insts[0] : null);
+    // ไฟล์เสียงของเครื่องนี้ตั้งไว้ตามระบบไหน + ความถี่จริงรายตำแหน่งที่ผู้ดูแลกรอกไว้
+    const tuneOpts = { tuning: tuneNow,
+      srcTuning: instNow?.tuning ? tuningBySlug(tunes, instNow.tuning) : null,
+      hzMap: instNow ? notesToHzMap(await loadInstrumentNotes(instNow.slug)) : null };
     let buffers = buffersRef.current;
     if (instNow && !buffers) {
       setLoadingSamples(true);
@@ -253,10 +264,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     // vel = น้ำหนักมือ (สะบัดตัวนำเบากว่าตัวลง)
     function scheduleNote(n, noteTime, vel = 1) {
       let played = false;
-      if (useReal) played = playMelodyNote(ctx, buffers, n.ch, n.register, noteTime, 0.85 * vel, pitchShift, instNow.transpose || 0);
+      if (useReal) played = playMelodyNote(ctx, buffers, n.ch, n.register, noteTime, 0.85 * vel, 0, instNow.transpose || 0, tuneOpts);
       if (!played) {
-        const f = noteFreq(n.ch, n.register);
-        if (f) synthNote(ctx, f * Math.pow(2, pitchShift / 7), noteTime, stepDur * 2.2, 0.45 * vel);
+        const f = hzOf(tuneNow, n.ch, n.register || 0);   // ความถี่จริงตามระบบเสียงที่เลือก
+        if (f) synthNote(ctx, f, noteTime, stepDur * 2.2, 0.45 * vel);
       }
     }
 
@@ -562,9 +573,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           <option value="0.1">สะบัดหนืด (100 ms)</option>
           <option value="0.12">สะบัดช้า (120 ms)</option>
         </select>
-        <select className="filter-select" value={ensemble} onChange={e => setEnsemble(e.target.value)} disabled={playState !== 'stopped'}>
-          <option value="khrueangsai">🎻 ระบบเครื่องสาย</option>
-          <option value="piphat">🥁 ระบบปี่พาทย์ (สูงขึ้น 1 เสียง)</option>
+        <select className="filter-select" value={tuning} onChange={e => setTuning(e.target.value)} disabled={playState !== 'stopped'}
+          title="ระบบเสียง: ความถี่จริงของโน้ตแต่ละเสียง (ตารางความถี่เสียงดนตรีไทย กรมศิลปากร)">
+          {(tunes.length ? tunes : [{ slug: DEFAULT_TUNING, name_th: 'กรมศิลปากร — เครื่องสาย / มโหรี' }])
+            .map(t => <option key={t.slug} value={t.slug}>🎚 {t.name_th}</option>)}
         </select>
         <select className="filter-select" value={mode} onChange={e => setMode(e.target.value)}>
           <option value="combined">บรรทัดเดียว (ทำนองรวม)</option>

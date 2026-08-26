@@ -18,6 +18,7 @@ import NotationImport from './NotationImport';
 import { textToVerses, versesToRows, hasSound } from '../lib/notation-core';
 import { loadMelodyBank, playMelodyNote } from '../lib/melodybank';
 import { loadInstruments } from '../lib/instruments';
+import { loadTunings, loadInstrumentNotes, notesToHzMap } from '../lib/tuning';
 import { parsePattern, playPercussion, playHit, loadSetBanks, loadDrumBank, loadNathabLibrary, nathabNames, findPattern, approvedRows, DRUMS, drumLabel } from '../lib/nathab';
 
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
@@ -33,7 +34,9 @@ const AUDIO = {
     }
     return it ? loadMelodyBank(ctx, it) : null;
   },
-  play: (ctx, bank, ch, reg, t, gain, shift, inst) => playMelodyNote(ctx, bank, ch, reg, t, gain, shift, inst?.transpose || 0),
+  play: (ctx, bank, ch, reg, t, gain, shift, inst, tune) => playMelodyNote(ctx, bank, ch, reg, t, gain, shift, inst?.transpose || 0, tune),
+  // ความถี่จริงรายตำแหน่งที่ผู้ดูแลกรอกไว้ในตาราง instrument_notes
+  notes: async slug => notesToHzMap(await loadInstrumentNotes(slug)),
 };
 // หน้าทับกลองจากคลังหน้าทับกลาง (/nathab) — ตาราง nathab_patterns เฉพาะแถวที่อนุมัติแล้ว
 const PERC = {
@@ -130,7 +133,11 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
     eng.setDrumOptions(DRUMS.map(d => [d, drumLabel(d)]));
     // ตัวเลือก "เสียง" = เครื่องดำเนินทำนองทุกตัวในทะเบียน (เพิ่มเครื่องใหม่ในฐานแล้วโผล่ที่นี่ทันที)
     loadInstruments({ kind: 'melody', force: true })
-      .then(list => { if (engRef.current === eng) eng.setSourceOptions(list.map(i => ({ slug: i.slug, name_th: i.name_th, transpose: i.transpose || 0, note_count: i.note_count })), { pick: options.instrument }); })
+      .then(list => { if (engRef.current === eng) eng.setSourceOptions(list.map(i => ({ slug: i.slug, name_th: i.name_th, transpose: i.transpose || 0, note_count: i.note_count, tuning: i.tuning || null })), { pick: options.instrument }); })
+      .catch(() => {});
+    // ตัวเลือก "เสียงตั้ง" = ชุดความถี่ในตาราง tunings (ตารางกรมศิลปากร 2 ชุดเป็นค่าตั้งต้น)
+    loadTunings({ force: true })
+      .then(list => { if (engRef.current === eng) eng.setTuningOptions(list, { pick: options.tuning }); })
       .catch(() => {});
     if (draftKey && !options.readOnly) {
       const d = readDraft(draftKey);
