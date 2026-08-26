@@ -16,7 +16,8 @@ const NOTE_STEP = { 'ด':0, 'ร':1, 'ม':2, 'ฟ':3, 'ซ':4, 'ล':5, 'ท':
 const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
-import { buildVoices, SABAT_GAP_DEFAULT, kroSpans, kroStrikes, KRO_GAP_DEFAULT, DAMP_DUR_DEFAULT, CHAR_MARK } from '../lib/notation-core';
+import { buildVoices, SABAT_GAP_DEFAULT, kroSpans, kroStrikes, KRO_GAP_DEFAULT, DAMP_DUR_DEFAULT, CHAR_MARK,
+  HAND_BIT, DAMP_ALL, pairLead } from '../lib/notation-core';
 import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
 import { stepOf, noteOfStep } from '../lib/instruments';
@@ -225,11 +226,18 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       const lh = parseVerse(v.left_hand);
       const xh = parseVerse(v.third_hand);
       const len = Math.max(cb.length, rh.length, lh.length, xh.length, 4);
-      // เครื่องหมายวิธีบรรเลงรายตำแหน่ง (song_melody.marks · sql/19): 'kro' กรอ · 'damp' ประคบ
+      // เครื่องหมายวิธีบรรเลง (song_melody.marks · sql/19+20)
+      //   marks[i] = 'kro' กรอ (รายตำแหน่ง) · damp[i] = เลขบิตของแนวที่ประคบ (r1 l2 x4 · 'ป' เดิม = ทุกแนว)
       const marks = new Array(len).fill('');
-      if (v.marks) [...String(v.marks)].forEach((c, i) => { if (i < len && CHAR_MARK[c]) marks[i] = CHAR_MARK[c]; });
+      const damp = new Array(len).fill(0);
+      if (v.marks) [...String(v.marks)].forEach((c, i) => {
+        if (i >= len) return;
+        if (c === 'ก') marks[i] = 'kro';
+        else if (c === 'ป') damp[i] = DAMP_ALL;
+        else if (c >= '1' && c <= '7') damp[i] = +c;
+      });
       const item = {
-        v, len, offset, marks,
+        v, len, offset, marks, damp,
         cb: padTo(cb, len), rh: padTo(rh, len), lh: padTo(lh, len), xh: padTo(xh, len),
         useHands: !!(v.right_hand || v.left_hand || v.third_hand),
       };
@@ -266,9 +274,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
 
   const totalSteps = parsed.length ? parsed[parsed.length-1].offset + parsed[parsed.length-1].len : 0;
 
-  // เครื่องหมายวิธีบรรเลงสำหรับวาดบนตาราง: ประคบ = ตัวหนา · กรอ = คลื่นคลุมตั้งแต่ช่องนั้นถึงก่อนเสียงถัดไป
+  // เครื่องหมายวิธีบรรเลงสำหรับวาดบนตาราง (Pk 27 ส.ค.):
+  //   ประคบ = ตัวหนา แยกอิสระรายมือ · กรอ = คลื่นเหนือ "โน้ตตัวที่กรอ" ตัวเดียว ไม่ลากไปหาเสียงถัดไป
+  //   (ตอนเล่นยังกรอยาวถึงเสียงถัดไปเหมือนเดิม — เปลี่ยนแค่การแสดงผล)
   const marksView = useMemo(() => {
     const markOf = st => { const pv = parsed.find(p => st >= p.offset && st < p.offset + p.len); return pv ? (pv.marks?.[st - pv.offset] || '') : ''; };
+    const dampOf = st => { const pv = parsed.find(p => st >= p.offset && st < p.offset + p.len); return pv ? (pv.damp?.[st - pv.offset] || 0) : 0; };
     const notesOf = st => {
       const pv = parsed.find(p => st >= p.offset && st < p.offset + p.len);
       if (!pv) return [];
@@ -276,8 +287,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       return ['cb', 'rh', 'lh', 'xh'].flatMap(k => (pv[k][i] || []).map(n => ({ ch: n.ch, reg: n.register || 0 })));
     };
     const cover = new Set();
-    kroSpans({ total: totalSteps, markOf, notesOf }).forEach(sp => { for (let k = sp.start; k < sp.end; k++) cover.add(k); });
-    return { markOf, cover };
+    kroSpans({ total: totalSteps, markOf, notesOf }).forEach(sp => cover.add(sp.start));
+    return { markOf, dampOf, cover };
   }, [parsed, totalSteps]);
 
   useEffect(() => () => {
@@ -356,27 +367,37 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     const spans = kroSpans({ total: totalSteps, markOf: markOfStep, notesOf: notesOfStep });
     const kroAt = new Map(spans.map(sp => [sp.start, sp]));
 
-    const scheduleMelodyAt = (s, t) => {
+    const scheduleMelodyAt = (s, tBase) => {
+      const t = tBase;
       const sp = kroAt.get(s);
       if (sp) {
         kroStrikes({ dur: (sp.end - sp.start) * stepDur, gap: kroGap, low: sp.low, high: sp.high })
           .forEach(k => { const tt = t + k.t; q(tt, () => scheduleNote({ ch: k.note.ch, register: k.note.reg }, tt, 0.95 * k.vel)); });
         return;
       }
-      const damp = markOfStep(s) === 'damp';
+      const dampMaskAt = st => { const pv = parsed.find(p => st >= p.offset && st < p.offset + p.len); return pv ? (pv.damp?.[st - pv.offset] || 0) : 0; };
+      const mask = dampMaskAt(s);
+      const HKp = ['r', 'l', 'x'];
+      // คู่สอง/คู่สาม (Pk 27 ส.ค.): แนวที่เสียงต่ำกว่าลงก่อนนิดหนึ่ง แม้เขียนไว้ตำแหน่งเดียวกัน
+      const lead = consumed.length > 1
+        ? pairLead(Array.from({ length: consumed.length }, (_, li) => (G[li][s] || []).map(n => ({ ch: n.ch, reg: n.register || 0 }))))
+        : [];
       for (let li = 0; li < consumed.length; li++) {   // ทุกบรรทัดตามระบบบันทึก (ขิม/จะเข้ = 3)
         if (consumed[li][s]) continue;
+        // ประคบแยกรายมือ · เลือกฟังมือเดียวอยู่ (hand !== 'both') เสียงถูกยกมาไว้แนว 0 แล้ว จึงดูทั้งก้อน
+        const damp = consumed.length > 1 && hand === 'both' ? !!(mask & HAND_BIT[HKp[li]]) : !!mask;
+        const tl = tBase - (lead[li] || 0);
         const run = runs.get(li * totalSteps + s);
         if (run) {
           // ตัวสุดท้ายลงตรงจังหวะ ตัวก่อนหน้าถอยหลังทีละ sabatGap · น้ำหนัก 0.6 → 0.8 → 1.0
           run.notes.forEach((n, ni) => {
             const back = run.notes.length - 1 - ni;
-            const tt = t - back * sabatGap;
+            const tt = tl - back * sabatGap;
             const vel = back === 0 ? 1 : back === 1 ? 0.8 : 0.6;
             q(tt, () => scheduleNote(n, tt, vel, damp));
           });
         } else {
-          G[li][s].forEach(n => q(t, () => scheduleNote(n, t, 1, damp)));
+          G[li][s].forEach(n => q(tl, () => scheduleNote(n, tl, 1, damp)));
         }
       }
     };
@@ -536,17 +557,20 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     startFrom(parsed[vi].offset + hongStart);
   }
 
-  function renderCell(notes, vi, p) {
+  // hk = แนวที่กำลังวาด ('r' บน · 'l' ล่าง · 'x' ที่สาม · null = แนวรวม ให้ถือว่าประคบทั้งก้อน)
+  function renderCell(notes, vi, p, hk) {
     const isSabat = notes.length > 1;
     const step = (parsed[vi]?.offset ?? 0) + p;
     const mk = marksView.markOf(step);
+    const mask = marksView.dampOf(step);
+    const dp = hk ? !!(mask & HAND_BIT[hk]) : !!mask;      // ประคบแยกอิสระรายมือ (Pk 27 ส.ค.)
+    const kro = mk === 'kro' && (!hk || hk === 'r');       // เครื่องหมายกรออยู่แนวบน (มือขวา) แนวเดียว ตามที่ Pk เคาะ
     const cls = 'np-cell'
-      + (mk === 'damp' ? ' np-damp' : '')
-      + (mk === 'kro' ? ' np-kro' : '')
-      + (marksView.cover.has(step) ? ' np-krocover' : '');
+      + (dp ? ' np-damp' : '')
+      + (kro ? ' np-kro np-krocover' : '');
     return (
-      <span onClick={() => seek(vi, p)} title={mk === 'kro' ? 'กรอ — ตีสลับสองมือถึงเสียงถัดไป' : mk === 'damp' ? 'ประคบ — กดให้เสียงสั้น' : 'กดเพื่อเล่นจากห้องนี้'}
-        data-cell={`${vi}-${p}`} data-mark={mk || undefined} className={cls} style={{
+      <span onClick={() => seek(vi, p)} title={kro ? 'กรอ — ตีสลับสองมือถึงเสียงถัดไป' : dp ? 'ประคบ — กดให้เสียงสั้น' : 'กดเพื่อเล่นจากห้องนี้'}
+        data-cell={`${vi}-${p}`} data-mark={kro ? 'kro' : dp ? 'damp' : undefined} className={cls} style={{
         display:'inline-block', minWidth:'26px', textAlign:'center',
         padding:'2px 1px', borderRadius:'3px', fontSize:'1.05rem',
         fontFamily:'THNotation', lineHeight:1.6,
@@ -564,16 +588,16 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     );
   }
 
-  function segCells(positions, vi) {
+  function segCells(positions, vi, hk) {
     return positions.map((notes, p) => (
       <span key={p} style={{display:'flex'}}>
         {p > 0 && p % 4 === 0 && <span style={{color:'var(--border)',margin:'0 3px'}}>|</span>}
-        {renderCell(notes, vi, p)}
+        {renderCell(notes, vi, p, hk)}
       </span>
     ));
   }
 
-  function renderMulti(segs, label) {
+  function renderMulti(segs, label, hk = null) {
     return (
       <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
         {label && <span style={{fontSize:'0.65rem',color:'var(--muted)',width:'26px',textAlign:'right',flexShrink:0}}>{label}</span>}
@@ -581,7 +605,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           {segs.map((s, si) => (
             <span key={si} style={{display:'flex'}}>
               {si > 0 && <span style={{color:'var(--border)',margin:'0 3px'}}>|</span>}
-              {segCells(s.positions, s.vi)}
+              {segCells(s.positions, s.vi, hk)}
             </span>
           ))}
         </div>
@@ -758,8 +782,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       </div>
 
       <style>{`.np-cell.np-on{background:rgba(201,168,76,0.4)}
-        .np-damp{font-weight:800}
-        .np-damp::after{content:'';position:absolute;left:50%;bottom:0;width:3px;height:3px;margin-left:-1.5px;border-radius:50%;background:var(--gold2)}
+        .np-damp{font-weight:900}
         .np-krocover{background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='7'%3E%3Cpath d='M0 5 q 3.5 -4.5 7 0 t 7 0' fill='none' stroke='%23e8c96a' stroke-width='1.4'/%3E%3C/svg%3E");
           background-repeat:repeat-x;background-position:left top;padding-top:7px !important}
         .np-kro{color:var(--gold2)}`}</style>
@@ -779,15 +802,15 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
               <div style={{fontSize:'0.62rem',color:'var(--muted)',marginBottom:'3px'}}>
                 {label}{first.section ? ` · ${first.section}` : ''}{luk ? ` · ลูกตก: ${luk}` : ''}
               </div>
-              {mode === 'combined' && renderMulti(segs(pv => pv.cb), null)}
+              {mode === 'combined' && renderMulti(segs(pv => pv.cb), null, null)}
               {mode === 'hands' && <>
-                {renderMulti(segs(pv => pv.rh), sysLines[0]?.tag || 'R')}
-                {renderMulti(segs(pv => pv.lh), sysLines[1]?.tag || 'L')}
+                {renderMulti(segs(pv => pv.rh), sysLines[0]?.tag || 'R', 'r')}
+                {renderMulti(segs(pv => pv.lh), sysLines[1]?.tag || 'L', 'l')}
               </>}
               {mode === 'khim' && ['1','0','-1'].map((reg, li) =>
-                <div key={reg}>{renderMulti(group.map(vi => ({ positions: khimRow(parsed[vi], reg), vi })), rec3 ? (sysLines[li]?.tag || REG_LABEL[reg]) : REG_LABEL[reg])}</div>
+                <div key={reg}>{renderMulti(group.map(vi => ({ positions: khimRow(parsed[vi], reg), vi })), rec3 ? (sysLines[li]?.tag || REG_LABEL[reg]) : REG_LABEL[reg], rec3 ? ['r', 'l', 'x'][li] : null)}</div>
               )}
-              {mode === 'vocal' && renderMulti(segs(pv => pv.cb), '♪')}
+              {mode === 'vocal' && renderMulti(segs(pv => pv.cb), '♪', null)}
             </div>
           );
         })}
