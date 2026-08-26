@@ -1,7 +1,7 @@
 // app/api/import-image/route.js — อ่านโน้ตจากรูปภาพ/หน้า PDF ด้วย Claude (vision) (2026-08-25)
 //   POST { images:[{data:<base64>, media_type:'image/jpeg'|'image/png'|'image/webp'}], mode:'auto'|'thai'|'western', hint }
 //   → { text, format:'thai'|'western', model, usage }
-//   ต้องล็อกอิน (ส่ง Authorization: Bearer <supabase access token>) · ต้องตั้ง ANTHROPIC_API_KEY ใน Vercel (Settings → Environment Variables)
+//   ต้องล็อกอิน (ส่ง Authorization: Bearer <supabase access token>) และเป็น admin/moderator (Pk 2026-08-26) · ต้องตั้ง ANTHROPIC_API_KEY ใน Vercel (Settings → Environment Variables)
 //   ตัวเลือก: ANTHROPIC_MODEL (ค่าปริยาย claude-sonnet-5) · IMPORT_MAX_IMAGES (ปริยาย 10)
 //   ผลลัพธ์เป็น "ข้อความโน้ต" ตามไวยากรณ์ของกระดาน — ฝั่งเว็บอ่านต่อด้วย lib/notation-import.js แล้วให้คนตรวจก่อนบันทึกเสมอ
 
@@ -22,7 +22,12 @@ async function verifyUser(req) {
     const r = await fetch(`${url}/auth/v1/user`, { headers: { apikey: key, Authorization: `Bearer ${token}` }, cache: 'no-store' });
     if (!r.ok) return null;
     const u = await r.json();
-    return u?.id ? u : null;
+    if (!u?.id) return null;
+    // สิทธิ์: เฉพาะ admin / moderator (Pk 2026-08-26) — อ่าน role จากโปรไฟล์ตัวเองผ่าน RLS
+    const pr = await fetch(`${url}/rest/v1/profiles?id=eq.${u.id}&select=role`, { headers: { apikey: key, Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    const rows = pr.ok ? await pr.json() : [];
+    u.role = rows?.[0]?.role ?? null;
+    return u;
   } catch { return null; }
 }
 
@@ -31,6 +36,7 @@ export async function POST(req) {
   if (!apiKey) return Response.json({ error: 'ยังไม่ได้ตั้ง ANTHROPIC_API_KEY บนเซิร์ฟเวอร์ — แอดมินตั้งใน Vercel → Settings → Environment Variables แล้ว Redeploy' }, { status: 501 });
   const user = await verifyUser(req);
   if (!user) return Response.json({ error: 'ต้องเข้าสู่ระบบก่อนใช้การอ่านภาพ' }, { status: 401 });
+  if (!['admin', 'moderator'].includes(user.role)) return Response.json({ error: 'การอ่านโน้ตจากภาพเปิดให้เฉพาะแอดมินและผู้ดูแล (moderator) — ไฟล์ PDF/Word/Excel/MusicXML/MIDI ยังนำเข้าได้ตามปกติ' }, { status: 403 });
 
   let body;
   try { body = await req.json(); } catch { return Response.json({ error: 'คำขอไม่ถูกต้อง' }, { status: 400 }); }

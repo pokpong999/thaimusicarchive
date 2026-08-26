@@ -98,6 +98,7 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
     }
   }
   async function runAi(res) {
+    if (!isAdmin) throw new Error('การอ่านโน้ตจากภาพ/สแกนเปิดให้เฉพาะแอดมินและผู้ดูแล — ไฟล์ PDF ที่เป็นข้อความ, Word, Excel, MusicXML, MIDI นำเข้าได้ตามปกติ');
     setBusy(`ส่ง ${res.images.length} ภาพให้ AI อ่าน… (ราว 10–40 วินาที)`);
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('ต้องเข้าสู่ระบบก่อนใช้การอ่านภาพ');
@@ -163,19 +164,19 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
             <div style={{ fontSize: '1.6rem' }}>📥</div>
             <div style={{ fontWeight: 600 }}>ลากไฟล์มาวาง หรือคลิกเลือก</div>
             <div style={{ fontSize: '0.74rem', color: 'var(--muted)', marginTop: 4, lineHeight: 1.7 }}>
-              PDF · Word (.docx) · Excel/CSV · รูปภาพ jpg/png (หลายรูป = หลายหน้า) · MusicXML/.mxl · MIDI · .txt<br />
+              PDF · Word (.docx) · Excel/CSV · MusicXML/.mxl · MIDI · .txt{isAdmin ? ' · รูปภาพ jpg/png (หลายรูป = หลายหน้า)' : ''}<br />
               อ่านได้ทั้งอักษรไทย ดรมฟซลท · ฟอนต์ TH Notation · โน้ตสากลบรรทัด 5 เส้น
             </div>
             <input ref={fileRef} type="file" accept={ACCEPT} multiple style={{ display: 'none' }} onChange={e => { handleFiles(e.target.files); e.target.value = ''; }} />
           </div>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 8, fontSize: '0.78rem' }}>
-            <span style={{ color: 'var(--muted)' }}>เมื่ออ่านจากภาพ/สแกน:</span>
+          {isAdmin && <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 8, fontSize: '0.78rem' }}>
+            <span style={{ color: 'var(--muted)' }}>เมื่ออ่านจากภาพ/สแกน (แอดมิน/ผู้ดูแล):</span>
             <label>ชนิดโน้ต <select className="filter-select" value={aiMode} onChange={e => setAiMode(e.target.value)}>
               <option value="auto">ให้ AI ดูเอง</option><option value="thai">โน้ตไทย / TH Notation</option><option value="western">โน้ตสากล 5 เส้น</option></select></label>
             <input className="form-input" placeholder="บอกใบ้ AI (ไม่บังคับ) เช่น เพลงลาวดวงเดือน สองชั้น 8 ห้องต่อบรรทัด" value={hint} onChange={e => setHint(e.target.value)} style={{ flex: 1, minWidth: 220, fontSize: '0.78rem' }} />
-          </div>
+          </div>}
           <div style={{ fontSize: '0.7rem', color: 'var(--muted)', marginTop: 6, lineHeight: 1.7 }}>
-            ไฟล์ PDF/Word/Excel ที่เป็น "ข้อความ" อ่านได้ทันทีในเครื่องคุณ ไม่ส่งไปไหน · ภาพและ PDF สแกนจะส่งให้ AI ช่วยถอด (ต้องล็อกอิน) แล้วคุณตรวจก่อนใส่ลงกระดานเสมอ
+            ไฟล์ PDF/Word/Excel ที่เป็น "ข้อความ" อ่านได้ทันทีในเครื่องคุณ ไม่ส่งไปไหน{isAdmin ? ' · ภาพและ PDF สแกนจะส่งให้ AI ช่วยถอด แล้วคุณตรวจก่อนใส่ลงกระดานเสมอ' : ' · การอ่านจากรูปภาพ/สแกนเปิดเฉพาะแอดมินและผู้ดูแล'}
           </div>
         </div>
       )}
