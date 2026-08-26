@@ -21,7 +21,7 @@ export default function ConvertPage() {
           </div>
         </div>
         <span style={{ flex: 1 }} />
-        <Link href="/songs/new"><button className="btn btn-outline btn-sm">➕ จะบันทึกเข้าฐาน? ไปหน้าเพิ่มเพลง</button></Link>
+        <Link href="/songs/new?mode=import"><button className="btn btn-outline btn-sm">➕ จะบันทึกเข้าฐาน? ไป "เพิ่มเพลง → นำเข้าจากไฟล์"</button></Link>
       </div>
 
       <NotationImport embedded title="📥 นำเข้า / ⬇ ส่งออก"

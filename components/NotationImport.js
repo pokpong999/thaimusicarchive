@@ -9,7 +9,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
-import { TONICS, importText, parseMusicXML, parseMidi, versesToMusicXML, versesToMidi, versesToThaiText, versesToWesternGrid, detectFormat, midiToNoteName } from '../lib/notation-import';
+import { TONICS, LAYOUTS, importText, parseMusicXML, parseMidi, versesToMusicXML, versesToMidi, versesToThaiText, versesToWesternGrid, detectFormat, detectLayout, midiToNoteName } from '../lib/notation-import';
 import { readNotationFile, aiReadImages, downloadBlob, ACCEPT, kindOf, imageToBase64 } from '../lib/notation-files';
 import { hasSound, hongOf } from '../lib/notation-core';
 
@@ -23,6 +23,8 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
   const [src, setSrc] = useState(null);         // ผลอ่านไฟล์ {kind, text, images, name, source, fontHint}
   const [raw, setRaw] = useState('');           // ข้อความที่แก้ได้ (ไทย/รหัสแป้น/ตารางสากล)
   const [format, setFormat] = useState(null);   // thai | thn | western
+  const [layout, setLayout] = useState('single');   // single | two | two-rev | three | labeled (โน้ตหัวเดียว/สองมือ/ขิม)
+  const [layoutHint, setLayoutHint] = useState(null);
   const [tonic, setTonic] = useState('C');
   const [beat, setBeat] = useState('western');
   const [aiMode, setAiMode] = useState('auto');
@@ -40,10 +42,10 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
   const parsed = useMemo(() => {
     if (!raw.trim()) return null;
     try {
-      const r = importText(raw, { format: format === 'unknown' ? null : format, tonic, beat, base, lineHong });
+      const r = importText(raw, { format: format === 'unknown' ? null : format, tonic, beat, base, lineHong, layout });
       return r;
     } catch (e) { return { verses: [], warnings: ['อ่านไม่ได้: ' + e.message], format }; }
-  }, [raw, format, tonic, beat, base, lineHong]);
+  }, [raw, format, tonic, beat, base, lineHong, layout]);
   const sounding = parsed ? parsed.verses.filter(hasSound) : [];
   const hongs = sounding.reduce((s, v) => s + hongOf(v), 0);
   const thaiPreview = parsed ? versesToThaiText(parsed.verses) : '';
@@ -51,7 +53,7 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
   async function handleFiles(files) {
     const list = Array.from(files || []);
     if (!list.length) return;
-    setErr(''); setAiNotes([]); setSrc(null); setRaw(''); setFormat(null);
+    setErr(''); setAiNotes([]); setSrc(null); setRaw(''); setFormat(null); setLayout('single'); setLayoutHint(null);
     try {
       // หลายรูป = หลายหน้าของโน้ตเดียวกัน · ไฟล์ชนิดอื่นอ่านไฟล์แรก
       const imgs = list.filter(f => kindOf(f) === 'image');
@@ -73,6 +75,7 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
     if (res.kind === 'text') {
       const fmt = res.fontHint === 'thn' && detectFormat(res.text) !== 'thai' ? 'thn' : detectFormat(res.text);
       setFormat(fmt); setRaw(res.text); if (fmt === 'western') setBeat('western');
+      pickLayout(res.layoutHint ?? detectLayout(res.text.split('\n')));
       setTab('review');
     } else if (res.kind === 'musicxml') {
       setBusy('อ่าน MusicXML…');
@@ -100,13 +103,20 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
     setAiNotes(j.notes || []);
     const fmt = j.format || detectFormat(j.text);
     setFormat(fmt === 'thn' ? 'thai' : fmt); setRaw(j.text); if (fmt === 'western') setBeat('western');
+    pickLayout(detectLayout(j.text.split('\n')));
     setSrc({ ...res, usage: j.usage, model: j.model });
     setTab('review');
+  }
+  // รูปแบบบรรทัด: มั่นใจ ≥ 0.8 ตั้งให้เลย · ต่ำกว่านั้นแค่แนะนำ
+  function pickLayout(h) {
+    setLayoutHint(h || null);
+    setLayout(h && h.confidence >= 0.8 ? h.layout : 'single');
   }
   function usePaste() {
     if (!pasteText.trim()) { setErr('⚠ วางข้อความก่อน'); return; }
     setErr(''); setSrc({ kind: 'text', name: 'ข้อความที่วาง', source: 'paste' });
     const fmt = detectFormat(pasteText); setFormat(fmt); setRaw(pasteText); if (fmt === 'western') setBeat('western');
+    pickLayout(detectLayout(pasteText.split('\n')));
     setTab('review');
   }
   function doImport(mode) {
@@ -186,6 +196,10 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
             <span>แหล่ง: <b>{src?.name}</b> <span style={{ color: 'var(--muted)' }}>· {SRC_LABEL[src?.source] ?? src?.source}{src?.pages ? ` · ${src.pages} หน้า` : ''}{src?.parts ? ` · ${src.parts.length} part (ใช้ที่มีโน้ตมากสุด)` : ''}{src?.bpm ? ` · ${Math.round(src.bpm)} bpm` : ''}</span></span>
             <label>อ่านเป็น <select className="filter-select" value={format ?? 'thai'} onChange={e => setFormat(e.target.value)}>
               <option value="thai">อักษรไทย</option><option value="thn">TH Notation (รหัสแป้น)</option><option value="western">โน้ตสากล (ตาราง C4 D4)</option></select></label>
+            {format !== 'western' && (
+              <label>รูปแบบ <select className="filter-select" value={layout} onChange={e => setLayout(e.target.value)} title="โน้ตหัวเดียว หรือโน้ตสองมือที่บรรทัดบน-ล่างคู่กัน">
+                {Object.entries(LAYOUTS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+            )}
             {format === 'western' && <>
               <label>ด = <select className="filter-select" value={tonic} onChange={e => setTonic(e.target.value)}>{TONICS.map(t => <option key={t}>{t}</option>)}</select></label>
               <label>จังหวะตก <select className="filter-select" value={beat} onChange={e => setBeat(e.target.value)} title="โน้ตสากลตกต้นห้อง → ย้ายให้ตกท้ายห้องแบบไทย (เลื่อน 3 ตำแหน่ง)">
@@ -193,12 +207,18 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
             </>}
           </div>
           {aiNotes.length > 0 && <div style={{ fontSize: '0.74rem', color: 'var(--gold)', marginBottom: 4 }}>🤖 {aiNotes.map(n => n.replace(/^%\s*/, '')).join(' · ')}</div>}
+          {format !== 'western' && layoutHint && layoutHint.layout !== 'single' && (
+            <div className="ni-layout-hint" style={{ fontSize: '0.74rem', color: layout === layoutHint.layout ? 'var(--jade)' : 'var(--gold)', marginBottom: 4 }}>
+              {layout === layoutHint.layout ? '✓ ' : '💡 '}{layoutHint.reason}{layout !== layoutHint.layout && <> — <button type="button" className="btn btn-outline btn-sm" onClick={() => setLayout(layoutHint.layout)}>ใช้ "{LAYOUTS[layoutHint.layout]}"</button></>}
+            </div>
+          )}
           <textarea className="form-input ni-raw" value={raw} onChange={e => setRaw(e.target.value)} rows={8} spellCheck={false}
             style={{ width: '100%', fontFamily: 'monospace', fontSize: '0.84rem', lineHeight: 1.7 }} title="แก้ข้อความได้เลย ระบบอ่านใหม่ให้ทันที" />
           <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap', marginTop: 6 }}>
             <div style={{ flex: 1, minWidth: 260 }}>
               <div style={{ fontSize: '0.76rem', marginBottom: 3 }}>
                 อ่านได้ <b style={{ color: 'var(--gold)' }}>{sounding.length}</b> วรรค · <b style={{ color: 'var(--gold)' }}>{hongs}</b> ห้อง
+                {sounding.some(v => v.cells.some(c => (c.l || []).length)) && <span style={{ color: 'var(--jade)' }}> · สองมือ R/L</span>}
                 {parsed?.format && <span style={{ color: 'var(--muted)' }}> · {FMT_LABEL[parsed.format]}</span>}
                 {parsed?.meta?.time && <span style={{ color: 'var(--muted)' }}> · {parsed.meta.time}{parsed.meta.key ? ' key ' + parsed.meta.key : ''}</span>}
               </div>

@@ -22,6 +22,14 @@ export default function NewSongPage() {
   const padRef = useRef(null);
 
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data.user)); }, []);
+  // ?mode=import → เปิดหน้าต่างนำเข้าไฟล์ทันที (ลิงก์จาก /convert และปุ่มเลือกวิธีด้านบน)
+  const [wantImport, setWantImport] = useState(false);
+  useEffect(() => { if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('mode') === 'import') setWantImport(true); }, []);
+  useEffect(() => {   // กระดานโผล่หลัง RankGate โหลดศักดินาเสร็จ → รอจนมี ref แล้วค่อยเปิด (ไม่เกิน 5 วิ)
+    if (!wantImport || !user) return;
+    let n = 0; const t = setInterval(() => { if (padRef.current?.openImport) { padRef.current.openImport(); setWantImport(false); clearInterval(t); } else if (++n > 25) clearInterval(t); }, 200);
+    return () => clearInterval(t);
+  }, [wantImport, user]);
 
   function onChange({ verses, base }) {
     const ck = checkVerses(verses, { base });
@@ -91,6 +99,21 @@ export default function NewSongPage() {
           </div>
         </div>
 
+        {/* เลือกวิธีใส่โน้ต (2026-08-25): เขียนเอง หรือ นำเข้า/แปลงจากไฟล์ */}
+        {summary.verses === 0 && (
+          <div className="new-song-ways" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))',gap:'10px',margin:'0.6rem 0'}}>
+            <button type="button" className="card" style={{textAlign:'left',cursor:'pointer',padding:'0.7rem 0.9rem',borderColor:'rgba(201,168,76,0.35)'}}
+              onClick={() => document.querySelector('.thn')?.scrollIntoView({behavior:'smooth',block:'start'})}>
+              <div style={{fontWeight:600}}>✍️ เขียนโน้ตเอง</div>
+              <div style={{fontSize:'0.74rem',color:'var(--muted)',marginTop:2}}>พิมพ์บนกระดานด้านล่างด้วยแป้น a s d f g h j · สองมือ R/L · ฟังได้ทันที</div>
+            </button>
+            <button type="button" className="card" style={{textAlign:'left',cursor:'pointer',padding:'0.7rem 0.9rem',borderColor:'rgba(201,168,76,0.35)'}}
+              onClick={() => padRef.current?.openImport?.()}>
+              <div style={{fontWeight:600}}>📥 นำเข้า / แปลงจากไฟล์</div>
+              <div style={{fontSize:'0.74rem',color:'var(--muted)',marginTop:2}}>PDF · Word · Excel · รูปถ่ายโน้ต · MusicXML · MIDI — อักษรไทย / TH Notation / โน้ตสากล → ตรวจแล้วใส่ลงกระดาน</div>
+            </button>
+          </div>
+        )}
         <NotationInput ref={padRef} onChange={onChange} options={{ base: 4, lineHong: 8, draftKey: 'new' }} />
 
         <div className="form-group" style={{marginTop:'1rem'}}>

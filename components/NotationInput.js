@@ -10,7 +10,7 @@
 //               staff: true }}     // ปุ่มเปิดโน้ตสากลใต้กระดาน (ค่าปริยาย true)
 //    onChange={({ verses, base, lineHong, twoHands, ensemble, level }) => …}
 // />
-// ref (useRef): getVerses() getState() toText() loadText(t) loadVerses(v) stop() clearDraft()
+// ref (useRef): getVerses() getState() toText() loadText(t) loadVerses(v) stop() clearDraft() openImport()
 import { useEffect, useImperativeHandle, useRef, useState, forwardRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { NotationEngine } from '../lib/notation-engine';
@@ -153,6 +153,7 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
     loadVerses: v => { if (engRef.current) { engRef.current.setVerses(v); engRef.current.emit(); } },
     stop:      () => engRef.current && engRef.current.stopPlay(),
     clearDraft: () => { if (draftKey) dropDraft(draftKey); },
+    openImport: () => setShowImport(true),           // เปิดหน้าต่างนำเข้าไฟล์/แปลงโน้ต
   }), [draftKey]);
 
   // ไม่เอาร่าง → กลับไปใช้โน้ตตั้งต้นจากฐาน และลบร่างทิ้ง
