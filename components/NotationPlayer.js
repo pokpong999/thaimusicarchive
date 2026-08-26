@@ -2,7 +2,8 @@
 import { usePermissions } from './Gate';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { loadGongSamples, playSampleNote, samplesAvailable } from '../lib/sampler';
+import { loadMelodyBank, playMelodyNote } from '../lib/melodybank';
+import { loadInstruments } from '../lib/instruments';
 import { CHING_PATTERNS, DRUMS, drumLabel, parsePattern, playPercussion, playHit, loadSetBanks, loadDrumBank,
          loadNathabLibrary, nathabNames, findPattern, planSongNathab } from '../lib/nathab';
 const TH_COLS = ['ด','ร','ม','ฟ','ซ','ล','ท'];
@@ -81,7 +82,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const { can } = usePermissions();
   const [mode, setMode] = useState('combined');
   const [hand, setHand] = useState('both');
-  const [sound, setSound] = useState('real');
+  const [sound, setSound] = useState('real');          // 'synth' หรือ slug เครื่องดนตรี ('real' = ยังไม่รู้ → ใช้เครื่องแรกในทะเบียน)
+  const [insts, setInsts] = useState([]);              // ทะเบียนเครื่องดำเนินทำนอง (โหลดสดจากฐาน)
   const [ensemble, setEnsemble] = useState('khrueangsai'); // khrueangsai | piphat
   const [sabatGap, setSabatGap] = useState(SABAT_DEFAULT);
   const [bpm, setBpm] = useState(120);
@@ -89,7 +91,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const [nathab, setNathab] = useState('none');       // none | auto (ตามที่เพลงกำหนด) | ชื่อหน้าทับในคลัง
   const [libNames, setLibNames] = useState([]);       // ชื่อหน้าทับทั้งหมดในคลังกลาง (/nathab)
   const nathabTouchedRef = useRef(false);
-  useEffect(() => { loadNathabLibrary({ force: true }).then(rows => setLibNames(nathabNames(rows))).catch(() => {}); }, []);   // โหลดสดทุกครั้งที่เปิดเครื่องเล่น → หน้าทับที่เพิ่งสร้างเลือกได้ทันที
+  useEffect(() => { loadNathabLibrary({ force: true }).then(rows => setLibNames(nathabNames(rows))).catch(() => {}); }, []);
+  // เครื่องดำเนินทำนองทั้งหมดในทะเบียน — เพิ่มเครื่อง/อัปเสียงใหม่แล้วเลือกได้ทันที
+  useEffect(() => { loadInstruments({ kind: 'melody', force: true }).then(list => {
+    setInsts(list);
+    setSound(cur => (cur === 'real' && list.length) ? list[0].slug : cur);
+  }).catch(() => {}); }, []);   // โหลดสดทุกครั้งที่เปิดเครื่องเล่น → หน้าทับที่เพิ่งสร้างเลือกได้ทันที
   // เพลงที่ตั้งหน้าทับไว้แล้ว → เปิดกลองให้อัตโนมัติ (ถ้าผู้ฟังยังไม่ได้เลือกเอง)
   useEffect(() => {
     if (!nathabRules?.length || nathabTouchedRef.current) return;
@@ -122,8 +129,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   useEffect(() => {
     if (defaultedRef.current || !verses?.length) return;
     defaultedRef.current = true;
+    const has3 = verses.some(v => (v.third_hand ?? '').trim());
     const hasHands = verses.some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim());
-    if (hasHands && can('player_hands')) setMode('hands');
+    if (has3 && can('player_khim')) setMode('khim');
+    else if (hasHands && can('player_hands')) setMode('hands');
   }, [verses, can]);
 
   useEffect(() => {
@@ -190,11 +199,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       const cb = parseVerse(v.combined);
       const rh = parseVerse(v.right_hand);
       const lh = parseVerse(v.left_hand);
-      const len = Math.max(cb.length, rh.length, lh.length, 4);
+      const xh = parseVerse(v.third_hand);
+      const len = Math.max(cb.length, rh.length, lh.length, xh.length, 4);
       const item = {
         v, len, offset,
-        cb: padTo(cb, len), rh: padTo(rh, len), lh: padTo(lh, len),
-        useHands: !!(v.right_hand || v.left_hand),
+        cb: padTo(cb, len), rh: padTo(rh, len), lh: padTo(lh, len), xh: padTo(xh, len),
+        useHands: !!(v.right_hand || v.left_hand || v.third_hand),
       };
       offset += len;
       return item;
@@ -217,15 +227,16 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     const ctx = ctxRef.current;
     await ctx.resume();
 
+    const instNow = insts.find(i => i.slug === sound) || (sound !== 'synth' ? insts[0] : null);
     let buffers = buffersRef.current;
-    if (sound === 'real' && !buffers) {
+    if (instNow && !buffers) {
       setLoadingSamples(true);
-      buffers = await loadGongSamples(ctx);
+      buffers = await loadMelodyBank(ctx, instNow);
       buffersRef.current = buffers;
-      setSampleCount(Object.keys(buffers).length);
+      setSampleCount(buffers?.count ?? 0);
       setLoadingSamples(false);
     }
-    const useReal = sound === 'real' && samplesAvailable(buffers);
+    const useReal = !!instNow && !!buffers?.count;
 
     const myId = ++playIdRef.current;
     setPlayState('playing');
@@ -241,7 +252,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     // vel = น้ำหนักมือ (สะบัดตัวนำเบากว่าตัวลง)
     function scheduleNote(n, noteTime, vel = 1) {
       let played = false;
-      if (useReal) played = playSampleNote(ctx, buffers, n.ch, n.register, noteTime, 0.85 * vel, pitchShift);
+      if (useReal) played = playMelodyNote(ctx, buffers, n.ch, n.register, noteTime, 0.85 * vel, pitchShift, instNow.transpose || 0);
       if (!played) {
         const f = noteFreq(n.ch, n.register);
         if (f) synthNote(ctx, f * Math.pow(2, pitchShift / 7), noteTime, stepDur * 2.2, 0.45 * vel);
@@ -251,14 +262,13 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     // ── เรียงโน้ตทุกวรรคเป็นแถวเดียวยาวตลอดเพลง (2 แถว = 2 มือ) ──
     // ทำให้สะบัดที่อยู่ตำแหน่งแรกของวรรค ดึงตัวนำจากตำแหน่งสุดท้ายของวรรคก่อนได้
     // และสะบัดตรงจุดที่กดเล่น (seek) ยังได้ตัวนำจากห้องก่อนหน้า แม้ห้องนั้นไม่ถูกเล่น
-    const G = [[], []];
+    const has3 = parsed.some(pv => pv.xh.some(c => c.length));
+    const G = has3 ? [[], [], []] : [[], []];
     parsed.forEach((pv, vi) => {
-      const ls = !pv.useHands ? [pv.cb, null]
-        : hand === 'R' ? [pv.rh, null] : hand === 'L' ? [pv.lh, null] : [pv.rh, pv.lh];
-      for (let p = 0; p < pv.len; p++) {
-        G[0].push(ls[0][p]);
-        G[1].push(ls[1] ? ls[1][p] : []);
-      }
+      const ls = !pv.useHands ? [pv.cb, null, null]
+        : hand === 'R' ? [pv.rh, null, null] : hand === 'L' ? [pv.lh, null, null]
+        : hand === 'X' ? [pv.xh, null, null] : [pv.rh, pv.lh, pv.xh];
+      for (let p = 0; p < pv.len; p++) G.forEach((g, gi) => g.push(ls[gi] ? (ls[gi][p] || []) : []));
     });
 
     // ── สะบัด + สองมือ: กฎอยู่ที่ lib/notation-core.js (ที่เดียวกับกระดานโน้ต) ──
@@ -482,7 +492,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     );
   }
 
+  // สามบรรทัดแบบขิม: ถ้าโน้ตบันทึกมา 3 บรรทัดจริง (third_hand) ใช้ของจริง
+  //   บน = สูง (หย่องซ้าย) = right_hand · กลาง = left_hand · ล่าง = ต่ำ (หย่องขวา) = third_hand
+  //   ถ้าไม่ได้บันทึกแยก ใช้วิธีเดิม: แยกทำนองรวมตามช่วงเสียง
+  const rec3 = useMemo(() => parsed.some(pv => pv.xh.some(c => c.length)), [parsed]);
   function khimRow(pv, reg) {
+    if (rec3) return reg === '1' ? pv.rh : reg === '0' ? pv.lh : pv.xh;
     return pv.cb.map(notes => notes.filter(n => String(n.register) === reg));
   }
 
@@ -524,8 +539,9 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
             <button className="btn btn-outline" onClick={stop}>■ หยุด</button>
           </>
         )}
-        <select className="filter-select" value={sound} onChange={e => setSound(e.target.value)} disabled={playState !== 'stopped'}>
-          {can('player_real') && <option value="real">🎵 เสียงฆ้องวงใหญ่จริง</option>}
+        <select className="filter-select" value={sound} onChange={e => { setSound(e.target.value); buffersRef.current = null; setSampleCount(null); }}
+          disabled={playState !== 'stopped'} title="เสียงเครื่องดนตรี — เพิ่มเครื่องใหม่ได้ที่ ผู้ดูแล → คลังเสียงเครื่องดนตรี">
+          {can('player_real') && insts.map(i => <option key={i.slug} value={i.slug}>🎵 {i.name_th}</option>)}
           <option value="synth">〰 เสียงสังเคราะห์</option>
         </select>
         {/* ค่า option ต้องเท่ากับ String(ตัวเลข) เป๊ะ ("0.06" ไม่ใช่ "0.060") ไม่งั้น dropdown แสดงค่าผิด */}
@@ -548,10 +564,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           {can('player_vocal') && <option value="vocal">โน้ตขับร้อง (มีเนื้อ)</option>}
           {can('player_staff') && <option value="staff">โน้ตสากล 5 เส้น</option>}
         </select>
-        <select className="filter-select" value={hand} onChange={e => setHand(e.target.value)} disabled={playState !== 'stopped'}>
-          <option value="both">🔊 ทั้งสองมือ</option>
-          <option value="R">🔊 มือขวา</option>
-          <option value="L">🔊 มือซ้าย</option>
+        <select className="filter-select" value={hand} onChange={e => setHand(e.target.value)} disabled={playState !== 'stopped'}
+          title={rec3 ? 'เลือกแนวที่จะให้ดัง (โน้ตนี้บันทึก 3 บรรทัด)' : 'เลือกมือที่จะให้ดัง'}>
+          <option value="both">🔊 {rec3 ? 'ทุกบรรทัด' : 'ทั้งสองมือ'}</option>
+          <option value="R">🔊 {rec3 ? 'บรรทัดบน (สูง)' : 'มือขวา'}</option>
+          <option value="L">🔊 {rec3 ? 'บรรทัดกลาง' : 'มือซ้าย'}</option>
+          {rec3 && <option value="X">🔊 บรรทัดล่าง (ต่ำ)</option>}
         </select>
         {can('player_perc') && <select className="filter-select" value={nathab} disabled={playState !== 'stopped'}
           onChange={e => { nathabTouchedRef.current = true; setNathab(e.target.value); }} title="หน้าทับจากคลังกลาง (/nathab)">
@@ -592,11 +610,17 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
             style={{accentColor:'var(--gold)'}} disabled={playState !== 'stopped'} /> เร็ว
           <span style={{fontFamily:'monospace'}}>{bpm}</span>
         </div>
-        {sampleCount != null && sound === 'real' && (
-          <span style={{fontSize:'0.68rem',color: sampleCount > 0 ? 'var(--jade)' : 'var(--danger)'}}>
-            {sampleCount > 0 ? `♪ เสียงจริง ${sampleCount}/16 ลูก` : '⚠ ยังไม่มีไฟล์เสียง'}
-          </span>
-        )}
+        {sampleCount != null && sound !== 'synth' && (() => {
+          const it = insts.find(i => i.slug === sound) || insts[0];
+          const want = it?.note_count || 16;
+          return (
+            <span style={{fontSize:'0.68rem',color: sampleCount > 0 ? 'var(--jade)' : 'var(--danger)'}}>
+              {sampleCount <= 0 ? '⚠ ยังไม่มีไฟล์เสียง ใช้สังเคราะห์แทน'
+                : sampleCount >= want ? `♪ เสียงจริงครบ ${sampleCount} เสียง`
+                : `♪ เสียงจริง ${sampleCount}/${want} เสียง · ที่ขาดขยับจากตัวใกล้สุด`}
+            </span>
+          );
+        })()}
         <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>💡 กดที่ห้องใดก็ได้เพื่อเล่นจากตรงนั้น</span>
       </div>
 

@@ -236,7 +236,7 @@ export default function AdminPage() {
     const rows = parsed.map(r => ({
       song_id: sub.song_id, verse_no: r.verse_no, instrument: inst,
       section: r.section ?? null, line_no: r.line_no ?? null,
-      combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null,
+      combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null, third_hand: r.third_hand ?? null, notation_system: r.notation_system ?? null,
       krasuan: r.krasuan ?? null, luktok: r.luktok ?? null,
       level: r.level ?? null, ching: r.ching ?? null,
       approved: true, submitted_by: sub.submitted_by,
@@ -329,7 +329,7 @@ export default function AdminPage() {
     const rows = parsed.map(r => ({
       song_id: sid, verse_no: r.verse_no, instrument: inst,
       section: r.section ?? null, line_no: r.line_no ?? null,
-      combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null,
+      combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null, third_hand: r.third_hand ?? null, notation_system: r.notation_system ?? null,
       krasuan: r.krasuan ?? null, luktok: r.luktok ?? null,
       level: r.level ?? null, ching: r.ching ?? null,
       approved: true, submitted_by: sub.submitted_by,

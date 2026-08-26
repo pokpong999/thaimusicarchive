@@ -16,15 +16,24 @@ import dynamic from 'next/dynamic';
 import { NotationEngine } from '../lib/notation-engine';
 import NotationImport from './NotationImport';
 import { textToVerses, versesToRows, hasSound } from '../lib/notation-core';
-import { loadGongSamples, playSampleNote } from '../lib/sampler';
+import { loadMelodyBank, playMelodyNote } from '../lib/melodybank';
+import { loadInstruments } from '../lib/instruments';
 import { parsePattern, playPercussion, playHit, loadSetBanks, loadDrumBank, loadNathabLibrary, nathabNames, findPattern, approvedRows, DRUMS, drumLabel } from '../lib/nathab';
 
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
 
-// เสียงฆ้องจริงจาก Supabase Storage (ตัวเดียวกับเครื่องเล่นหน้าเพลง)
+// เสียงเครื่องดนตรีจริงจาก Supabase Storage — เครื่องไหนก็ได้ตามทะเบียน instruments (2026-08-26)
+//   เสียงที่ยังไม่มีไฟล์ ระบบขยับระดับเสียงจากตัวที่ใกล้ที่สุดให้เอง (lib/melodybank.js)
 const AUDIO = {
-  load: ctx => loadGongSamples(ctx),
-  play: (ctx, buf, ch, reg, t, gain, shift) => playSampleNote(ctx, buf, ch, reg, t, gain, shift),
+  load: async (ctx, inst) => {
+    let it = inst;
+    if (!it || typeof it === 'string') {
+      const list = await loadInstruments({ kind: 'melody' });
+      it = list.find(x => x.slug === inst) || list[0] || null;
+    }
+    return it ? loadMelodyBank(ctx, it) : null;
+  },
+  play: (ctx, bank, ch, reg, t, gain, shift, inst) => playMelodyNote(ctx, bank, ch, reg, t, gain, shift, inst?.transpose || 0),
 };
 // หน้าทับกลองจากคลังหน้าทับกลาง (/nathab) — ตาราง nathab_patterns เฉพาะแถวที่อนุมัติแล้ว
 const PERC = {
@@ -106,7 +115,7 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
           clearTimeout(saveTimer.current);
           saveTimer.current = setTimeout(() => { flushDraft(); }, 250);
         }
-        if (showStaffRef.current) setStaffRows(versesToRows(d.verses, { twoHands: d.twoHands }));
+        if (showStaffRef.current) setStaffRows(versesToRows(d.verses, { lines: d.lines, system: d.system }));
       },
     });
     engRef.current = eng;
@@ -119,6 +128,10 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
     // รายชื่อหน้าทับใน dropdown "กลอง" มาจากคลังกลาง (ไม่ใช่ค่าตายตัว)
     loadNathabLibrary({ force: true }).then(rows => { if (engRef.current === eng) eng.setNathabOptions(nathabNames(rows)); }).catch(() => {});
     eng.setDrumOptions(DRUMS.map(d => [d, drumLabel(d)]));
+    // ตัวเลือก "เสียง" = เครื่องดำเนินทำนองทุกตัวในทะเบียน (เพิ่มเครื่องใหม่ในฐานแล้วโผล่ที่นี่ทันที)
+    loadInstruments({ kind: 'melody', force: true })
+      .then(list => { if (engRef.current === eng) eng.setSourceOptions(list.map(i => ({ slug: i.slug, name_th: i.name_th, transpose: i.transpose || 0, note_count: i.note_count })), { pick: options.instrument }); })
+      .catch(() => {});
     if (draftKey && !options.readOnly) {
       const d = readDraft(draftKey);
       if (d && d.verses && d.verses.some(hasSound)) {
@@ -141,7 +154,7 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
     showStaffRef.current = showStaff;
     if (showStaff && engRef.current) {
       const st = engRef.current.getState();
-      setStaffRows(versesToRows(engRef.current.getVerses(), { twoHands: st.twoHands }));
+      setStaffRows(versesToRows(engRef.current.getVerses(), { lines: st.lines, system: st.system }));
     }
   }, [showStaff]);
 

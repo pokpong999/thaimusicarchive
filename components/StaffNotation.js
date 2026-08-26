@@ -85,7 +85,7 @@ function sliceWeight(size) {
 export default function StaffNotation({ verses, cursor = null }) {
   const ref = useRef(null);
   const geomRef = useRef([]);   // [{verseIdx, rowEl, rects:[{x,w,start,size}], len}]
-  const hasHands = verses.some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim());
+  const hasHands = verses.some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim() || (v.third_hand ?? '').trim());
   const { can } = usePermissions();
   const [source, setSource] = useState('combined');
   const [beat, setBeat] = useState('thai'); // 'thai' ตกท้ายห้อง | 'western' ตกต้นห้อง
@@ -124,8 +124,10 @@ export default function StaffNotation({ verses, cursor = null }) {
         if (source === 'hands' && ((v.right_hand ?? '').trim() || (v.left_hand ?? '').trim())) {
           const rh = parseVerse(v.right_hand);
           const lh = parseVerse(v.left_hand);
-          const len = Math.max(rh.length, lh.length);
-          handPos = Array.from({ length: len }, (_, i) => ({ rh: rh[i] ?? [], lh: lh[i] ?? [] }));
+          // ขิม 3 บรรทัด: บรรทัดบน (สูง) = กุญแจซอล · กลาง + ต่ำ = กุญแจฟา
+          const xh = (v.third_hand ?? '').trim() ? parseVerse(v.third_hand) : [];
+          const len = Math.max(rh.length, lh.length, xh.length);
+          handPos = Array.from({ length: len }, (_, i) => ({ rh: rh[i] ?? [], lh: [...(lh[i] ?? []), ...(xh[i] ?? [])] }));
           positions = handPos.map(hp => [...hp.rh, ...hp.lh]);
         } else {
           positions = parseVerse(v.combined);

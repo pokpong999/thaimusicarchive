@@ -71,7 +71,7 @@ function Btn({ busy, id, label, fn }) {
 
 export default function SheetExport({ song, instrument, verses, onClose }) {
   const me = useMe();
-  const hasHands = (verses ?? []).some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim());
+  const hasHands = (verses ?? []).some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim() || (v.third_hand ?? '').trim());
   const [o, setO] = useState({
     notation: 'thai',                 // thai | staff
     handMode: hasHands ? 'hands' : 'combined',
@@ -222,9 +222,13 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
         ['ท่อน', 'วรรค', 'มือ', 'ห้อง 1', 'ห้อง 2', 'ห้อง 3', 'ห้อง 4', 'ลูกตก', 'กระสวน']];
       (verses ?? []).forEach(v => {
         const hongs = t => { const a = (t ?? '').split('|').map(x => x.trim()); while (a.length < 4) a.push(''); return a.slice(0, 4); };
-        if (o.handMode === 'hands' && ((v.right_hand ?? '').trim() || (v.left_hand ?? '').trim())) {
-          rows.push([v.section ?? '', v.verse_no, 'ขวา', ...hongs(v.right_hand), v.luktok ?? '', v.krasuan ?? '']);
-          rows.push(['', '', 'ซ้าย', ...hongs(v.left_hand), '', '']);
+        if (o.handMode === 'hands' && ((v.right_hand ?? '').trim() || (v.left_hand ?? '').trim() || (v.third_hand ?? '').trim())) {
+          const three = (v.third_hand ?? '').trim();
+          // ขิม 3 บรรทัด ใช้ชื่อบรรทัดตามระบบ (สูง / กลาง / ต่ำ) · สองมือใช้ ขวา / ซ้าย
+          const nm = three ? ['สูง', 'กลาง', 'ต่ำ'] : ['ขวา', 'ซ้าย'];
+          rows.push([v.section ?? '', v.verse_no, nm[0], ...hongs(v.right_hand), v.luktok ?? '', v.krasuan ?? '']);
+          rows.push(['', '', nm[1], ...hongs(v.left_hand), '', '']);
+          if (three) rows.push(['', '', nm[2], ...hongs(v.third_hand), '', '']);
         } else rows.push([v.section ?? '', v.verse_no, '', ...hongs(v.combined), v.luktok ?? '', v.krasuan ?? '']);
       });
       const ws = window.XLSX.utils.aoa_to_sheet(rows);

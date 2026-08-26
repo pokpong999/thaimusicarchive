@@ -43,11 +43,11 @@ export default function NewSongPage() {
     if (!verses.filter(hasSound).length) { setMsg('⚠ กรอกโน้ตอย่างน้อย 1 วรรค'); return; }
     if (padRef.current.stop) padRef.current.stop();
     setBusy(true); setMsg('กำลังส่ง…');
-    const rows = versesToRows(verses, { twoHands: st.twoHands });
+    const rows = versesToRows(verses, { lines: st.lines, system: st.system });
     const { error } = await supabase.from('song_submissions').insert({
       name_th: name.trim(), song_type: songType, instrument,
-      notation_text: versesToText(verses, { twoHands: st.twoHands }),   // อ่านได้ด้วยตา + ระบบเก่ายังอ่านออก
-      notation_json: { rows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands,
+      notation_text: versesToText(verses, { lines: st.lines }),   // อ่านได้ด้วยตา + ระบบเก่ายังอ่านออก
+      notation_json: { rows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, system: st.system, lines: st.lines,
                        ensemble: st.ensemble, level: st.level },       // ระบบใหม่ใช้ตัวนี้
       note: note || null, submitted_by: user.id,
     });
@@ -114,7 +114,7 @@ export default function NewSongPage() {
             </button>
           </div>
         )}
-        <NotationInput ref={padRef} onChange={onChange} options={{ base: 4, lineHong: 8, draftKey: 'new' }} />
+        <NotationInput ref={padRef} onChange={onChange} options={{ base: 4, lineHong: 8, instrument, draftKey: 'new' }} />
 
         <div className="form-group" style={{marginTop:'1rem'}}>
           <label className="form-label">ที่มาโน้ต / หมายเหตุถึงผู้ดูแล</label>
