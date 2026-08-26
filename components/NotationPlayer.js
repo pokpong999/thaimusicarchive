@@ -1,6 +1,6 @@
 'use client';
 import { usePermissions } from './Gate';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadMelodyBank, playMelodyNote } from '../lib/melodybank';
 import { loadInstruments } from '../lib/instruments';
@@ -18,6 +18,8 @@ const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
 import { buildVoices, SABAT_GAP_DEFAULT } from '../lib/notation-core';
 import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
+import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
+import { stepOf, noteOfStep } from '../lib/instruments';
 const SABAT_DEFAULT = SABAT_GAP_DEFAULT; // 80 ms — ค่าเดียวกับกระดานโน้ต (Pk เคาะ 2026-08-24)
 
 function noteFreq(ch, register) {
@@ -86,6 +88,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const [hand, setHand] = useState('both');
   const [sound, setSound] = useState('real');          // 'synth' หรือ slug เครื่องดนตรี ('real' = ยังไม่รู้ → ใช้เครื่องแรกในทะเบียน)
   const [insts, setInsts] = useState([]);              // ทะเบียนเครื่องดำเนินทำนอง (โหลดสดจากฐาน)
+  const [tang, setTang] = useState(null);              // ทางที่ผู้ฟังเลือก (null = ตามที่เพลงบันทึก)
+  const [tangView, setTangView] = useState('fix');     // fix = ตรึงโน้ต · real = ย้ายโน้ตจริง
   const [tunes, setTunes] = useState([]);              // ชุดความถี่ในตาราง tunings
   const [tuning, setTuning] = useState(DEFAULT_TUNING); // slug ของชุดที่เลือก
   const [sabatGap, setSabatGap] = useState(SABAT_DEFAULT);
@@ -201,7 +205,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const playIdRef = useRef(0);
 
   // ── แปลงโน้ตทุกวรรคครั้งเดียว: ความยาวจริงต่อวรรค + offset สะสม ──
-  const parsed = useMemo(() => {
+  // ── แปลงโน้ตทุกวรรคครั้งเดียว: ความยาวจริงต่อวรรค + offset สะสม ──
+  //   แยกเป็นสองชั้น: baseParsed = โน้ตตามที่บันทึก (แพงที่สุด ทำครั้งเดียว)
+  //   แล้วค่อยเลื่อนทางทีหลัง — ห้าม parse ซ้ำ ไม่งั้นเพลงยาวเฟรมค้าง
+  const baseParsed = useMemo(() => {
     let offset = 0;
     return (verses ?? []).map(v => {
       const cb = parseVerse(v.combined);
@@ -218,6 +225,33 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       return item;
     });
   }, [verses]);
+
+  // ── ทาง: หา "ทางบ้าน" ของโน้ตชุดนี้ แล้วคิดว่าต้องเลื่อนกี่ขั้น ──
+  const ensNow = useMemo(() => {
+    const t = tunes.find(x => x.slug === tuning);
+    return (t?.ensemble === 'piphat') ? 'piphat' : 'khrueangsai';
+  }, [tunes, tuning]);
+  const allSteps = useMemo(() => {
+    const out = [];
+    baseParsed.forEach(p => ['cb', 'rh', 'lh', 'xh'].forEach(k =>
+      p[k].forEach(cell => cell.forEach(n => out.push(stepOf(n.ch, n.register || 0))))));
+    return out;
+  }, [baseParsed]);
+  const homeTang = useMemo(() => (allSteps.length ? (guessTang(allSteps, { ens: ensNow })[0]?.no ?? 2) : 2), [allSteps, ensNow]);
+  //   ตรึงโน้ต → โน้ตไม่ขยับ เลื่อนแค่เสียง · ย้ายโน้ตจริง → ขยับตัวอักษร (เลือกทิศให้อยู่ช่วงเดิม) เสียงตามไปเอง
+  const tangShift = tang == null ? 0 : shiftBetween(homeTang, tang);
+  const viewShift = (tangView === 'real' && tangShift) ? bestShift(allSteps, tangShift) : 0;
+  const soundShift = tangView === 'real' ? 0 : tangShift;
+
+  const parsed = useMemo(() => {
+    if (!viewShift) return baseParsed;
+    const mv = cells => cells.map(c => c.map(n => {
+      const o = noteOfStep(stepOf(n.ch, n.register || 0) + viewShift);
+      return { ...n, ch: o.ch, register: o.reg };
+    }));
+    return baseParsed.map(p => ({ ...p, cb: mv(p.cb), rh: mv(p.rh), lh: mv(p.lh), xh: mv(p.xh) }));
+  }, [baseParsed, viewShift]);
+
   const totalSteps = parsed.length ? parsed[parsed.length-1].offset + parsed[parsed.length-1].len : 0;
 
   useEffect(() => () => {
@@ -264,9 +298,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     // vel = น้ำหนักมือ (สะบัดตัวนำเบากว่าตัวลง)
     function scheduleNote(n, noteTime, vel = 1) {
       let played = false;
-      if (useReal) played = playMelodyNote(ctx, buffers, n.ch, n.register, noteTime, 0.85 * vel, 0, instNow.transpose || 0, tuneOpts);
+      if (useReal) played = playMelodyNote(ctx, buffers, n.ch, n.register, noteTime, 0.85 * vel, soundShift, instNow.transpose || 0, tuneOpts);
       if (!played) {
-        const f = hzOf(tuneNow, n.ch, n.register || 0);   // ความถี่จริงตามระบบเสียงที่เลือก
+        const o = noteOfStep(stepOf(n.ch, n.register || 0) + soundShift);
+        const f = hzOf(tuneNow, o.ch, o.reg);   // ความถี่จริงตามระบบเสียง + ทางที่เลือก
         if (f) synthNote(ctx, f, noteTime, stepDur * 2.2, 0.45 * vel);
       }
     }
@@ -578,6 +613,17 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           {(tunes.length ? tunes : [{ slug: DEFAULT_TUNING, name_th: 'กรมศิลปากร — เครื่องสาย / มโหรี' }])
             .map(t => <option key={t.slug} value={t.slug}>🎚 {t.name_th}</option>)}
         </select>
+        <select className="filter-select" value={tang ?? ''} onChange={e => setTang(e.target.value === '' ? null : +e.target.value)}
+          disabled={playState !== 'stopped'} title="ทาง (บันไดเสียง) ที่อยากฟัง">
+          <option value="">🎼 ทางตามโน้ต ({tangOf(homeTang).short})</option>
+          {TANGS.map(t => <option key={t.no} value={t.no}>🎼 {t.name}</option>)}
+        </select>
+        {tang != null && tang !== homeTang &&
+          <select className="filter-select" value={tangView} onChange={e => setTangView(e.target.value)}
+            title="เปลี่ยนทางแล้วโน้ตบนจอขยับตามหรือไม่">
+            <option value="fix">ตรึงโน้ต (เสียงเปลี่ยน)</option>
+            <option value="real">ย้ายโน้ตจริง</option>
+          </select>}
         <select className="filter-select" value={mode} onChange={e => setMode(e.target.value)}>
           <option value="combined">บรรทัดเดียว (ทำนองรวม)</option>
           {can('player_hands') && <option value="hands">สองบรรทัด (แยกมือ R/L)</option>}

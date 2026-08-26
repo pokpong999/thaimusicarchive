@@ -48,6 +48,7 @@ export default function NewSongPage() {
       name_th: name.trim(), song_type: songType, instrument,
       notation_text: versesToText(verses, { lines: st.lines }),   // อ่านได้ด้วยตา + ระบบเก่ายังอ่านออก
       notation_json: { rows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, system: st.system, lines: st.lines,
+                       tang: st.tangHome, notation_ensemble: st.notEns,
                        ensemble: st.ensemble, level: st.level },       // ระบบใหม่ใช้ตัวนี้
       note: note || null, submitted_by: user.id,
     });
