@@ -117,7 +117,7 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
     window.addEventListener('beforeunload', onHide);
     hideRef.current = onHide;
     // รายชื่อหน้าทับใน dropdown "กลอง" มาจากคลังกลาง (ไม่ใช่ค่าตายตัว)
-    loadNathabLibrary().then(rows => { if (engRef.current === eng) eng.setNathabOptions(nathabNames(rows)); }).catch(() => {});
+    loadNathabLibrary({ force: true }).then(rows => { if (engRef.current === eng) eng.setNathabOptions(nathabNames(rows)); }).catch(() => {});
     eng.setDrumOptions(DRUMS.map(d => [d, drumLabel(d)]));
     if (draftKey && !options.readOnly) {
       const d = readDraft(draftKey);

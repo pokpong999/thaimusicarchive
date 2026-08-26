@@ -89,7 +89,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const [nathab, setNathab] = useState('none');       // none | auto (ตามที่เพลงกำหนด) | ชื่อหน้าทับในคลัง
   const [libNames, setLibNames] = useState([]);       // ชื่อหน้าทับทั้งหมดในคลังกลาง (/nathab)
   const nathabTouchedRef = useRef(false);
-  useEffect(() => { loadNathabLibrary().then(rows => setLibNames(nathabNames(rows))).catch(() => {}); }, []);
+  useEffect(() => { loadNathabLibrary({ force: true }).then(rows => setLibNames(nathabNames(rows))).catch(() => {}); }, []);   // โหลดสดทุกครั้งที่เปิดเครื่องเล่น → หน้าทับที่เพิ่งสร้างเลือกได้ทันที
   // เพลงที่ตั้งหน้าทับไว้แล้ว → เปิดกลองให้อัตโนมัติ (ถ้าผู้ฟังยังไม่ได้เลือกเอง)
   useEffect(() => {
     if (!nathabRules?.length || nathabTouchedRef.current) return;

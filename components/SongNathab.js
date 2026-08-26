@@ -45,7 +45,7 @@ export default function SongNathab({ song, verses, onRules }) {
     setRules(r); onRules?.(r);
   }, [songId, onRules]);
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { loadNathabLibrary().then(rows => setNames(nathabNames(rows))).catch(() => {}); }, []);
+  useEffect(() => { loadNathabLibrary({ force: true }).then(rows => setNames(nathabNames(rows))).catch(() => {}); }, []);
 
   const main = rules.find(r => !r.section) ?? null;
   const extra = rules.filter(r => r.section);

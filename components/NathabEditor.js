@@ -238,7 +238,11 @@ export default function NathabEditor({ value, onSave, onCancel, saveLabel = '�
 
   return (
     <div ref={rootRef} tabIndex={0} onKeyDown={onKey} style={{ outline: 'none' }}
-      onClick={() => rootRef.current?.focus({ preventScroll: true })}>
+      onClick={e => {
+        // โฟกัสกระดานเพื่อรับคีย์ลัด — แต่ห้ามแย่งโฟกัสจากช่องกรอก/select/textarea (บั๊ก 2026-08-26: พิมพ์ชื่อหน้าทับไม่ได้ กด select ไม่ได้)
+        if (e.target.closest && e.target.closest('input, select, textarea, option, label')) return;
+        rootRef.current?.focus({ preventScroll: true });
+      }}>
       {/* ข้อมูลหน้าทับ */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
         <input className="form-input" list="nathab-names" style={{ width: 180 }} value={nathab} placeholder="ชื่อหน้าทับ เช่น สามไม้"
