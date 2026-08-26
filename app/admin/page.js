@@ -285,19 +285,49 @@ export default function AdminPage() {
   }
 
   // ── อนุมัติเพลงใหม่: สร้าง song + แตกโน้ต + ให้ศักดินา ──
+  // ID ว่างถัดไปจากคำนำหน้า (SMR → SMR001/002/…)
+  async function nextFreeId(prefixRaw) {
+    const prefix = (prefixRaw || '').toUpperCase().replace(/\d+$/, '') || 'USR';
+    const { data } = await supabase.from('songs').select('id').ilike('id', prefix + '%');
+    const nums = (data ?? []).map(r => parseInt(String(r.id).slice(prefix.length))).filter(n => !isNaN(n));
+    return prefix + String((nums.length ? Math.max(...nums) : 0) + 1).padStart(3, '0');
+  }
+  async function suggestId(sub) {
+    const cur = (songIdInput[sub.id] ?? '').trim();
+    const sid = await nextFreeId(cur || 'USR');
+    setSongIdInput({ ...songIdInput, [sub.id]: sid });
+  }
   async function approveSong(sub) {
     const sid = (songIdInput[sub.id] ?? '').trim().toUpperCase();
-    if (!sid) { alert('ใส่ Song ID ก่อน เช่น USR001'); return; }
+    if (!sid) { alert('ใส่ Song ID ก่อน เช่น USR001 (หรือกด 💡 ให้ระบบหา ID ว่าง)'); return; }
     const parsed = submissionRows(sub);
     if (!parsed.length) { alert('อ่านโน้ตที่ส่งมาไม่ออก'); return; }
-    const { error: e1 } = await supabase.from('songs').insert({
-      id: sid, name_th: sub.name_th, type: sub.song_type,
-      total_verses: parsed.length, unique_patterns: new Set(parsed.map(r => r.krasuan)).size,
-      contributed_by: sub.submitted_by,
-    });
-    if (e1) { alert('สร้างเพลงไม่สำเร็จ: ' + e1.message); return; }
+    const inst = sub.instrument || 'ทำนองหลัก';
+    // มีเพลง ID นี้อยู่แล้ว? → เสนอเพิ่มเป็น "ทาง" ใหม่ของเพลงเดิม (2026-08-26: เดิมชน songs_pkey แล้วหยุดเฉย ๆ)
+    const { data: exist } = await supabase.from('songs').select('id, name_th').eq('id', sid).maybeSingle();
+    let createSong = true;
+    if (exist) {
+      const free = await nextFreeId(sid);
+      const addTang = confirm(`มีเพลง ${sid} "${exist.name_th}" อยู่แล้ว\n\nOK = เพิ่มโน้ตชุดนี้เป็นทาง "${inst}" ของเพลง ${sid} (ไม่สร้างเพลงใหม่)\nยกเลิก = ไม่ทำอะไร แล้วเปลี่ยน Song ID (ID ว่างถัดไปคือ ${free})`);
+      if (!addTang) { setSongIdInput({ ...songIdInput, [sub.id]: free }); return; }
+      createSong = false;
+      const { count } = await supabase.from('song_melody').select('id', { count: 'exact', head: true }).eq('song_id', sid).eq('instrument', inst);
+      if (count > 0) {
+        if (!confirm(`เพลง ${sid} มีทาง "${inst}" อยู่แล้ว (${count} วรรค)\n\nOK = แทนที่ทางเดิมด้วยชุดนี้\nยกเลิก = ไม่ทำอะไร`)) return;
+        const { error: eDel } = await supabase.from('song_melody').delete().eq('song_id', sid).eq('instrument', inst);
+        if (eDel) { alert('ลบทางเดิมไม่สำเร็จ: ' + eDel.message); return; }
+      }
+    }
+    if (createSong) {
+      const { error: e1 } = await supabase.from('songs').insert({
+        id: sid, name_th: sub.name_th, type: sub.song_type,
+        total_verses: parsed.length, unique_patterns: new Set(parsed.map(r => r.krasuan)).size,
+        contributed_by: sub.submitted_by,
+      });
+      if (e1) { alert('สร้างเพลงไม่สำเร็จ: ' + (e1.message.includes('songs_pkey') ? `Song ID ${sid} ถูกใช้แล้ว — กด 💡 ให้ระบบหา ID ว่าง` : e1.message)); return; }
+    }
     const rows = parsed.map(r => ({
-      song_id: sid, verse_no: r.verse_no, instrument: sub.instrument || 'ทำนองหลัก',
+      song_id: sid, verse_no: r.verse_no, instrument: inst,
       section: r.section ?? null, line_no: r.line_no ?? null,
       combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null,
       krasuan: r.krasuan ?? null, luktok: r.luktok ?? null,
@@ -310,6 +340,7 @@ export default function AdminPage() {
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(), assigned_song_id: sid,
     }).eq('id', sub.id);
     await supabase.rpc('add_points', { uid: sub.submitted_by, pts: 10 });
+    alert(createSong ? `✓ สร้างเพลง ${sid} (${rows.length} วรรค) แล้ว` : `✓ เพิ่มทาง "${inst}" ให้เพลง ${sid} (${rows.length} วรรค) แล้ว`);
     loadAll();
   }
   async function rejectSong(id) {
@@ -652,6 +683,7 @@ export default function AdminPage() {
                   {boardOpen[s.id] ? 'ดูเป็นข้อความ' : '🎼 ดูบนกระดาน / ฟัง'}</button>
                 <input className="form-input" style={{width:'140px'}} placeholder="Song ID เช่น USR001"
                   value={songIdInput[s.id] ?? ''} onChange={e => setSongIdInput({...songIdInput, [s.id]: e.target.value})} />
+                <button className="btn btn-outline btn-sm" title="หา Song ID ว่างถัดไปจากคำนำหน้าที่พิมพ์ (เช่น SMR → SMR002)" onClick={() => suggestId(s)}>💡 ID ว่าง</button>
                 <button className="btn btn-jade btn-sm" onClick={() => approveSong(s)}>✓ อนุมัติ + สร้างเพลง</button>
                 <button className="btn btn-danger btn-sm" onClick={() => rejectSong(s.id)}>✕ ปฏิเสธ</button>
               </div>
