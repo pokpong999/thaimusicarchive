@@ -330,3 +330,34 @@ html.nav-rail .siderail:focus-within .rail-lbl { opacity:1; }
   border-radius:5px; padding:6px 10px; min-height:32px; color:var(--muted); font-family:inherit;
 }
 .nav-switch:hover { border-color:var(--gold); color:var(--gold); }
+
+/* ── สีกระดาษของโปรแกรมเล่นโน้ต (Pk 27 ส.ค. 69) ─────────────────────────
+   ทุกสีในโปรแกรมเล่นอ่านจากตัวแปรอยู่แล้ว จึงแค่ประกาศตัวแปรทับในกล่องนี้
+   ไม่ต้องไล่แก้ inline style ทีละจุด และไม่กระทบส่วนอื่นของเว็บ
+   --np-rest  = ขีด "-" ช่องที่ไม่มีเสียง · --np-bar = เส้นคั่นห้อง/วรรค
+   ทั้งสองอย่างเดิมใช้ --border ซึ่งจางจนกลืนพื้นไปหมด (Pk ทัก) */
+.np-root { --np-rest:#9FB3CE; --np-restw:600; --np-bar:#43597C; }
+
+.np-root.np-paper {
+  --navy:#FBFAF6; --navy2:#F3F1E9; --navy3:#FFFFFF;
+  --cream:#12161C; --muted:#5F6670; --border:#C6CBD3;
+  --gold:#8A6D14; --gold2:#6E5510; --jade:#1F6B57; --jade2:#17513F; --danger:#A3312B;
+  --np-rest:#5F6670; --np-restw:500; --np-bar:#8A9199;
+}
+.np-root.np-hicon {
+  --navy:#FFFFFF; --navy2:#FFFFFF; --navy3:#FFFFFF;
+  --cream:#000000; --muted:#2B2B2B; --border:#000000;
+  --gold:#5E4300; --gold2:#3D2C00; --jade:#00503B; --jade2:#003527; --danger:#8A0000;
+  --np-rest:#333333; --np-restw:700; --np-bar:#000000;
+}
+.np-root.np-paper, .np-root.np-hicon {
+  background:var(--navy); color:var(--cream);
+  border:1px solid var(--border); border-radius:10px; padding:0.9rem;
+}
+/* ห้องที่กำลังเล่น — บนพื้นขาวต้องเข้มขึ้น ไม่งั้นแทบไม่เห็นว่าวิ่งถึงไหน */
+.np-root.np-paper .np-cell.np-on { background:rgba(138,109,20,0.30); }
+.np-root.np-hicon .np-cell.np-on { background:#FFE08A; outline:1px solid #000; }
+/* เส้นหยักของ "กรอ" วาดด้วยสีทองอ่อน จางไปบนกระดาษขาว */
+.np-root.np-paper .np-krocover, .np-root.np-hicon .np-krocover {
+  background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='7'%3E%3Cpath d='M0 5 q 3.5 -4.5 7 0 t 7 0' fill='none' stroke='%236E5510' stroke-width='1.6'/%3E%3C/svg%3E");
+}

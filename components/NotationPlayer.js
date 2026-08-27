@@ -1,5 +1,6 @@
 'use client';
 import { usePermissions } from './Gate';
+import { usePlayerTheme, PLAYER_THEMES } from '../lib/playertheme';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { loadMelodyBank, playMelodyNote } from '../lib/melodybank';
@@ -86,6 +87,7 @@ const REG_LABEL = { '-1': 'ต่ำ', '0': 'กลาง', '1': 'สูง' };
 // nathabRules = แถว song_nathab ของเพลงนี้ (หน้าทับหลัก + ข้อยกเว้นต่อท่อน) — ถ้ามี เครื่องเล่นเลือกโหมด "ตามที่เพลงกำหนด" ให้เอง
 export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const { can } = usePermissions();
+  const { theme, set: setTheme, cls: themeCls } = usePlayerTheme();   // สีกระดาษ (Pk 27 ส.ค. 69)
   const [mode, setMode] = useState('combined');
   const [hand, setHand] = useState('both');
   const [sound, setSound] = useState('real');          // 'synth' หรือ slug เครื่องดนตรี ('real' = ยังไม่รู้ → ใช้เครื่องแรกในทะเบียน)
@@ -621,7 +623,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         padding:'2px 1px', borderRadius:'3px', fontSize:'1.05rem',
         fontFamily:'THNotation', lineHeight:1.6,
         cursor:'pointer', position:'relative',
-        color: notes.length ? 'var(--cream)' : 'var(--border)',
+        color: notes.length ? 'var(--cream)' : 'var(--np-rest)',
+        fontWeight: notes.length ? undefined : 'var(--np-restw)',
       }}>
         {isSabat && <span style={{
           position:'absolute', top:'-4px', left:'3px', right:'3px', height:'6px',
@@ -637,7 +640,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   function segCells(positions, vi, hk) {
     return positions.map((notes, p) => (
       <span key={p} style={{display:'flex'}}>
-        {p > 0 && p % 4 === 0 && <span style={{color:'var(--border)',margin:'0 3px'}}>|</span>}
+        {p > 0 && p % 4 === 0 && <span style={{color:'var(--np-bar)',margin:'0 3px'}}>|</span>}
         {renderCell(notes, vi, p, hk)}
       </span>
     ));
@@ -650,7 +653,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         <div style={{display:'flex',flexWrap:'nowrap'}}>
           {segs.map((s, si) => (
             <span key={si} style={{display:'flex'}}>
-              {si > 0 && <span style={{color:'var(--border)',margin:'0 3px'}}>|</span>}
+              {si > 0 && <span style={{color:'var(--np-bar)',margin:'0 3px'}}>|</span>}
               {segCells(s.positions, s.vi, hk)}
             </span>
           ))}
@@ -755,11 +758,11 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   togglePauseRef.current = togglePause;
 
   return (
-    <div>
+    <div className={themeCls}>
       <div style={{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',marginBottom:'1rem'}}>
         {playState === 'stopped' && (
           <button className="btn btn-jade" onClick={() => startFrom(0)} disabled={loadingSamples}>
-            {loadingSamples ? '⏳ โหลดเสียง...' : '▶ เล่นโน้ต'}
+            {loadingSamples ? '⏳ โหลดเสียง...' : '▶ เล่นเพลง'}
           </button>
         )}
         {playState !== 'stopped' && (
@@ -852,7 +855,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         {can('player_repeat') && (
           <select className="filter-select" value={repeat} onChange={e => setRepeat(e.target.value)}
             disabled={playState !== 'stopped'} title="การกลับต้น">
-            <option value="none">▶ เที่ยวเดียวจบ</option>
+            <option value="none">▶ ไม่กลับต้น</option>
             <option value="section">🔁 กลับต้นทุกท่อน (ท่อนละ 2 เที่ยว)</option>
             <option value="piece">🔁 กลับต้นเที่ยวใหญ่ (ทั้งเพลง 2 เที่ยว)</option>
             <option value="loop">♾ วนกลับต้นไปเรื่อย ๆ</option>
@@ -873,6 +876,11 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
             <option value="16">16 ห้อง/บรรทัด</option>
           </select>
         )}
+        {/* สีกระดาษ — เปิดให้ทุกคนปรับได้ ไม่ผูกกับสิทธิ์ เพราะเป็นเรื่องการมองเห็น (Pk 27 ส.ค. 69) */}
+        <select className="filter-select" value={theme} onChange={e => setTheme(e.target.value)}
+          title="สีกระดาษของโปรแกรมเล่นโน้ต — จำไว้ในเครื่องของคุณ">
+          {PLAYER_THEMES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}
+        </select>
         {can('player_tempo') && (
           <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'0.75rem',color:'var(--muted)'}}>
             ช้า <input type="range" min="50" max="220" value={bpm} onChange={e => setBpm(+e.target.value)}
@@ -907,7 +915,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
             disabled={playState !== 'stopped'} style={{accentColor:'var(--gold)',width:'18px',height:'18px'}} />
           {/* จอแคบ: ข้อความต้องไหลเป็นก้อนเดียว ไม่งั้น <b> ถูกดันไปคนละมุม (Pk 27 ส.ค. 69) */}
           <span style={{flex:1,minWidth:0}}>
-            🎚 จังหวะไม่สม่ำเสมอ — เร่งขึ้นทั้งท่อน แล้วจบท่อนแบบ <b>ถอน</b> หรือ <b>ทอด</b>
+            🎚 เร่งแนว <b>“ถอน”</b> หรือ <b>“ทอด”</b>
           </span>
         </label>
         {!tempoOn && <div style={{fontSize:'0.74rem',color:'var(--muted)',marginTop:'6px'}}>
@@ -967,12 +975,6 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
                 <input type="range" min="40" max="95" value={Math.round(tempoOpts.thotRatio * 100)} disabled={playState !== 'stopped'}
                   onChange={e => setTempoOpts({ ...tempoOpts, thotRatio: +e.target.value / 100 })}
                   style={{width:'100%',accentColor:'var(--gold)'}} /></label>
-            </div>
-            <div style={{fontSize:'0.72rem',color:'var(--muted)',marginTop:'0.7rem',lineHeight:1.8}}>
-              ⤳ <b>ชั้นเดียว</b> กับ <b>ลูกหมด</b> ไม่มีถอนไม่มีทอด — จังหวะเร่งต่อเนื่องรับช่วงจากท่อนก่อนไปจนจบ ·
-              💡 ท่อนที่ถอนต้องเร่งให้มากพอ ไม่งั้นพอขึ้นท่อนใหม่จังหวะจะยืดยาดเกินไป —
-              ถ้าตั้ง "เร่งของท่อนถอน" ไว้ ๑๐๐% และ "เหลือ" ๕๐% ท่อนใหม่จะกลับมาที่ความเร็วตั้งต้นพอดี
-              (ตัวเลขท้ายแต่ละท่อนคือความเร็วต้นท่อน → ท้ายท่อน)
             </div>
           </div>
         )}
