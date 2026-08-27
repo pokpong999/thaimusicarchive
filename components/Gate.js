@@ -3,12 +3,15 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 export function useMe() {
-  const [me, setMe] = useState({ loading: true, user: null, role: null, tier: 'free' });
+  const [me, setMe] = useState({ loading: true, user: null, role: null, tier: 'free', isTeacherFlag: false });
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) { setMe({ loading: false, user: null, role: null, tier: 'free' }); return; }
-      const { data: p } = await supabase.from('profiles').select('role, tier').eq('id', data.user.id).single();
-      setMe({ loading: false, user: data.user, role: p?.role ?? 'member', tier: p?.tier ?? 'free' });
+      if (!data.user) { setMe({ loading: false, user: null, role: null, tier: 'free', isTeacherFlag: false }); return; }
+      // select('*') ไม่ใช่ระบุคอลัมน์ — ถ้ายังไม่ได้รัน sql/25 คอลัมน์ is_teacher จะยังไม่มี
+      // การระบุชื่อคอลัมน์ที่ยังไม่มีจะทำให้คำสั่งล้มทั้งอัน แล้วสิทธิ์ของทุกคนหายหมด
+      const { data: p } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+      setMe({ loading: false, user: data.user, role: p?.role ?? 'member', tier: p?.tier ?? 'free',
+              isTeacherFlag: !!p?.is_teacher });
     });
   }, []);
   // ระดับสิทธิ์ (2026-08-25):
@@ -16,6 +19,9 @@ export function useMe() {
   //   moderator  ทำได้ทุกอย่าง ยกเว้นตั้งแอดมินและแตะบัญชีแอดมิน
   //   superuser  เข้าชมได้ทุกอย่าง (รวมส่วนที่ล็อกด้วยศักดินา/อุปถัมภ์) แต่อนุมัติ/แก้แบบแอดมินไม่ได้
   //   student    ใช้ระบบบันทึกโน้ตได้โดยไม่ต้องมีศักดินา แต่ไม่เห็นเนื้อหาพิเศษ
+  //              และงานที่บันทึกจะไม่ขึ้นสาธารณะ — ส่งเป็น "การบ้าน" ให้ครูแทน
+  //   ครู        เป็นธงแยก (profiles.is_teacher) ไม่ใช่ role — คนหนึ่งจึงเป็นครู
+  //              พร้อมกับเป็นผู้สนับสนุนหรือแอดมินได้ (Pk 27 ส.ค. 69)
   //   member     สมาชิกธรรมดา
   const isAdmin = me.role === 'admin' || me.role === 'moderator';   // อำนาจจัดการเนื้อหา
   return { ...me,
@@ -23,6 +29,7 @@ export function useMe() {
     isRealAdmin: me.role === 'admin',                               // อำนาจจัดการแอดมินด้วยกัน
     isViewer: me.role === 'superuser',
     isStudent: me.role === 'student',
+    isTeacher: !!me.isTeacherFlag || me.role === 'teacher',
     isPremium: isAdmin || me.role === 'superuser' || me.tier === 'premium',
   };
 }

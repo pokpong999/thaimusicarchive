@@ -459,6 +459,12 @@ export default function AdminPage() {
     await supabase.from('song_files').delete().eq('id', f.id); loadAll();
   }
 
+  // ตั้ง/ถอดสถานะครู (sql/25) — แยกจาก role เพื่อให้เป็นครูพร้อมกับเป็นผู้สนับสนุนหรือแอดมินได้
+  async function setTeacherFlag(uid, on) {
+    const { error } = await supabase.rpc('set_teacher', { target: uid, on_off: on });
+    if (error) { alert('ตั้งสถานะครูไม่สำเร็จ: ' + error.message + '\n(ยังไม่ได้รัน sql/25 หรือเปล่า?)'); return; }
+    setMembers(ms => ms.map(m => (m.id === uid ? { ...m, is_teacher: on } : m)));
+  }
   async function setMemberRole(uid, newRole) {
     // ผ่านฟังก์ชันที่เช็คสิทธิ์ (คอลัมน์ role อัปเดตตรงไม่ได้แล้วหลังปิดช่องแอดมิน)
     const { error } = await supabase.rpc('set_user_role', { target: uid, new_role: newRole });
@@ -1014,7 +1020,7 @@ export default function AdminPage() {
           {recountMsg && <div style={{fontSize:'0.78rem',color:'var(--jade)',marginBottom:'0.7rem',whiteSpace:'pre-wrap'}}>{recountMsg}</div>}
           <div className="table-wrap">
             <table>
-              <thead><tr><Th k="display_name">ชื่อ / อีเมล</Th><Th k="phone">ติดต่อ</Th><Th k="organization">สำนัก / จังหวัด</Th><Th k="points">ศักดินา</Th><Th k="joined">สมัคร · เข้าใช้ล่าสุด</Th><Th k="role">สถานะ</Th></tr></thead>
+              <thead><tr><Th k="display_name">ชื่อ / อีเมล</Th><Th k="phone">ติดต่อ</Th><Th k="organization">สำนัก / จังหวัด</Th><Th k="points">ศักดินา</Th><Th k="joined">สมัคร · เข้าใช้ล่าสุด</Th><th style={{whiteSpace:'nowrap'}}>👩‍🏫 ครู</th><Th k="role">สถานะ</Th></tr></thead>
               <tbody>
                 {sortedMembers.map(m => (
                   <tr key={m.id}>
@@ -1028,6 +1034,14 @@ export default function AdminPage() {
                     <td style={{fontSize:'0.68rem',whiteSpace:'nowrap'}}>
                       <div title={activity[m.id]?.joined_at ?? m.created_at ?? ''}>{fmtDT(activity[m.id]?.joined_at ?? m.created_at) || '—'}</div>
                       <div style={{color:'var(--muted)'}} title={fmtDT(activity[m.id]?.last_sign_in_at)}>{activity[m.id]?.last_sign_in_at ? 'ล่าสุด ' + ago(activity[m.id].last_sign_in_at) : ''}</div>
+                    </td>
+                    {/* สถานะครูเป็นธงแยกจาก role — คนหนึ่งเป็นครูพร้อมกับเป็นผู้สนับสนุนได้ (Pk 27 ส.ค. 69) */}
+                    <td style={{textAlign:'center'}}>
+                      <label title="เปิดให้รับการบ้านจากนักเรียน" style={{cursor:'pointer',display:'inline-flex'}}>
+                        <input type="checkbox" checked={!!m.is_teacher}
+                          onChange={e => setTeacherFlag(m.id, e.target.checked)}
+                          style={{accentColor:'var(--gold)',width:'18px',height:'18px'}} />
+                      </label>
                     </td>
                     <td style={{whiteSpace:'nowrap'}}>
                       <select className="filter-select" value={m.role ?? 'member'}

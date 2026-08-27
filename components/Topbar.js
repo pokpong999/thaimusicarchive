@@ -26,7 +26,8 @@ export default function Topbar() {
   }, []);
 
   async function loadProfile(uid) {
-    const { data } = await supabase.from('profiles').select('role, points, display_name, avatar_url').eq('id', uid).single();
+    // select('*') กันพังตอนที่ยังไม่ได้รัน sql/25 (คอลัมน์ is_teacher ยังไม่มี)
+    const { data } = await supabase.from('profiles').select('*').eq('id', uid).single();
     setProfile(data);
   }
 
@@ -54,6 +55,10 @@ export default function Topbar() {
         <Link href="/leaderboard">{t("nav_board")}</Link>
         {user && <Link href="/songs/new">{t("nav_add")}</Link>}
         {user && <Link href="/dashboard">{t("nav_mine")}</Link>}
+        {/* เมนูการบ้าน — เห็นเฉพาะนักเรียนกับครู (Pk 27 ส.ค. 69) */}
+        {user && (profile?.role === 'student' || profile?.is_teacher || profile?.role === 'teacher'
+                  || profile?.role === 'admin' || profile?.role === 'moderator')
+          && <Link href="/homework" title="ส่งการบ้าน / ตรวจการบ้าน">📚 การบ้าน</Link>}
         {user && <Link href="/diary" title="ไดอารี่ดนตรี → แฟ้มผลงาน">{t("nav_diary")}</Link>}
         <Link href="/search" title="search">🔍</Link>
         <button type="button" onClick={() => setLang(lang === 'th' ? 'en' : 'th')}

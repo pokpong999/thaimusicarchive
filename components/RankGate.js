@@ -38,8 +38,8 @@ export default function RankGate({ minPoints = 300, bypass = false, children }) 
   );
 
   // ผ่านด่าน: แอดมิน/ผู้ช่วยแอดมิน · superuser (เข้าชมได้ทุกอย่าง)
-  //           · student (ไว้สอนใช้โปรแกรมบันทึกโน้ต) · หรือศักดินาถึงเกณฑ์
-  if (me.isAdmin || me.role === 'superuser' || me.role === 'student' || points >= minPoints) return children;
+  //           · student (ไว้สอนใช้โปรแกรมบันทึกโน้ต) · ครู · หรือศักดินาถึงเกณฑ์
+  if (me.isAdmin || me.role === 'superuser' || me.role === 'student' || me.isTeacher || points >= minPoints) return children;
 
   const need = minPoints - points;
   const target = RANKS.find(r => r.min === minPoints) ?? getRank(minPoints);

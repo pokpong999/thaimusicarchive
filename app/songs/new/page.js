@@ -10,6 +10,8 @@ import RankGate from '../../../components/RankGate';
 import DraftBar from '../../../components/DraftBar';
 import { versesToRows, versesToText, checkVerses, hasSound, rowsToVerses } from '../../../lib/notation-core';
 import { listDrafts, getDraft, saveDraft, deleteDraft, makeAutoSaver } from '../../../lib/drafts';
+import { useMe } from '../../../components/Gate';
+import { listTeachers, sendHomework } from '../../../lib/homework';
 
 const TYPES = ['🟢 แปรทำนอง', '🟠 บังคับทาง', '🟡 กึ่งบังคับทาง'];
 const INSTS = ['ทำนองหลัก','ระนาดเอก','ระนาดทุ้ม','ฆ้องวงใหญ่','ฆ้องวงเล็ก','ปี่ใน','ขลุ่ยเพียงออ','ซอด้วง','ซออู้','ซอสามสาย','จะเข้','ขิม'];
@@ -24,6 +26,21 @@ export default function NewSongPage() {
   const [busy, setBusy] = useState(false);
   const [summary, setSummary] = useState({ verses: 0, warn: 0 });
   const padRef = useRef(null);
+
+  // ── นักเรียน: งานไม่ขึ้นสาธารณะ ส่งเป็น "การบ้าน" ให้ครูที่เลือกแทน (Pk 27 ส.ค. 69) ──
+  const me = useMe();
+  const [teachers, setTeachers] = useState([]);
+  const [teacherId, setTeacherId] = useState('');
+  const [teacherErr, setTeacherErr] = useState('');
+  useEffect(() => {
+    if (!me.isStudent) return;
+    listTeachers().then(({ teachers: t, error }) => {
+      setTeachers(t);
+      if (error) setTeacherErr('โหลดรายชื่อครูไม่สำเร็จ — ผู้ดูแลอาจยังไม่ได้รัน sql/25');
+      else if (!t.length) setTeacherErr('ยังไม่มีครูในระบบ — บอกผู้ดูแลให้ตั้งสถานะครูให้อาจารย์ของคุณก่อน');
+      else setTeacherId(t[0].id);
+    });
+  }, [me.isStudent]);
 
   // ── ร่าง ──
   const draftIdRef = useRef(null);
@@ -140,6 +157,36 @@ export default function NewSongPage() {
     touch();
   }
 
+  // นักเรียนกดส่งการบ้าน — ไม่แตะคิวสาธารณะเลย
+  async function submitHomework() {
+    if (!name.trim()) { setMsg('⚠ ตั้งชื่องานก่อน (เช่น ชื่อเพลง หรือ "แขกบรเทศ ท่อน 1")'); return; }
+    if (!teacherId) { setMsg('⚠ เลือกครูที่จะส่งงานให้ก่อน'); return; }
+    const verses = padRef.current.getVerses();
+    const st = padRef.current.getState();
+    if (!verses.filter(hasSound).length) { setMsg('⚠ กรอกโน้ตอย่างน้อย 1 วรรค'); return; }
+    if (padRef.current.stop) padRef.current.stop();
+    setBusy(true); setMsg('กำลังส่งการบ้าน…');
+    saverRef.current.cancel();
+    const rows = versesToRows(verses, { lines: st.lines, system: st.system });
+    const { error } = await sendHomework({
+      studentId: user.id, teacherId, title: name.trim(), instrument, songType,
+      notationText: versesToText(verses, { lines: st.lines }),
+      notationJson: { rows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands,
+                      system: st.system, lines: st.lines, tang: st.tangHome, notation_ensemble: st.notEns,
+                      ensemble: st.ensemble, level: st.level,
+                      ching: st.chingOn, nathab: st.nathab, drum: st.drum, bpm: st.bpm },
+      note,
+    });
+    setBusy(false);
+    if (error) { setMsg('⚠ ' + error.message); return; }
+    await deleteDraft(draftIdRef.current);
+    draftIdRef.current = null; setDraftId(null); setSavedAt(null);
+    const who = teachers.find(t => t.id === teacherId)?.display_name ?? 'ครู';
+    setMsg(`✓ ส่งการบ้าน "${name}" (${rows.length} วรรค) ให้ ${who} แล้ว — ดูสถานะได้ที่หน้า "การบ้าน"`);
+    padRef.current.clearDraft();
+    setName(''); setNote('');
+  }
+
   async function submit() {
     if (!name.trim()) { setMsg('⚠ ใส่ชื่อเพลง'); return; }
     const verses = padRef.current.getVerses();
@@ -187,9 +234,12 @@ export default function NewSongPage() {
     <main className="container" style={{maxWidth:'1180px'}}>
       <Link href="/"><span style={{color:'var(--muted)',fontSize:'0.8rem'}}>← กลับรายการเพลง</span></Link>
       <div className="card" style={{marginTop:'1rem'}}>
-        <div className="section-title" style={{fontSize:'1.1rem'}}>TH Notation+ <span style={{fontWeight:400,color:'var(--muted)',fontSize:'0.9rem'}}>· เพิ่มเพลงใหม่เข้าฐานข้อมูล</span></div>
+        <div className="section-title" style={{fontSize:'1.1rem'}}>TH Notation+ <span style={{fontWeight:400,color:'var(--muted)',fontSize:'0.9rem'}}>· {me.isStudent ? 'เขียนโน้ตส่งการบ้าน' : 'เพิ่มเพลงใหม่เข้าฐานข้อมูล'}</span></div>
         <div style={{fontSize:'0.75rem',color:'var(--muted)',marginBottom:'1.1rem'}}>
-          พิมพ์โน้ตด้วยแป้น TH Notation (a s d f g h j = ด ร ม ฟ ซ ล ท) · ผู้ดูแลตรวจสอบก่อนเผยแพร่ · เครดิตชื่อผู้เพิ่มแสดงในหน้าเพลง
+          พิมพ์โน้ตด้วยแป้น TH Notation (a s d f g h j = ด ร ม ฟ ซ ล ท) ·{' '}
+          {me.isStudent
+            ? 'งานของคุณส่งถึงครูโดยตรง ไม่ขึ้นคลังสาธารณะ'
+            : 'ผู้ดูแลตรวจสอบก่อนเผยแพร่ · เครดิตชื่อผู้เพิ่มแสดงในหน้าเพลง'}
         </div>
 
         <DraftBar kind="song" draftId={draftId} savedAt={savedAt} saving={saving} error={draftErr} others={others}
@@ -233,11 +283,45 @@ export default function NewSongPage() {
         <NotationInput ref={padRef} onChange={onChange} options={{ base: 4, lineHong: 8, instrument, draftKey: 'new' }} />
 
         <div className="form-group" style={{marginTop:'1rem'}}>
-          <label className="form-label">ที่มาโน้ต / หมายเหตุถึงผู้ดูแล</label>
-          <input className="form-input" value={note} onChange={e => setNote(e.target.value)} placeholder="เช่น ถอดจากโน้ตครูสำนัก…" />
+          <label className="form-label">{me.isStudent ? 'หมายเหตุถึงครู' : 'ที่มาโน้ต / หมายเหตุถึงผู้ดูแล'}</label>
+          <input className="form-input" value={note} onChange={e => setNote(e.target.value)}
+            placeholder={me.isStudent ? 'เช่น ท่อน 2 ยังไม่แน่ใจลูกตกครับ' : 'เช่น ถอดจากโน้ตครูสำนัก…'} />
         </div>
+
+        {/* นักเรียน: เลือกครูที่จะส่งงานให้ */}
+        {me.isStudent && (
+          <div className="card" style={{borderColor:'rgba(201,168,76,0.45)',marginBottom:'0.9rem'}}>
+            <div style={{fontWeight:600,fontSize:'0.9rem',marginBottom:'0.5rem'}}>📮 ส่งการบ้าน</div>
+            <div className="form-group" style={{marginBottom:'0.5rem'}}>
+              <label className="form-label">ส่งให้ครู</label>
+              <select className="form-input" value={teacherId} onChange={e => setTeacherId(e.target.value)}>
+                {!teachers.length && <option value="">— ยังไม่มีครูให้เลือก —</option>}
+                {teachers.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.display_name ?? 'ครู'}{t.organization ? ` · ${t.organization}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {teacherErr && <div style={{fontSize:'0.76rem',color:'var(--danger)'}}>{teacherErr}</div>}
+            <div style={{fontSize:'0.75rem',color:'var(--muted)',lineHeight:1.8}}>
+              งานของนักเรียนเป็นงานส่วนตัวระหว่างคุณกับครู — ไม่ขึ้นในคลังเพลงสาธารณะ
+              และคนอื่นมองไม่เห็น · ถ้าครูเห็นว่างานดีมาก ครูจะส่งเข้าคลังจริงให้เองโดยเครดิตยังเป็นของคุณ
+            </div>
+          </div>
+        )}
+
         <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}}>
+          {me.isStudent ? (
+            <>
+              <button className="btn btn-jade" onClick={submitHomework} disabled={busy || !teacherId}>
+                📮 ส่งการบ้านให้ครู
+              </button>
+              <Link href="/homework"><button className="btn btn-outline" type="button">📚 การบ้านของฉัน</button></Link>
+            </>
+          ) : (
           <button className="btn btn-jade" onClick={submit} disabled={busy}>✓ ส่งเพลง — รอผู้ดูแลตรวจสอบ</button>
+          )}
           <button className="btn btn-outline" type="button" onClick={saveNow} disabled={saving}>💾 เก็บเป็นร่างไว้ก่อน</button>
           <span style={{fontSize:'0.75rem',color:'var(--muted)'}}>
             {summary.verses} วรรค{summary.warn ? ` · ⚑ มี ${summary.warn} จุดที่ระบบทักไว้ (ส่งได้ ผู้ดูแลจะเห็นธง)` : ''}
