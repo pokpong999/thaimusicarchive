@@ -167,6 +167,8 @@ function HomeworkCard({ hw, me, side, open, onToggle, onChanged }) {
           <div style={{fontSize:'0.75rem',color:'var(--muted)'}}>
             {side === 'teacher' ? 'จาก ' : 'ส่งให้ '}{other?.display_name ?? '—'}
             {hw.instrument ? ` · ${hw.instrument}` : ''}
+            {hw.class_name ? ` · ${hw.class_name}` : ''}
+            {hw.assignment_title ? ` · งาน: ${hw.assignment_title}` : ''}
             {hw.version > 1 ? ` · ส่งครั้งที่ ${hw.version}` : ''}
             {' · '}{fmtDT(hw.created_at)}
           </div>

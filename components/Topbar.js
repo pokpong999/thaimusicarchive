@@ -59,6 +59,9 @@ export default function Topbar() {
         {user && (profile?.role === 'student' || profile?.is_teacher || profile?.role === 'teacher'
                   || profile?.role === 'admin' || profile?.role === 'moderator')
           && <Link href="/homework" title="ส่งการบ้าน / ตรวจการบ้าน">📚 การบ้าน</Link>}
+        {user && (profile?.role === 'student' || profile?.is_teacher || profile?.role === 'teacher'
+                  || profile?.role === 'admin' || profile?.role === 'moderator')
+          && <Link href="/classroom" title="ห้องเรียน">🎓 ห้องเรียน</Link>}
         {user && <Link href="/diary" title="ไดอารี่ดนตรี → แฟ้มผลงาน">{t("nav_diary")}</Link>}
         <Link href="/search" title="search">🔍</Link>
         <button type="button" onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
