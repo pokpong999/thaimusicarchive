@@ -17,6 +17,7 @@ const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future
 export default function ArchiveDetailClient() {
   const { id } = useParams();
   const [rec, setRec] = useState(null);
+  const [poster, setPoster] = useState(null);
   const [notFound, setNotFound] = useState(false);
   const { isAdmin, user } = useMe();
   const [busy, setBusy] = useState(false);
@@ -29,6 +30,11 @@ export default function ArchiveDetailClient() {
       .select('*, archive_media(*)').eq('id', id).single();
     if (!data) { setNotFound(true); return; }
     setRec(data);
+    // ชื่อคนโพสต์ — ดึงแยกรอบ (submitted_by ชี้ auth.users จะ embed profiles ตรง ๆ ไม่ได้)
+    if (data.submitted_by) {
+      const { data: pr } = await supabase.from('profiles').select('display_name').eq('id', data.submitted_by).maybeSingle();
+      setPoster(pr?.display_name ?? 'สมาชิก');
+    }
   }
 
   if (notFound) return <main className="container">ไม่พบบันทึกนี้</main>;
@@ -69,6 +75,15 @@ export default function ArchiveDetailClient() {
     window.location.href = '/archive';
   }
 
+  async function editCaption(m) {
+    const next = window.prompt('คำบรรยายภาพนี้ (ใช้เป็นข้อความแทนภาพสำหรับคนตาบอด และแสดงใต้รูป)', m.caption ?? '');
+    if (next === null) return;
+    setBusy(true);
+    const { error } = await supabase.from('archive_media').update({ caption: next.trim() || null }).eq('id', m.id);
+    await load(); setBusy(false);
+    setMsg(error ? '⚠ ' + error.message : '✓ บันทึกคำบรรยายแล้ว'); setTimeout(() => setMsg(''), 3000);
+  }
+
   async function delImage(m) {
     if (!confirm('ลบรูปนี้?')) return;
     setBusy(true);
@@ -90,7 +105,10 @@ export default function ArchiveDetailClient() {
         <div className="detail-meta">
           <div className="meta-pill"><span className="meta-label">ใคร</span><span className="meta-value">{rec.who_text}</span></div>
           <div className="meta-pill"><span className="meta-label">ที่ไหน</span><span className="meta-value">{rec.where_text}</span></div>
+          {rec.when_date && <div className="meta-pill" title="วันที่ของเหตุการณ์ (ใช้เรียงลำดับและกำหนดสีหมุด)"><span className="meta-label">วันที่</span><span className="meta-value" style={{fontSize:'0.78rem'}}>{rec.when_date}</span></div>}
           {rec.created_at && <div className="meta-pill" title="วัน-เวลาที่โพสต์เข้าหอจดหมายเหตุ"><span className="meta-label">บันทึกเมื่อ</span><span className="meta-value" style={{fontSize:'0.78rem'}}>{fmtDT(rec.created_at)}</span></div>}
+          {/* เดิมหน้านี้ไม่ให้เครดิตคนโพสต์เลย ทั้งที่หน้ารายการให้ (Pk 27 ส.ค. 69) */}
+          {poster && <div className="meta-pill"><span className="meta-label">โพสต์โดย</span><span className="meta-value" style={{fontSize:'0.78rem'}}>{poster}</span></div>}
         </div>
         <div style={{marginTop:'0.6rem'}}><StatBadge type="archive" id={id} /></div>
         {canEditMedia && (
@@ -146,9 +164,16 @@ export default function ArchiveDetailClient() {
                         style={{width:'100%',borderRadius:'8px',border:'1px solid var(--border)',display:'block'}} />
                     </a>
                     {canEditMedia && (
-                      <button className="btn btn-sm" disabled={busy} onClick={() => delImage(m)}
+                      <button className="btn btn-sm btn-icon" disabled={busy} onClick={() => delImage(m)}
                         style={{position:'absolute',right:'8px',top:'8px',background:'rgba(15,27,45,0.9)',
                           border:'1px solid #C0574B',color:'#E08878',fontSize:'0.7rem'}}>🗑</button>
+                    )}
+                    {(m.caption || canEditMedia) && (
+                      <div style={{fontSize:'0.75rem',color:'var(--muted)',marginTop:'4px',lineHeight:1.6}}>
+                        {m.caption || <span style={{opacity:.7}}>ยังไม่มีคำบรรยายภาพ</span>}
+                        {canEditMedia && <button className="btn btn-outline btn-sm" style={{marginLeft:'6px'}}
+                          disabled={busy} onClick={() => editCaption(m)}>✎ คำบรรยาย</button>}
+                      </div>
                     )}
                   </div>
                 );
