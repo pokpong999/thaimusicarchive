@@ -25,6 +25,7 @@ export default function SongDetailClient() {
   const [contributors, setContributors] = useState({});
   const [instOwners, setInstOwners] = useState({});
   const [parts, setParts] = useState([]);      // เพลงย่อย (ถ้าเพลงนี้เป็นเพลงเรื่อง)
+  const [melodyWhy, setMelodyWhy] = useState('');   // เหตุผลตอนโน้ตไม่ขึ้น
   const [songOwner, setSongOwner] = useState(null);
   const [instAt, setInstAt] = useState({});   // ทาง → created_at
   const [instrument, setInstrumentState] = useState(() => {
@@ -147,8 +148,17 @@ export default function SongDetailClient() {
   useEffect(() => {
     // fetchMelody รู้เองว่า id นี้เป็นเพลงเรื่องหรือเพลงย่อย และนับเลขวรรคใหม่ให้
     fetchMelody(id, { instrument, approvedOnly: true })
-      .then(({ rows }) => {
+      .then(({ rows, error, ref }) => {
         setMelody(rows ?? []);
+        // ★ โน้ตไม่ขึ้นต้องบอกสาเหตุ ไม่ใช่โชว์หน้าว่างเปล่าให้เดาเอง (Pk เจอตอนแยกเพลงย่อย)
+        setMelodyWhy(
+          error ? 'อ่านโน้ตไม่ได้: ' + error.message
+                  + (/part_song_id|schema cache|column/i.test(error.message)
+                     ? ' — ยังไม่ได้รัน sql/30-31 หรือ Supabase ยังไม่รีเฟรชคอลัมน์ใหม่' : '')
+          : ref && !ref.ready ? 'ยังไม่ได้รัน sql/30 — ระบบเพลงย่อยยังไม่พร้อม'
+          : (rows ?? []).length === 0 && ref?.isPart
+              ? `ยังไม่มีวรรคไหนถูกผูกกับเพลงย่อยนี้ — ลองแยกใหม่จากหน้าผู้ดูแล (เพลงเรื่อง ${ref.parentId})`
+          : '');
         // โน้ตโหลดแล้วค่อยเลื่อนกลับตำแหน่งเดิม (ครั้งแรกครั้งเดียว)
         if (!restoredRef.current) {
           restoredRef.current = true;
@@ -255,6 +265,9 @@ export default function SongDetailClient() {
           {song.notation && song.notation !== '-' && <span className="badge badge-fixed">{song.notation}</span>}
         </div>
         <SongPartsBar song={song} parts={parts} />
+        {melodyWhy && <div data-melodywhy style={{marginTop:'0.6rem',padding:'0.6rem 0.8rem',borderRadius:'8px',
+          background:'rgba(212,122,143,0.10)',border:'1px solid var(--danger)',fontSize:'0.8rem',color:'var(--danger)'}}>
+          ⚠ {melodyWhy}</div>}
         {songOwner && <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
           ✍️ เพิ่มข้อมูลโดย: {songOwner}{song.created_at && <span style={{color:'var(--muted)'}}> · {fmtDT(song.created_at)}</span>}</div>}
         <div style={{marginTop:'0.8rem',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}}>

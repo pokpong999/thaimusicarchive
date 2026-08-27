@@ -11,7 +11,8 @@
 //     แก้ที่เพลงย่อยหรือที่เพลงเรื่องก็คือแถวเดียวกัน
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { suggestParts, partIdFor, makePart, unmakePart, listParts, partError } from '../lib/songparts';
+import { suggestParts, partIdFor, makePart, unmakePart, listParts, partError,
+         suiteReport, reportSummary } from '../lib/songparts';
 
 const MAIN = 'ทำนองหลัก';
 
@@ -25,6 +26,8 @@ export default function SuiteSplitter() {
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [log, setLog] = useState([]);
+  const [report, setReport] = useState(null);   // ตรวจข้อมูลในฐาน (sql/31)
+  const [instUsed, setInstUsed] = useState(null);
 
   // เพลงที่น่าจะเป็นเพลงเรื่อง — ดูจากประเภท หรือชื่อที่มีคำว่า เรื่อง/ตับ
   useEffect(() => {
@@ -36,12 +39,17 @@ export default function SuiteSplitter() {
   const loadSuite = useCallback(async id => {
     setMsg(''); setErr(''); setLog([]); setRows(null); setParts([]); setDone([]);
     if (!id) return;
+    // ★ ต้องรับแถวที่ instrument เป็น null ด้วย — ข้อมูลนำเข้าจาก Excel หลายแถวไม่ได้ระบุทางไว้
+    //   ถ้าใช้ eq('instrument','ทำนองหลัก') เฉย ๆ จะได้วรรคไม่ครบ แล้วแยกเพลงได้ไม่ครบตามไปด้วย
     const { data, error } = await supabase.from('song_melody')
-      .select('id, verse_no, section, part_song_id').eq('song_id', id).eq('instrument', MAIN).order('verse_no');
+      .select('id, verse_no, section, instrument, part_song_id').eq('song_id', id)
+      .or(`instrument.eq.${MAIN},instrument.is.null`).order('verse_no');
     if (error) { setErr('อ่านโน้ตไม่ได้: ' + partError(error.message)); return; }
     const vs = data ?? [];
+    setInstUsed([...new Set(vs.map(r => r.instrument ?? '(ไม่ระบุทาง)'))]);
     setRows(vs);
     setDone(await listParts(id));
+    setReport(null);
     setParts(suggestParts(vs).map(p => ({ ...p, id: partIdFor(id, p.partNo), take: true })));
   }, []);
 
@@ -56,6 +64,9 @@ export default function SuiteSplitter() {
     const ids = taken.map(p => p.id);
     if (new Set(ids).size !== ids.length) problems.push('Song ID ซ้ำกันเอง');
     if (taken.some(p => !p.name.trim())) problems.push('มีเพลงที่ยังไม่ได้ตั้งชื่อ');
+    const noName = taken.filter(p => p.noName);
+    if (noName.length) problems.push(`ต้นฉบับไม่ได้บันทึกชื่อท่อนไว้ ${noName.length} ช่วง (วรรค `
+      + noName.map(p => `${p.from}–${p.to}`).join(', ') + ') — ตั้งชื่อเองก่อน หรือรวมเข้ากับเพลงข้างเคียงด้วยการแก้ช่วงวรรค');
     if (taken.some(p => p.from > p.to)) problems.push('มีช่วงวรรคที่กลับหัว');
     const sorted = [...taken].sort((a, b) => a.from - b.from);
     for (let i = 1; i < sorted.length; i++) {
@@ -97,6 +108,53 @@ export default function SuiteSplitter() {
         {suites.map(s => <option key={s.id} value={s.id}>{s.id} · {s.name_th} ({s.total_verses ?? '?'} วรรค)</option>)}
       </select>
 
+      {sid && (
+        <div style={{display:'flex',gap:'8px',alignItems:'center',marginTop:'0.6rem',flexWrap:'wrap'}}>
+          <button className="btn btn-outline btn-sm" disabled={busy} onClick={async () => {
+            setBusy(true); setErr('');
+            const { rows: rr, error } = await suiteReport(sid);
+            setBusy(false);
+            if (error) { setErr('ตรวจไม่ได้: ' + partError(error.message)); setReport(null); return; }
+            setReport(rr);
+          }}>🔍 ตรวจข้อมูลในฐาน</button>
+          {instUsed && <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>
+            ทางที่พบ: {instUsed.join(' · ')}</span>}
+          {report && <button className="btn btn-outline btn-sm" onClick={() => setReport(null)}>ปิด</button>}
+        </div>
+      )}
+
+      {report && (
+        <div style={{marginTop:'0.7rem'}} data-report>
+          <div style={{fontSize:'0.76rem',color:'var(--muted)',lineHeight:1.8,marginBottom:'0.4rem'}}>
+            นี่คือ<b style={{color:'var(--gold2)'}}>ชื่อท่อนตามต้นฉบับในฐาน</b> ไม่ได้ผ่านการตัดคำใด ๆ
+            — ใช้ตัดสินใจว่าจะแยกตรงไหน
+          </div>
+          {reportSummary(report).map(x => (
+            <div key={x.instrument} style={{fontSize:'0.76rem',color:'var(--jade)'}}>
+              ทาง{x.instrument}: {x.verses} วรรค · {x.groups} ท่อน · อนุมัติแล้ว {x.approved} ·
+              แยกไปแล้ว {x.claimed}{x.noName > 0 && <span style={{color:'var(--danger)'}}> · ไม่มีชื่อท่อน {x.noName} วรรค</span>}
+            </div>
+          ))}
+          <div style={{maxHeight:'320px',overflow:'auto',marginTop:'0.5rem',border:'1px solid var(--border)',borderRadius:'6px'}}>
+            <table style={{fontSize:'0.76rem',width:'100%'}}>
+              <thead><tr><th>#</th><th>ชื่อท่อนตามต้นฉบับ</th><th>ทาง</th><th>วรรค</th><th>จำนวน</th><th>แยกแล้ว</th></tr></thead>
+              <tbody>
+                {report.map(r => (
+                  <tr key={`${r.instrument}-${r.seq}`} data-rep={r.seq}>
+                    <td style={{color:'var(--muted)'}}>{r.seq}</td>
+                    <td>{r.section ?? <span style={{color:'var(--danger)'}}>(ต้นฉบับไม่ได้บันทึกชื่อท่อน)</span>}</td>
+                    <td style={{color:'var(--muted)',fontSize:'0.7rem'}}>{r.instrument}</td>
+                    <td style={{fontFamily:'monospace'}}>{r.verse_from}–{r.verse_to}</td>
+                    <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{r.verses}</td>
+                    <td style={{fontSize:'0.7rem',color:'var(--muted)'}}>{r.part_song_id ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {msg && <div style={{fontSize:'0.82rem',color:'var(--jade)',marginTop:'0.6rem'}}>{msg}</div>}
       {err && <div style={{fontSize:'0.82rem',color:'var(--danger)',marginTop:'0.6rem'}}>⚠ {err}</div>}
 
@@ -127,7 +185,9 @@ export default function SuiteSplitter() {
             อ่านชื่อท่อนแล้วเสนอ {parts.length} เพลงย่อย <span style={{color:'var(--muted)',fontWeight:400}}>· ทำนองหลัก {rows.length} วรรค</span>
           </div>
           <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.6rem'}}>
-            ตรวจชื่อและช่วงวรรคก่อนกดแยก · ติ๊กออกได้ถ้าไม่อยากแยกเพลงไหน
+            ตรวจชื่อและช่วงวรรคก่อนกดแยก · ติ๊กออกได้ถ้าไม่อยากแยกเพลงไหน<br />
+            คอลัมน์ขวาสุดคือ<b style={{color:'var(--gold2)'}}>ชื่อท่อนตามต้นฉบับ</b> — ชื่อนี้จะถูกเก็บไว้ทั้งดุ้น
+            ทั้งในเพลงเรื่องและในเพลงย่อย ไม่ถูกตัดคำ
           </div>
 
           {problems.length > 0 && (
@@ -157,7 +217,11 @@ export default function SuiteSplitter() {
                     <td><input className="form-input" type="number" style={{width:'72px'}} value={p.to}
                       onChange={e => upd(i, { to: +e.target.value })} /></td>
                     <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{Math.max(0, p.to - p.from + 1)}</td>
-                    <td style={{fontSize:'0.7rem',color:'var(--muted)'}}>{p.sections.join(' · ')}</td>
+                    <td style={{fontSize:'0.7rem',color:'var(--muted)'}}>
+                      {p.noName
+                        ? <span style={{color:'var(--danger)'}}>ต้นฉบับไม่ได้บันทึกชื่อท่อนช่วงนี้</span>
+                        : p.sections.join(' · ')}
+                    </td>
                   </tr>
                 ))}
               </tbody>
