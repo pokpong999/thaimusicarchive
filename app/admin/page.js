@@ -11,6 +11,8 @@ import { pointsFor, awardLabel } from '../../lib/points';
 import { LENSES as PERM_LENSES, PERM_BY_KEY } from '../../lib/perms';
 import SongTypeAdmin from '../../components/SongTypeAdmin';
 import SuiteSplitter from '../../components/SuiteSplitter';
+import ProofBox from '../../components/ProofBox';
+import MelodyLog from '../../components/MelodyLog';
 import SongTypeSelect from '../../components/SongTypeSelect';
 const PERM_HINTS = Object.fromEntries(Object.entries(PERM_BY_KEY).map(([k, v]) => [k, v.hint]).filter(([, h]) => h));
 import { fmtDT, ago } from '../../lib/fmtdate';
@@ -436,7 +438,7 @@ export default function AdminPage() {
 
   // ── จัดการข้อมูล ──
   async function searchSongs() {
-    let q = supabase.from('songs').select('id, name_th, name_en, type, style').order('name_th').limit(30);
+    let q = supabase.from('songs').select('*').order('name_th').limit(30);
     if (mgQ) q = q.or(`name_th.ilike.%${mgQ}%,id.ilike.%${mgQ}%`);
     const { data } = await q;
     setMgSongs(data ?? []);
@@ -824,6 +826,7 @@ export default function AdminPage() {
           {mgMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.6rem'}}>{mgMsg}</div>}
           <SongTypeAdmin />
           <SuiteSplitter />
+          <MelodyLog />
           <div className="card">
             <div style={{fontWeight:600,marginBottom:'0.6rem'}}>🎼 เพลง — แก้ไข / ลบ</div>
             <div style={{display:'flex',gap:'8px',marginBottom:'0.8rem'}}>
@@ -843,6 +846,9 @@ export default function AdminPage() {
                   onChange={v => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, style: v} : x))} />
                 <input className="form-input" style={{width:'150px'}} placeholder="English name" value={s.name_en ?? ''}
                   onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, name_en: e.target.value} : x))} />
+                {/* ติ๊กตรวจทานจากหน้าจัดการด้วย — ค้นหาเพลงแล้วติ๊กได้เลย (Pk 27 ส.ค. 69) */}
+                <ProofBox song={s} compact
+                  onChange={u => setMgSongs(mgSongs.map((x, j) => j === i ? { ...x, ...u } : x))} />
                 <button className="btn btn-jade btn-sm btn-icon" onClick={() => saveSong(s)}>💾</button>
                 <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteSong(s.id)}>🗑</button>
               </div>
