@@ -116,7 +116,7 @@ export default function HomePage() {
             </div>
           </a>
         </section>
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px',margin:'0 0 1.2rem'}}>
+        <div className="m1col" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'16px',margin:'0 0 1.2rem'}}>
           <EImage k="home.banner.left" height={200} />
           <EImage k="home.banner.right" height={200} />
         </div>

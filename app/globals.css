@@ -193,7 +193,22 @@ table { max-width: 100%; }
   .btn { font-size: 0.86rem; padding: 0.6rem 0.9rem; min-height: 42px; }
   .btn-sm { font-size: 0.82rem; padding: 0.5rem 0.8rem; min-height: 38px; }
   .btn-icon, .btn-sm.btn-icon { min-width: 42px; }
-  .form-input, .filter-select { font-size: 16px; }  /* 16px กัน iOS ซูมเองตอนพิมพ์ */
+  /* ช่องกรอกทุกชนิดต้อง ≥16px ไม่งั้น iOS ซูมหน้าจอเองตอนแตะ
+     (เดิมคุมแค่ .form-input/.filter-select — ช่องค้นหาหอจดหมายเหตุ กล่องวางโน้ต ฯลฯ หลุดหมด
+      และหลายที่ตั้ง font-size ไว้ในโค้ดโดยตรง จึงต้องใช้ !important — Pk 27 ส.ค. 69) */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),
+  select, textarea { font-size: 16px !important; }
+
+  /* ช่องติ๊กถูก/ปุ่มเลื่อน ค่าเริ่มต้นของเบราว์เซอร์ 13px — เล็กเกินกว่านิ้วจะกดโดน
+     (ติ๊ก "ถอน/ทอด" รายท่อน กับ ฉิ่ง–ฉับ ในเครื่องเล่น อยู่ในกลุ่มนี้) */
+  /* !important เพราะหลายจุดตั้งขนาดไว้ในโค้ดโดยตรง (เช่นติ๊กเปิดจังหวะถอน/ทอด 18px) */
+  input[type=checkbox], input[type=radio] {
+    width: 22px !important; height: 22px !important; flex: 0 0 auto; accent-color: var(--gold); }
+  input[type=range] { height: 28px !important; accent-color: var(--gold); }
+  label:has(> input[type=checkbox]), label:has(> input[type=radio]) { min-height: 34px; }
+
+  /* กริดสองช่องที่เขียนไว้ในโค้ดโดยตรง — มือถือให้เรียงลงมาแทนบีบข้างกัน */
+  .m1col { grid-template-columns: 1fr !important; }
 
   .hero-title { font-size: 1.5rem !important; }
   .hero-sub { font-size: 0.82rem !important; }
