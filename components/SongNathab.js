@@ -65,10 +65,18 @@ export default function SongNathab({ song, verses, onRules }) {
     const bpm = draft.main.bpm ? parseInt(draft.main.bpm, 10) : null;
     if (bpm != null && (!Number.isFinite(bpm) || bpm < 30 || bpm > 300)) { setMsg('⚠ ความเร็วต้องอยู่ระหว่าง 30–300'); return; }
     setBusy(true); setMsg('');
+    // ⚠ ทุกแถวต้องมี "คีย์ครบชุดเท่ากัน" (Pk รายงาน 27 ส.ค. 69)
+    //   ตอน insert หลายแถวพร้อมกัน PostgREST เอาคีย์ของทุกแถวมารวมเป็นชุดเดียว
+    //   แถวไหนไม่มีคีย์นั้นจะถูกส่งเป็น null — ไม่ใช่ใช้ค่า default ของคอลัมน์
+    //   กฎรายท่อนเดิมไม่ส่ง ching มาด้วย จึงกลายเป็น null แล้วชนเงื่อนไข not null ของคอลัมน์ ching
+    const row = (o) => ({ song_id: songId, section: null, nathab: null, level: null, drum: null,
+                          scope: 'only', ching: false, bpm: null, ...o });
     const out = [
-      { song_id: songId, section: null, nathab: draft.main.nathab, level: draft.main.level || null, drum: draft.main.drum || null, scope: 'only',
-        ching: !!draft.main.ching, bpm },
-      ...draft.extra.filter(x => x.section.trim() && x.nathab).map(x => ({ song_id: songId, section: x.section.trim(), nathab: x.nathab, level: x.level || null, drum: x.drum || null, scope: x.scope === 'from' ? 'from' : 'only' })),
+      row({ nathab: draft.main.nathab, level: draft.main.level || null, drum: draft.main.drum || null,
+            ching: !!draft.main.ching, bpm }),
+      ...draft.extra.filter(x => x.section.trim() && x.nathab).map(x =>
+        row({ section: x.section.trim(), nathab: x.nathab, level: x.level || null, drum: x.drum || null,
+              scope: x.scope === 'from' ? 'from' : 'only' })),
     ];
     // ชุดใหม่แทนชุดเก่าทั้งหมด (ตารางเล็ก แถวต่อเพลงไม่กี่แถว)
     const { error: e1 } = await supabase.from('song_nathab').delete().eq('song_id', songId);
