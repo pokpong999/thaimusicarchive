@@ -13,14 +13,18 @@ import { listDrafts, getDraft, saveDraft, deleteDraft, makeAutoSaver } from '../
 import { useMe } from '../../../components/Gate';
 import { listTeachers, sendHomework } from '../../../lib/homework';
 import { myMemberships, myAssignments, dueText } from '../../../lib/classroom';
+import SongTypeSelect from '../../../components/SongTypeSelect';
 
-const TYPES = ['🟢 แปรทำนอง', '🟠 บังคับทาง', '🟡 กึ่งบังคับทาง'];
+// ประเภทเพลงกับลักษณะการบรรเลงย้ายไปอยู่ในตาราง song_types แล้ว (sql/29 · Pk 27 ส.ค. 69)
+//   ของเดิมฝังคำไว้ 3 คำตรงนี้ ซึ่งเป็น "ลักษณะการบรรเลง" แต่ถูกบันทึกลงช่อง "ประเภท"
+//   เพลงอย่าง KBT004 จึงขึ้น 'แปรทำนอง' ปนอยู่ในคอลัมน์ที่เหลือเป็น 'เพลงสองชั้น'
 const INSTS = ['ทำนองหลัก','ระนาดเอก','ระนาดทุ้ม','ฆ้องวงใหญ่','ฆ้องวงเล็ก','ปี่ใน','ขลุ่ยเพียงออ','ซอด้วง','ซออู้','ซอสามสาย','จะเข้','ขิม'];
 
 export default function NewSongPage() {
   const [user, setUser] = useState(null);
   const [name, setName] = useState('');
-  const [songType, setSongType] = useState(TYPES[0]);
+  const [songType, setSongType] = useState(null);      // ประเภทเพลง (เพลงสองชั้น · เพลงเถา …)
+  const [songStyle, setSongStyle] = useState(null);    // ลักษณะการบรรเลง (แปรทำนอง · บังคับทาง …)
   const [instrument, setInstrument] = useState('ทำนองหลัก');
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState('');
@@ -95,8 +99,8 @@ export default function NewSongPage() {
   const [draftErr, setDraftErr] = useState('');
   const [others, setOthers] = useState([]);
   const [ready, setReady] = useState(false);          // โหลดร่างเดิมเสร็จแล้วค่อยเริ่มเก็บร่าง
-  const formRef = useRef({ name: '', songType: TYPES[0], instrument: 'ทำนองหลัก', note: '' });
-  formRef.current = { name, songType, instrument, note };
+  const formRef = useRef({ name: '', songType: null, songStyle: null, instrument: 'ทำนองหลัก', note: '' });
+  formRef.current = { name, songType, songStyle, instrument, note };
 
   useEffect(() => { supabase.auth.getUser().then(({ data }) => setUser(data.user)); }, []);
   // ?mode=import → เปิดหน้าต่างนำเข้าไฟล์ทันที (ลิงก์จาก /convert และปุ่มเลือกวิธีด้านบน)
@@ -111,7 +115,7 @@ export default function NewSongPage() {
   const applyDraft = useCallback(d => {
     const p = d?.payload ?? {};
     draftIdRef.current = d?.id ?? null; setDraftId(d?.id ?? null);
-    setName(p.name ?? ''); setSongType(p.songType ?? TYPES[0]);
+    setName(p.name ?? ''); setSongType(p.songType ?? null); setSongStyle(p.songStyle ?? null);
     setInstrument(p.instrument ?? 'ทำนองหลัก'); setNote(p.note ?? '');
     setSavedAt(d?.updated_at ?? null);
     // โน้ตกลับเข้ากระดาน (รอกระดานพร้อมก่อน)
@@ -167,7 +171,7 @@ export default function NewSongPage() {
     saverRef.current.push(p, p.name || '(ยังไม่ตั้งชื่อเพลง)');
   }, [ready, user, payloadNow]);
 
-  useEffect(() => { touch(); }, [name, songType, instrument, note, touch]);
+  useEffect(() => { touch(); }, [name, songType, songStyle, instrument, note, touch]);
   // ปิดแท็บ/รีเฟรช → รีบเขียนร่างที่ค้าง
   useEffect(() => {
     const h = () => saverRef.current?.flush();
@@ -217,7 +221,7 @@ export default function NewSongPage() {
       studentId: user.id, teacherId: classId ? null : teacherId,
       classId: classId ? Number(classId) : null,
       assignmentId: assignmentId ? Number(assignmentId) : null,
-      title: name.trim(), instrument, songType,
+      title: name.trim(), instrument, songType, songStyle,
       notationText: versesToText(verses, { lines: st.lines }),
       notationJson: { rows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands,
                       system: st.system, lines: st.lines, tang: st.tangHome, notation_ensemble: st.notEns,
@@ -248,7 +252,7 @@ export default function NewSongPage() {
     saverRef.current.cancel();
     const rows = versesToRows(verses, { lines: st.lines, system: st.system });
     const { error } = await supabase.from('song_submissions').insert({
-      name_th: name.trim(), song_type: songType, instrument,
+      name_th: name.trim(), song_type: songType, song_style: songStyle, instrument,
       notation_text: versesToText(verses, { lines: st.lines }),   // อ่านได้ด้วยตา + ระบบเก่ายังอ่านออก
       notation_json: { rows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, system: st.system, lines: st.lines,
                        tang: st.tangHome, notation_ensemble: st.notEns,
@@ -297,16 +301,18 @@ export default function NewSongPage() {
           onSave={saveNow} onDiscard={discardDraft}
           onOpen={d => { applyDraft(d); setOthers(o => o.filter(x => x.id !== d.id)); setMsg('เปิดร่าง "' + (d.title ?? '') + '" มาแก้ต่อแล้ว'); }} />
 
-        <div style={{display:'grid',gridTemplateColumns:'2fr 1fr 1fr',gap:'0.8rem'}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(190px,1fr))',gap:'0.8rem'}}>
           <div className="form-group">
             <label className="form-label">ชื่อเพลง *</label>
             <input className="form-input" value={name} onChange={e => setName(e.target.value)} placeholder="เช่น จีนล่องหน่าย สองชั้น" />
           </div>
           <div className="form-group">
             <label className="form-label">ประเภทเพลง</label>
-            <select className="form-input" value={songType} onChange={e => setSongType(e.target.value)}>
-              {TYPES.map(t => <option key={t}>{t}</option>)}
-            </select>
+            <SongTypeSelect kind="type" value={songType} onChange={setSongType} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">ลักษณะการบรรเลง</label>
+            <SongTypeSelect kind="style" value={songStyle} onChange={setSongStyle} />
           </div>
           <div className="form-group">
             <label className="form-label">ทาง / เครื่องดนตรี</label>

@@ -7,6 +7,7 @@ import GoalBanner from '../components/GoalBanner';
 import TopArchivists from '../components/TopArchivists';
 import RandomEvents from '../components/RandomEvents';
 import { EText, EImage } from '../components/Editable';
+import SongTypeSelect from '../components/SongTypeSelect';
 
 const PAGE_SIZE = 25;
 
@@ -30,12 +31,14 @@ export default function HomePage() {
   const [count, setCount] = useState(0);
   const [page, setPage] = useState(0);
   const [q, setQ] = useState('');
+  const [fType, setFType] = useState('');      // กรองตามประเภทเพลง (Pk 27 ส.ค. 69)
+  const [fStyle, setFStyle] = useState('');   // กรองตามลักษณะการบรรเลง
   const [loading, setLoading] = useState(true);
   const [videoCounts, setVideoCounts] = useState({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [stats, setStats] = useState(null);
 
-  useEffect(() => { load(); }, [page, q]);
+  useEffect(() => { load(); }, [page, q, fType, fStyle]);
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
@@ -69,6 +72,8 @@ export default function HomePage() {
     setLoading(true);
     let query = supabase.from('songs').select('*', { count: 'exact' }).order('name_th');
     if (q) query = query.or(`name_th.ilike.%${q}%,id.ilike.%${q}%`);
+    if (fType)  query = query.eq('type', fType);
+    if (fStyle) query = query.eq('style', fStyle);
     const { data, count: c } = await query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
     setSongs(data ?? []);
     setCount(c ?? 0);
@@ -130,20 +135,30 @@ export default function HomePage() {
         <div className="search-bar">
           <input className="search-input" placeholder="ค้นหาชื่อเพลง หรือ Song ID..."
             value={q} onChange={e => { setQ(e.target.value); setPage(0); }} />
+          {/* กรองตามบัญชีประเภทเพลง — รายการมาจากตาราง ไม่ใช่คำที่ฝังไว้ (Pk 27 ส.ค. 69) */}
+          <SongTypeSelect kind="type" value={fType} className="filter-select" blankLabel="ทุกประเภท"
+            onChange={v => { setFType(v ?? ''); setPage(0); }} />
+          <SongTypeSelect kind="style" value={fStyle} className="filter-select" blankLabel="ทุกลักษณะการบรรเลง"
+            onChange={v => { setFStyle(v ?? ''); setPage(0); }} />
+          {(fType || fStyle) && (
+            <button className="btn btn-outline btn-sm" onClick={() => { setFType(''); setFStyle(''); setPage(0); }}>
+              ✕ ล้างตัวกรอง</button>
+          )}
         </div>
         <div className="table-wrap">
           <table>
             <thead><tr>
-              <th>Song ID</th><th>ชื่อเพลง</th><th>ประเภท</th><th>วรรค</th><th>กระสวน</th><th>วิดีโอ</th>{isAdmin && <th></th>}
+              <th>Song ID</th><th>ชื่อเพลง</th><th>ประเภท</th><th>ลักษณะการบรรเลง</th><th>วรรค</th><th>กระสวน</th><th>วิดีโอ</th>{isAdmin && <th></th>}
             </tr></thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={isAdmin ? 7 : 6} style={{textAlign:'center',color:'var(--muted)'}}>กำลังโหลด...</td></tr>
+                <tr><td colSpan={isAdmin ? 8 : 7} style={{textAlign:'center',color:'var(--muted)'}}>กำลังโหลด...</td></tr>
               ) : songs.map(s => (
                 <tr key={s.id}>
                   <td className="song-id">{s.id}</td>
                   <td><Link href={`/songs/${s.id}`}><span className="song-name">{s.name_th}</span></Link></td>
-                  <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.type}</td>
+                  <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.type || <span style={{color:'var(--border)'}}>—</span>}</td>
+                  <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.style || <span style={{color:'var(--border)'}}>—</span>}</td>
                   <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{s.total_verses}</td>
                   <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{s.unique_patterns}</td>
                   <td>{videoCounts[s.id]

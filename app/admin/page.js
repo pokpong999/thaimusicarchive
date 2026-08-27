@@ -9,6 +9,8 @@ import { invalidateNathabLibrary, saveSongDefaults } from '../../lib/nathab';
 import { refreshSongStats } from '../../lib/songstats';
 import { pointsFor, awardLabel } from '../../lib/points';
 import { LENSES as PERM_LENSES, PERM_BY_KEY } from '../../lib/perms';
+import SongTypeAdmin from '../../components/SongTypeAdmin';
+import SongTypeSelect from '../../components/SongTypeSelect';
 const PERM_HINTS = Object.fromEntries(Object.entries(PERM_BY_KEY).map(([k, v]) => [k, v.hint]).filter(([, h]) => h));
 import { fmtDT, ago } from '../../lib/fmtdate';
 
@@ -392,7 +394,7 @@ export default function AdminPage() {
     }
     if (createSong) {
       const { error: e1 } = await supabase.from('songs').insert({
-        id: sid, name_th: sub.name_th, type: sub.song_type,
+        id: sid, name_th: sub.name_th, type: sub.song_type || null, style: sub.song_style || null,
         total_verses: parsed.length, unique_patterns: new Set(parsed.map(r => r.krasuan)).size,
         contributed_by: sub.submitted_by,
       });
@@ -433,13 +435,13 @@ export default function AdminPage() {
 
   // ── จัดการข้อมูล ──
   async function searchSongs() {
-    let q = supabase.from('songs').select('id, name_th, name_en, type').order('name_th').limit(30);
+    let q = supabase.from('songs').select('id, name_th, name_en, type, style').order('name_th').limit(30);
     if (mgQ) q = q.or(`name_th.ilike.%${mgQ}%,id.ilike.%${mgQ}%`);
     const { data } = await q;
     setMgSongs(data ?? []);
   }
   async function saveSong(s) {
-    const { error } = await supabase.from('songs').update({ name_th: s.name_th, name_en: s.name_en || null, type: s.type }).eq('id', s.id);
+    const { error } = await supabase.from('songs').update({ name_th: s.name_th, name_en: s.name_en || null, type: s.type || null, style: s.style || null }).eq('id', s.id);
     setMgMsg(error ? '⚠ ' + error.message : '✓ บันทึก ' + s.id);
   }
   async function deleteSong(id) {
@@ -819,6 +821,7 @@ export default function AdminPage() {
       {tab === 'manage' && (
         <>
           {mgMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.6rem'}}>{mgMsg}</div>}
+          <SongTypeAdmin />
           <div className="card">
             <div style={{fontWeight:600,marginBottom:'0.6rem'}}>🎼 เพลง — แก้ไข / ลบ</div>
             <div style={{display:'flex',gap:'8px',marginBottom:'0.8rem'}}>
@@ -831,8 +834,11 @@ export default function AdminPage() {
                 <span className="song-id" style={{width:'70px'}}>{s.id}</span>
                 <input className="form-input" style={{flex:1,minWidth:'160px'}} value={s.name_th}
                   onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, name_th: e.target.value} : x))} />
-                <input className="form-input" style={{width:'130px'}} value={s.type ?? ''}
-                  onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, type: e.target.value} : x))} />
+                {/* เดิมเป็นช่องพิมพ์มือ พิมพ์ผิดได้เรื่อย ๆ — ตอนนี้เลือกจากบัญชีข้างล่าง (Pk 27 ส.ค. 69) */}
+                <SongTypeSelect kind="type" value={s.type} style={{width:'150px'}}
+                  onChange={v => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, type: v} : x))} />
+                <SongTypeSelect kind="style" value={s.style} blankLabel="— ลักษณะการบรรเลง —" style={{width:'150px'}}
+                  onChange={v => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, style: v} : x))} />
                 <input className="form-input" style={{width:'150px'}} placeholder="English name" value={s.name_en ?? ''}
                   onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, name_en: e.target.value} : x))} />
                 <button className="btn btn-jade btn-sm btn-icon" onClick={() => saveSong(s)}>💾</button>
