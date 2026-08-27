@@ -109,8 +109,11 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   // ระบบเสียง (ความถี่จริง) — เพิ่มชุดใหม่ในฐานแล้วเลือกได้ที่นี่ทันที
   useEffect(() => { loadTunings({ force: true }).then(list => {
     setTunes(list);
-    setTuning(cur => list.some(t => t.slug === cur) ? cur : (list.find(t => t.is_default) || list[0])?.slug || DEFAULT_TUNING);
-  }).catch(() => {}); }, []);
+    // ถ้าโน้ตชุดนี้ระบุระบบเสียงไว้เอง ใช้ของเพลงก่อน (sql/21 · Pk 27 ส.ค. 69)
+    const declared = (verses ?? []).find(v => v.tuning)?.tuning;
+    setTuning(cur => (declared && list.some(t => t.slug === declared)) ? declared
+      : (list.some(t => t.slug === cur) ? cur : (list.find(t => t.is_default) || list[0])?.slug || DEFAULT_TUNING));
+  }).catch(() => {}); }, [verses]);
   // ── ค่าเริ่มต้นของเพลง (Pk 2026-08-26) ──
   // เพลงที่บันทึกฉิ่ง/กลอง/ความเร็วไว้แล้ว → กดเล่นแล้วต้องได้ยินตามนั้นทันที "กับผู้ฟังทุกคน"
   // (หน้าทับที่เพลงกำหนดไว้ไม่ติดสิทธิ์ player_perc — สิทธิ์คุมแค่การ "เลือกหน้าทับเอง")
@@ -248,16 +251,24 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
 
   // ── ทาง: หา "ทางบ้าน" ของโน้ตชุดนี้ แล้วคิดว่าต้องเลื่อนกี่ขั้น ──
   const ensNow = useMemo(() => {
+    const declared = (verses ?? []).find(v => v.ensemble)?.ensemble;
+    if (declared === 'piphat' || declared === 'khrueangsai') return declared;
     const t = tunes.find(x => x.slug === tuning);
     return (t?.ensemble === 'piphat') ? 'piphat' : 'khrueangsai';
-  }, [tunes, tuning]);
+  }, [verses, tunes, tuning]);
   const allSteps = useMemo(() => {
     const out = [];
     baseParsed.forEach(p => ['cb', 'rh', 'lh', 'xh'].forEach(k =>
       p[k].forEach(cell => cell.forEach(n => out.push(stepOf(n.ch, n.register || 0))))));
     return out;
   }, [baseParsed]);
-  const homeTang = useMemo(() => (allSteps.length ? (guessTang(allSteps, { ens: ensNow })[0]?.no ?? 2) : 2), [allSteps, ensNow]);
+  // ทางที่ผู้ถอดโน้ตระบุไว้มาก่อนการเดาเสมอ — เดาผิดทีเสียงเพี้ยนทั้งเพลง (Pk 27 ส.ค. 69)
+  const declaredTang = useMemo(() => {
+    const v = (verses ?? []).find(x => x.tang != null && +x.tang >= 1 && +x.tang <= 7);
+    return v ? +v.tang : null;
+  }, [verses]);
+  const homeTang = useMemo(() => declaredTang
+    ?? (allSteps.length ? (guessTang(allSteps, { ens: ensNow })[0]?.no ?? 2) : 2), [declaredTang, allSteps, ensNow]);
   //   ตรึงโน้ต → โน้ตไม่ขยับ เลื่อนแค่เสียง · ย้ายโน้ตจริง → ขยับตัวอักษร (เลือกทิศให้อยู่ช่วงเดิม) เสียงตามไปเอง
   const tangShift = tang == null ? 0 : shiftBetween(homeTang, tang);
   const viewShift = (tangView === 'real' && tangShift) ? bestShift(allSteps, tangShift) : 0;
@@ -699,7 +710,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         </select>
         <select className="filter-select" value={tang ?? ''} onChange={e => setTang(e.target.value === '' ? null : +e.target.value)}
           disabled={playState !== 'stopped'} title="ทาง (บันไดเสียง) ที่อยากฟัง">
-          <option value="">🎼 ทางตามโน้ต ({tangOf(homeTang).short})</option>
+          <option value="">🎼 ทางตามโน้ต ({tangOf(homeTang).short}{declaredTang ? '' : ' · ระบบเดาให้'})</option>
           {TANGS.map(t => <option key={t.no} value={t.no}>🎼 {t.name}</option>)}
         </select>
         {tang != null && tang !== homeTang &&

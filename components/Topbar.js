@@ -56,10 +56,11 @@ export default function Topbar() {
         {user && <Link href="/dashboard">{t("nav_mine")}</Link>}
         {user && <Link href="/diary" title="ไดอารี่ดนตรี → แฟ้มผลงาน">{t("nav_diary")}</Link>}
         <Link href="/search" title="search">🔍</Link>
-        <span onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
-          style={{cursor:'pointer',fontSize:'0.72rem',border:'1px solid var(--border)',
-            borderRadius:'4px',padding:'2px 7px',color:'var(--muted)'}}>
-          {lang === 'th' ? 'EN' : 'ไทย'}</span>
+        <button type="button" onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
+          title={lang === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
+          style={{cursor:'pointer',fontSize:'0.8rem',border:'1px solid var(--border)',background:'transparent',
+            borderRadius:'5px',padding:'6px 10px',minHeight:'32px',color:'var(--muted)',fontFamily:'inherit'}}>
+          {lang === 'th' ? 'EN' : 'ไทย'}</button>
         {(profile?.role === 'admin' || profile?.role === 'moderator') && <Link href="/admin">Admin</Link>}
       </nav>
       <div className="topbar-right">

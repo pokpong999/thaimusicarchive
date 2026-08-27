@@ -322,10 +322,10 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
               <span style={{ fontSize: '0.74rem', color: 'var(--muted)' }}>ตัวอย่างก่อนพิมพ์</span>
               <span style={{ display: 'flex', gap: '6px', alignItems: 'center', fontSize: '0.74rem' }}>
                 <button className="btn btn-outline btn-sm" disabled={pageIdx <= 0}
-                  onClick={() => setPageIdx(p => p - 1)} style={{ padding: '2px 9px' }}>‹</button>
+                  onClick={() => setPageIdx(p => p - 1)} >‹</button>
                 หน้า {pageIdx + 1} / {pageCount}
                 <button className="btn btn-outline btn-sm" disabled={pageIdx >= pageCount - 1}
-                  onClick={() => setPageIdx(p => p + 1)} style={{ padding: '2px 9px' }}>›</button>
+                  onClick={() => setPageIdx(p => p + 1)} >›</button>
               </span>
             </div>
             <div ref={wrapRef} style={{ background: 'var(--navy3)', borderRadius: '8px', padding: '0.8rem' }} />

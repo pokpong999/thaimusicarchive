@@ -62,7 +62,13 @@ export default function NathabLibraryPage() {
     if (editing?.mode === 'edit' && editing.row?.id != null) {
       ({ error } = await supabase.from('nathab_patterns').update(out).eq('id', editing.row.id));
     } else {
-      ({ error } = await supabase.from('nathab_patterns').insert(out));
+      // เดิมไม่ส่ง submitted_by มาเลย → หน้าทับที่สมาชิกส่งไม่ขึ้นในกล่อง "ของฉันที่รออนุมัติ"
+      // และหน้าแอดมินขึ้น "โดย —" ทุกใบ (แก้ 27 ส.ค. 69)
+      // แอดมิน/ผู้ตรวจเขียนเองขึ้นคลังทันที · สมาชิกทั่วไปเข้าคิวรอตรวจ (sql/21 ตั้ง default pending ไว้อีกชั้น)
+      ({ error } = await supabase.from('nathab_patterns').insert({
+        ...out, submitted_by: me.user?.id ?? null,
+        status: (me.isAdmin || me.isViewer) ? 'approved' : 'pending',
+      }));
     }
     setBusy(false);
     if (error) { flash('⚠ บันทึกไม่สำเร็จ: ' + error.message, 6000); return; }
@@ -133,8 +139,8 @@ export default function NathabLibraryPage() {
               </span>
               <NathabPreview row={r} />
               {r.status === 'pending' && <>
-                <button className="btn btn-outline btn-sm" onClick={() => setEditing({ row: r, mode: 'edit' })}>✏️</button>
-                <button className="btn btn-danger btn-sm" onClick={() => remove(r)}>🗑</button>
+                <button className="btn btn-outline btn-sm btn-icon" onClick={() => setEditing({ row: r, mode: 'edit' })}>✏️</button>
+                <button className="btn btn-danger btn-sm btn-icon" onClick={() => remove(r)}>🗑</button>
               </>}
             </div>
           ))}
@@ -160,9 +166,9 @@ export default function NathabLibraryPage() {
               <NathabPreview row={r} />
               {canWrite && !editing && (
                 me.isAdmin
-                  ? <span style={{ display: 'flex', gap: 4 }}>
-                      <button className="btn btn-outline btn-sm" title="แก้ไข" onClick={() => setEditing({ row: r, mode: 'edit' })}>✏️</button>
-                      <button className="btn btn-danger btn-sm" title="ลบ" onClick={() => remove(r)}>🗑</button>
+                  ? <span style={{ display: 'flex', gap: 10 }}>
+                      <button className="btn btn-outline btn-sm btn-icon" title="แก้ไข" onClick={() => setEditing({ row: r, mode: 'edit' })}>✏️</button>
+                      <button className="btn btn-danger btn-sm btn-icon" title="ลบหน้าทับนี้" onClick={() => remove(r)}>🗑</button>
                     </span>
                   : <button className="btn btn-outline btn-sm" onClick={() => setEditing({ row: { ...r, id: undefined }, mode: 'propose' })}>เสนอแก้ไข</button>
               )}

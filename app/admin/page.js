@@ -6,9 +6,21 @@ import { textToVerses, versesToRows, rowsToVerses } from '../../lib/notation-cor
 import NotationInput from '../../components/NotationInput';
 import { NathabPreview } from '../../components/NathabEditor';
 import { invalidateNathabLibrary, saveSongDefaults } from '../../lib/nathab';
+import { refreshSongStats } from '../../lib/songstats';
 import { fmtDT, ago } from '../../lib/fmtdate';
 
 // กระดานอ่านอย่างเดียวสำหรับดู/ฟังโน้ตที่ส่งมาก่อนอนุมัติ
+// แถบ "ส่งโดยใคร เมื่อไร" — ข้อมูลมีอยู่ในมือแล้ว (submitted_by + created_at) แต่เดิมไม่เคยพิมพ์ออกมา
+//   หา foreign key จาก submitted_by ไป profiles ไม่ได้ (ชี้ไป auth.users) จึงเทียบกับรายชื่อสมาชิกที่โหลดไว้แล้วแทน
+function By({ id, at, members }) {
+  const who = members.find(m => m.id === id);
+  return (
+    <div style={{fontSize:'0.74rem',color:'var(--muted)',marginTop:'3px'}}>
+      ✍️ ส่งโดย <span style={{color:'var(--gold)'}}>{who?.display_name ?? (id ? 'ไม่ทราบชื่อ' : '—')}</span>
+      {at ? ' · ' + fmtDT(at) : ''}
+    </div>
+  );
+}
 function SubmissionBoard({ sub }) {
   const rows = submissionRows(sub);
   const j = sub.notation_json || {};
@@ -202,10 +214,17 @@ export default function AdminPage() {
     setMgFiles(mf ?? []);
   }
 
+  // ให้ศักดินาผู้ส่ง — ปุ่มอนุมัติทุกปุ่มเขียนว่า "+10 ศักดินา" แต่เดิมให้จริงแค่ 2 เส้นทาง (แก้ 27 ส.ค. 69)
+  async function award(uid, pts = 10) {
+    if (!uid) return;
+    try { await supabase.rpc('add_points', { uid, pts }); } catch (e) { /* ไม่มีฟังก์ชันก็ยังอนุมัติได้ */ }
+  }
   async function approveVideo(id) {
+    const row = pendingVideos.find(v => v.id === id);
     await supabase.from('song_videos').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
     }).eq('id', id);
+    await award(row?.submitted_by);
     loadAll();
   }
   async function rejectVideo(id) {
@@ -213,9 +232,11 @@ export default function AdminPage() {
     loadAll();
   }
   async function approveRecord(id) {
+    const row = pendingRecords.find(r => r.id === id);
     await supabase.from('archive_records').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
     }).eq('id', id);
+    await award(row?.submitted_by);
     loadAll();
   }
   async function rejectRecord(id) {
@@ -239,6 +260,10 @@ export default function AdminPage() {
       combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null, third_hand: r.third_hand ?? null, notation_system: r.notation_system ?? null,
       krasuan: r.krasuan ?? null, luktok: r.luktok ?? null,
       level: r.level ?? null, ching: r.ching ?? null, marks: r.marks ?? null,
+      // ทาง/วง/ระบบเสียงที่ผู้ส่งระบุไว้ใน notation_json — เดิมไม่เคยถูกคัดลอกลงตารางจริง (sql/21)
+      tang: (sub.notation_json || {}).tang ?? null,
+      ensemble: (sub.notation_json || {}).notation_ensemble ?? (sub.notation_json || {}).ensemble ?? null,
+      tuning: (sub.notation_json || {}).tuning ?? null,
       approved: true, submitted_by: sub.submitted_by,
     }));
     const { error } = await supabase.from('song_melody').insert(rows);
@@ -246,7 +271,13 @@ export default function AdminPage() {
     await supabase.from('melody_submissions').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
     }).eq('id', id);
-    if (sub.submitted_by) await supabase.rpc('add_points', { uid: sub.submitted_by, pts: 10 });
+    // ฉิ่ง/กลอง/ความเร็วที่ผู้ส่งตั้งไว้บนกระดาน → ค่าเริ่มต้นของเพลง (เดิมทำเฉพาะตอนอนุมัติ "เพลงใหม่")
+    try {
+      const j = sub.notation_json || {};
+      await saveSongDefaults(sub.song_id, { nathab: j.nathab, level: j.level, drum: j.drum, ching: j.ching, bpm: j.bpm });
+    } catch (e) { /* ยังไม่ได้รัน sql/18 ก็ยังอนุมัติได้ */ }
+    await refreshSongStats(sub.song_id, inst);
+    await award(sub.submitted_by);
     loadAll();
   }
   async function rejectTang(id) {
@@ -255,9 +286,11 @@ export default function AdminPage() {
   }
 
   async function approveFile(id) {
+    const row = pendingFiles.find(f => f.id === id);
     await supabase.from('song_files').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
     }).eq('id', id);
+    await award(row?.submitted_by);
     loadAll();
   }
   async function rejectFile(id) {
@@ -331,7 +364,11 @@ export default function AdminPage() {
       section: r.section ?? null, line_no: r.line_no ?? null,
       combined: r.combined, right_hand: r.right_hand ?? null, left_hand: r.left_hand ?? null, third_hand: r.third_hand ?? null, notation_system: r.notation_system ?? null,
       krasuan: r.krasuan ?? null, luktok: r.luktok ?? null,
-      level: r.level ?? null, ching: r.ching ?? null,
+      level: r.level ?? null, ching: r.ching ?? null, marks: r.marks ?? null,
+      // ทาง/วง/ระบบเสียงที่ผู้ส่งระบุไว้ใน notation_json — เดิมไม่เคยถูกคัดลอกลงตารางจริง (sql/21)
+      tang: (sub.notation_json || {}).tang ?? null,
+      ensemble: (sub.notation_json || {}).notation_ensemble ?? (sub.notation_json || {}).ensemble ?? null,
+      tuning: (sub.notation_json || {}).tuning ?? null,
       approved: true, submitted_by: sub.submitted_by,
     }));
     const { error: e2 } = await supabase.from('song_melody').insert(rows);
@@ -344,7 +381,8 @@ export default function AdminPage() {
     await supabase.from('song_submissions').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(), assigned_song_id: sid,
     }).eq('id', sub.id);
-    await supabase.rpc('add_points', { uid: sub.submitted_by, pts: 10 });
+    await refreshSongStats(sid, inst);
+    await award(sub.submitted_by);
     alert(createSong ? `✓ สร้างเพลง ${sid} (${rows.length} วรรค) แล้ว` : `✓ เพิ่มทาง "${inst}" ให้เพลง ${sid} (${rows.length} วรรค) แล้ว`);
     loadAll();
   }
@@ -514,14 +552,16 @@ export default function AdminPage() {
         หอจดหมายเหตุรอตรวจ {pendingRecords.length} · วิดีโอเพลงรอตรวจ {pendingVideos.length}
       </div>
 
-      <div style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem'}}>
+      {/* แท็บ: เดิมเป็น <div onClick> กดด้วยคีย์บอร์ดไม่ได้ และเป้ากดเตี้ย (Pk 27 ส.ค. 69) */}
+      <div className="tab-row" style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem',flexWrap:'wrap'}}>
         {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','🥁 หน้าทับ'+(nathabRows.filter(r=>r.status==='pending').length?' ('+nathabRows.filter(r=>r.status==='pending').length+')':'')],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์'],['content','🖼 เนื้อหาเว็บ'],['stats','📈 สถิติ']].map(([k,label]) => (
-          <div key={k} onClick={() => setTab(k)}
-            style={{padding:'8px 16px',fontSize:'0.85rem',cursor:'pointer',
+          <button key={k} type="button" onClick={() => setTab(k)} aria-pressed={tab === k}
+            style={{padding:'10px 16px',minHeight:'40px',fontSize:'0.86rem',cursor:'pointer',
+              background:'transparent',border:'none',fontFamily:'inherit',whiteSpace:'nowrap',
               color: tab===k ? 'var(--gold)' : 'var(--muted)',
               borderBottom: tab===k ? '2px solid var(--gold)' : '2px solid transparent'}}>
             {label}
-          </div>
+          </button>
         ))}
       </div>
 
@@ -538,6 +578,7 @@ export default function AdminPage() {
                   </div>
                   <div style={{fontWeight:600,margin:'6px 0 2px'}}>{r.what_text}</div>
                   <div style={{fontSize:'0.8rem',color:'var(--muted)'}}>{r.who_text} · {r.where_text}</div>
+                  <By id={r.submitted_by} at={r.created_at} members={members} />
                   {r.description && <div style={{fontSize:'0.78rem',color:'var(--muted)',marginTop:'6px'}}>{r.description}</div>}
                   <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
                     แนบ: รูป {(r.archive_media??[]).filter(m=>m.media_type==='image').length} · วิดีโอ {(r.archive_media??[]).filter(m=>m.media_type==='youtube').length}
@@ -562,6 +603,7 @@ export default function AdminPage() {
                   <div style={{fontWeight:500}}>{v.songs?.name_th} <span className="song-id">({v.song_id})</span></div>
                   <div style={{fontSize:'0.78rem',color:'var(--muted)',marginTop:'4px'}}>{v.title || '(ไม่มีคำอธิบาย)'}</div>
                   <a href={v.youtube_url} target="_blank" style={{fontSize:'0.75rem',color:'var(--jade)'}}>เปิดดูบน YouTube ↗</a>
+                  <By id={v.submitted_by} at={v.created_at} members={members} />
                 </div>
                 <div style={{display:'flex',gap:'8px'}}>
                   <button className="btn btn-jade btn-sm" onClick={() => approveVideo(v.id)}>✓ Approve</button>
@@ -581,6 +623,8 @@ export default function AdminPage() {
                 <div style={{minWidth:0,flex:1}}>
                   <div style={{fontWeight:600}}>{t.songs?.name_th} <span className="song-id">({t.song_id})</span>
                     <span className="badge badge-fixed" style={{marginLeft:'8px'}}>{t.instrument}</span></div>
+                  <By id={t.submitted_by} at={t.created_at} members={members} />
+                  {t.note && <div style={{fontSize:'0.75rem',color:'var(--muted)',marginTop:'4px'}}>📝 {t.note}</div>}
                   {boardOpen[t.id]
                     ? <div style={{marginTop:'0.6rem'}}><SubmissionBoard sub={t} /></div>
                     : <pre style={{fontSize:'0.78rem',color:'var(--cream)',background:'var(--navy3)',
@@ -617,6 +661,7 @@ export default function AdminPage() {
                     <div style={{fontWeight:600}}>{f.songs?.name_th} <span className="song-id">({f.song_id})</span></div>
                     <div style={{fontSize:'0.8rem',color:'var(--muted)',marginTop:'4px'}}>{f.title}</div>
                     <a href={url} target="_blank" style={{fontSize:'0.75rem',color:'var(--jade)'}}>เปิดดู PDF ↗</a>
+                    <By id={f.submitted_by} at={f.created_at} members={members} />
                   </div>
                   <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
                     <button className="btn btn-jade btn-sm" onClick={() => approveFile(f.id)}>✓ Approve</button>
@@ -675,6 +720,7 @@ export default function AdminPage() {
               <div style={{fontWeight:600}}>{s.name_th}
                 <span className="badge badge-fixed" style={{marginLeft:'8px'}}>{s.song_type}</span>
                 <span className="badge badge-mixed" style={{marginLeft:'4px'}}>{s.instrument}</span></div>
+              <By id={s.submitted_by} at={s.created_at} members={members} />
               {s.note && <div style={{fontSize:'0.75rem',color:'var(--muted)',marginTop:'4px'}}>📝 {s.note}</div>}
               {boardOpen[s.id]
                 ? <div style={{marginTop:'0.6rem'}}><SubmissionBoard sub={s} /></div>
@@ -705,10 +751,14 @@ export default function AdminPage() {
               <div className="card" key={a.id}>
                 <div style={{fontWeight:600}}>{a.songs?.name_th}
                   <span style={{color:'var(--muted)',fontSize:'0.78rem'}}> · {a.title ?? '-'} · {a.performer ?? '-'} · {a.year_recorded ?? '-'}</span></div>
+                <By id={a.submitted_by} at={a.created_at} members={members} />
                 <audio controls preload="none" src={url} style={{width:'100%',margin:'0.6rem 0'}} />
                 <div style={{display:'flex',gap:'8px'}}>
                   <button className="btn btn-jade btn-sm" onClick={async () => {
-                    await supabase.from('song_audio').update({ approved: true }).eq('id', a.id); loadAll();
+                    await supabase.from('song_audio').update({
+                      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
+                    }).eq('id', a.id);
+                    await award(a.submitted_by); loadAll();
                   }}>✓ อนุมัติ (+10 ศักดินา)</button>
                   <button className="btn btn-danger btn-sm" onClick={async () => {
                     if (!confirm('ปฏิเสธและลบไฟล์เสียงนี้?')) return;
@@ -740,8 +790,8 @@ export default function AdminPage() {
                   onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, type: e.target.value} : x))} />
                 <input className="form-input" style={{width:'150px'}} placeholder="English name" value={s.name_en ?? ''}
                   onChange={e => setMgSongs(mgSongs.map((x,j) => j===i ? {...x, name_en: e.target.value} : x))} />
-                <button className="btn btn-jade btn-sm" onClick={() => saveSong(s)}>💾</button>
-                <button className="btn btn-danger btn-sm" onClick={() => deleteSong(s.id)}>🗑</button>
+                <button className="btn btn-jade btn-sm btn-icon" onClick={() => saveSong(s)}>💾</button>
+                <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteSong(s.id)}>🗑</button>
               </div>
             ))}
           </div>
@@ -754,7 +804,7 @@ export default function AdminPage() {
                 </span>
                 <button className="btn btn-outline btn-sm" onClick={() => toggleRecordApprove(r)}>
                   {r.approved ? 'ซ่อน' : 'แสดง'}</button>
-                <button className="btn btn-danger btn-sm" onClick={() => deleteRecord(r.id)}>🗑</button>
+                <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteRecord(r.id)}>🗑</button>
               </div>
             ))}
           </div>
@@ -765,7 +815,7 @@ export default function AdminPage() {
                 <span style={{flex:1,fontSize:'0.8rem'}}>{v.songs?.name_th}
                   <span style={{color:'var(--muted)'}}> · {v.title ?? v.youtube_url}</span></span>
                 <a href={v.youtube_url} target="_blank" style={{fontSize:'0.72rem',color:'var(--jade)'}}>ดู↗</a>
-                <button className="btn btn-danger btn-sm" onClick={() => deleteVideo(v.id)}>🗑</button>
+                <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteVideo(v.id)}>🗑</button>
               </div>
             ))}
           </div>
@@ -777,7 +827,7 @@ export default function AdminPage() {
                 <div key={i} style={{display:'flex',gap:'8px',alignItems:'center',marginBottom:'6px'}}>
                   <span style={{flex:1,fontSize:'0.8rem'}}>{t.songs?.name_th}
                     <span className="badge badge-fixed" style={{marginLeft:'6px'}}>{t.instrument}</span></span>
-                  <button className="btn btn-danger btn-sm" onClick={() => deleteTang(t.song_id, t.instrument)}>🗑</button>
+                  <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteTang(t.song_id, t.instrument)}>🗑</button>
                 </div>
               ))}
           </div>
@@ -790,7 +840,7 @@ export default function AdminPage() {
                   <span style={{flex:1,fontSize:'0.8rem'}}>{f.songs?.name_th}
                     <span style={{color:'var(--muted)'}}> · {f.title}</span></span>
                   <a href={url} target="_blank" style={{fontSize:'0.72rem',color:'var(--jade)'}}>เปิด↗</a>
-                  <button className="btn btn-danger btn-sm" onClick={() => deletePdf(f)}>🗑</button>
+                  <button className="btn btn-danger btn-sm btn-icon" onClick={() => deletePdf(f)}>🗑</button>
                 </div>
               );
             })}
@@ -812,7 +862,7 @@ export default function AdminPage() {
                     <br/>{(c.body ?? '(รูปภาพ)').slice(0, 120)}
                   </span>
                   <a href={href} target="_blank" style={{fontSize:'0.72rem',color:'var(--jade)',whiteSpace:'nowrap'}}>ดู↗</a>
-                  <button className="btn btn-danger btn-sm" onClick={() => deleteComment(c.id)}>🗑</button>
+                  <button className="btn btn-danger btn-sm btn-icon" onClick={() => deleteComment(c.id)}>🗑</button>
                 </div>
               );
             })}
@@ -1018,292 +1068,6 @@ export default function AdminPage() {
         </div>
       )}
 
-      {tab === 'stats' && (
-        <div className="card">
-          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>📈 สถิติการเข้าชมและการแชร์</div>
-          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
-            นับ 1 วิวต่อผู้ชม 1 คนต่อชิ้นงาน ทุก 6 ชั่วโมง · ยอดแชร์นับเมื่อกดปุ่มแชร์
-            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadStats}>โหลดสถิติ</button>
-          </div>
-          {statSum.length > 0 && (
-            <div style={{display:'flex',gap:'12px',flexWrap:'wrap',marginBottom:'1rem'}}>
-              {statSum.map(r => (
-                <div key={r.target_type} className="card" style={{flex:'1 1 190px',margin:0,padding:'0.8rem'}}>
-                  <div style={{fontSize:'0.72rem',color:'var(--muted)'}}>
-                    {r.target_type === 'song' ? '🎵 เพลง' : r.target_type === 'archive' ? '📜 เหตุการณ์' : r.target_type}</div>
-                  <div style={{fontSize:'1.3rem',fontWeight:700,color:'var(--gold)'}}>
-                    👁 {Number(r.total_views ?? 0).toLocaleString('th-TH')}</div>
-                  <div style={{fontSize:'0.78rem',color:'var(--jade)'}}>
-                    ↗ แชร์ {Number(r.total_shares ?? 0).toLocaleString('th-TH')} · {r.items} รายการ</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {['song','archive'].map(t => (statTop[t]?.length > 0 && (
-            <div key={t} style={{marginBottom:'1rem'}}>
-              <div style={{fontWeight:600,fontSize:'0.85rem',marginBottom:'0.4rem'}}>
-                {t === 'song' ? '🎵 เพลงยอดนิยม 15 อันดับ' : '📜 เหตุการณ์ยอดนิยม 15 อันดับ'}</div>
-              {statTop[t].map((r, i) => (
-                <div key={r.target_id} style={{display:'flex',gap:'10px',fontSize:'0.8rem',
-                  padding:'5px 0',borderBottom:'1px solid rgba(42,63,92,0.3)'}}>
-                  <span style={{color:'var(--muted)',width:'22px'}}>{i+1}.</span>
-                  <a href={`/${t === 'song' ? 'songs' : 'archive'}/${r.target_id}`}
-                    style={{flex:1,color:'var(--gold2)',overflow:'hidden',textOverflow:'ellipsis'}}>{r.target_id}</a>
-                  <span>👁 {r.views}</span><span style={{color:'var(--jade)'}}>↗ {r.shares}</span>
-                </div>
-              ))}
-            </div>
-          )))}
-          {statSum.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดสถิติ" (ต้องรัน thma_stats.sql ก่อน)</div>}
-        </div>
-      )}
-
-      {tab === 'content' && (
-        <div className="card">
-          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🖼 เนื้อหาเว็บที่ถูกแก้ไข</div>
-          <div style={{fontSize:'0.74rem',color:'var(--muted)',lineHeight:1.9,marginBottom:'0.8rem'}}>
-            วิธีแก้ข้อความ/รูป: เข้าหน้านั้นๆ ขณะล็อกอินเป็น Admin แล้วกดปุ่ม ✏️ ข้างข้อความ หรือปุ่ม ＋ เพิ่มรูป บนกรอบรูป<br/>
-            ตารางนี้แสดงรายการที่แก้ไปแล้ว กด "คืนค่าเดิม" เพื่อกลับไปใช้ข้อความต้นฉบับในโค้ด
-            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadSC}>โหลดรายการ</button>
-          </div>
-          {scMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{scMsg}</div>}
-          {scRows.map(r => (
-            <div key={r.key} style={{display:'flex',gap:'10px',alignItems:'flex-start',
-              padding:'8px 0',borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:'0.72rem',color:'var(--gold)'}}>{r.key}</div>
-                <div style={{fontSize:'0.8rem',color:'var(--cream)',whiteSpace:'pre-wrap',
-                  maxHeight:'60px',overflow:'hidden'}}>{r.text_value ?? (r.image_path ? '🖼 ' + r.image_path : '—')}</div>
-              </div>
-              <button className="btn btn-outline btn-sm" onClick={() => clearSC(r.key)}
-                style={{fontSize:'0.68rem'}}>↺ คืนค่าเดิม</button>
-            </div>
-          ))}
-          {scRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>ยังไม่มีการแก้ไข (หรือกดโหลดรายการ)</div>}
-        </div>
-      )}
-
-      {tab === 'perm' && (
-        <div className="card">
-          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🔐 ตารางสิทธิ์การมองเห็น</div>
-          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
-            ติ๊ก = เปิดให้เห็น/ใช้งาน · บันทึกและมีผลทันทีทั้งเว็บ · คอลัมน์ Admin ล็อกเปิดเสมอ
-            {permRows.length === 0 && <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadPerms}>โหลดตาราง</button>}
-          </div>
-          {permMsg && <div style={{fontSize:'0.78rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{permMsg}</div>}
-          {permRows.length > 0 && (
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
-                <thead><tr style={{borderBottom:'2px solid var(--border)'}}>
-                  <th style={{textAlign:'left',padding:'6px'}}>สิทธิ์</th>
-                  <th style={{padding:'6px'}}>👤 ผู้เยี่ยมชม</th>
-                  <th style={{padding:'6px'}}>สมาชิกฟรี</th>
-                  <th style={{padding:'6px'}}>💎 อุปถัมภ์</th>
-                  <th style={{padding:'6px'}}>Admin</th>
-                </tr></thead>
-                <tbody>
-                  {permRows.map((row, i) => (
-                    <>
-                      {(i === 0 || permRows[i-1].section !== row.section) && (
-                        <tr key={row.section}><td colSpan={5} style={{padding:'10px 6px 4px',color:'var(--gold)',fontWeight:700,fontSize:'0.75rem'}}>▸ {row.section}</td></tr>
-                      )}
-                      <tr key={row.feature_key} style={{borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
-                        <td style={{padding:'6px'}}>{row.label}</td>
-                        {['guest','free','premium'].map(tk => (
-                          <td key={tk} style={{textAlign:'center'}}>
-                            <input type="checkbox" checked={!!row[tk]} onChange={() => togglePerm(row, tk)}
-                              style={{width:'17px',height:'17px',accentColor:'var(--gold)',cursor:'pointer'}} />
-                          </td>
-                        ))}
-                        <td style={{textAlign:'center'}}>
-                          <input type="checkbox" checked disabled style={{width:'17px',height:'17px',accentColor:'var(--jade)'}} />
-                        </td>
-                      </tr>
-                    </>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {permRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดตาราง" (ต้องรัน thma_permissions.sql ก่อน)</div>}
-        </div>
-      )}
-
-      {tab === 'members' && (
-        <div className="card">
-          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.8rem'}}>
-            <div style={{fontWeight:600}}>👥 สมาชิกทั้งหมด ({members.length})</div>
-            <button className="btn btn-jade btn-sm" onClick={exportMembers}>📊 Export Excel</button>
-          </div>
-          <div className="table-wrap">
-            <table>
-              <thead><tr><Th k="display_name">ชื่อ / อีเมล</Th><Th k="phone">ติดต่อ</Th><Th k="organization">สำนัก / จังหวัด</Th><Th k="points">ศักดินา</Th><Th k="joined">สมัคร · เข้าใช้ล่าสุด</Th><Th k="role">สถานะ</Th></tr></thead>
-              <tbody>
-                {sortedMembers.map(m => (
-                  <tr key={m.id}>
-                    <td style={{minWidth:'150px'}}>
-                      <Link href={`/members/${m.id}`} style={{color:'var(--cream)'}}>{m.display_name ?? '—'}</Link>
-                      <div style={{fontSize:'0.68rem',color:'var(--muted)',wordBreak:'break-all'}}>{m.email ?? '—'}</div>
-                    </td>
-                    <td style={{fontSize:'0.7rem',color:'var(--muted)'}}>{[m.phone, m.line_id && 'LINE ' + m.line_id].filter(Boolean).join(' · ') || '—'}</td>
-                    <td style={{fontSize:'0.7rem',color:'var(--muted)'}}>{[m.organization, m.province].filter(Boolean).join(' · ') || '—'}</td>
-                    <td style={{fontFamily:'monospace',color:'var(--jade)',whiteSpace:'nowrap'}}>{(m.points ?? 0).toLocaleString()}</td>
-                    <td style={{fontSize:'0.68rem',whiteSpace:'nowrap'}}>
-                      <div title={activity[m.id]?.joined_at ?? m.created_at ?? ''}>{fmtDT(activity[m.id]?.joined_at ?? m.created_at) || '—'}</div>
-                      <div style={{color:'var(--muted)'}} title={fmtDT(activity[m.id]?.last_sign_in_at)}>{activity[m.id]?.last_sign_in_at ? 'ล่าสุด ' + ago(activity[m.id].last_sign_in_at) : ''}</div>
-                    </td>
-                    <td style={{whiteSpace:'nowrap'}}>
-                      <select className="filter-select" value={m.role ?? 'member'}
-                        onChange={e => setMemberRole(m.id, e.target.value)}
-                        disabled={m.role === 'admin' && !isRealAdmin}
-                        title={m.role === 'admin' && !isRealAdmin ? 'บัญชีแอดมิน — แก้ได้เฉพาะแอดมินด้วยกัน' : ''}
-                        style={{fontSize:'0.72rem',padding:'2px 6px'}}>
-                        <option value="member">สมาชิก</option>
-                        <option value="student">🎓 Student (ใช้กระดานโน้ตได้)</option>
-                        <option value="superuser">👁 Super user (เห็นทุกอย่าง)</option>
-                        <option value="moderator">🛡 Moderator</option>
-                        {(isRealAdmin || m.role === 'admin') && <option value="admin">⭐ Admin</option>}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {tab === 'nathab' && (
-        <div>
-          <div style={{fontSize:'0.78rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
-            แก้ไขหน้าทับได้โดยตรง — รูปแบบ: พยางค์กลองต่อตำแหน่ง คั่นห้องด้วย | (เช่น - - - เท่ง | - - - พรึม)
-            พยางค์ที่รองรับ: เท่ง ทิง ติง พรึม ตุ๊บ ทั่ม ป๊ะ จ๊ะ โจ๊ะ
-          </div>
-          {nathabRows.map((row, i) => (
-            <div className="card" key={row.id} style={{padding:'0.8rem'}}>
-              <div style={{fontSize:'0.8rem',fontWeight:600,marginBottom:'0.4rem'}}>
-                {row.nathab} · {row.level} · {row.instrument}
-              </div>
-              <textarea className="form-input" rows="2" value={row.pattern_text}
-                onChange={e => setNathabRows(nathabRows.map((x,j) => j===i ? {...x, pattern_text: e.target.value} : x))}
-                style={{fontFamily:'monospace',fontSize:'0.8rem',resize:'vertical'}} />
-              <button className="btn btn-jade btn-sm" style={{marginTop:'0.4rem'}} onClick={() => saveNathab(row)}>💾 บันทึก</button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {tab === 'stats' && (
-        <div className="card">
-          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>📈 สถิติการเข้าชมและการแชร์</div>
-          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
-            นับ 1 วิวต่อผู้ชม 1 คนต่อชิ้นงาน ทุก 6 ชั่วโมง · ยอดแชร์นับเมื่อกดปุ่มแชร์
-            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadStats}>โหลดสถิติ</button>
-          </div>
-          {statSum.length > 0 && (
-            <div style={{display:'flex',gap:'12px',flexWrap:'wrap',marginBottom:'1rem'}}>
-              {statSum.map(r => (
-                <div key={r.target_type} className="card" style={{flex:'1 1 190px',margin:0,padding:'0.8rem'}}>
-                  <div style={{fontSize:'0.72rem',color:'var(--muted)'}}>
-                    {r.target_type === 'song' ? '🎵 เพลง' : r.target_type === 'archive' ? '📜 เหตุการณ์' : r.target_type}</div>
-                  <div style={{fontSize:'1.3rem',fontWeight:700,color:'var(--gold)'}}>
-                    👁 {Number(r.total_views ?? 0).toLocaleString('th-TH')}</div>
-                  <div style={{fontSize:'0.78rem',color:'var(--jade)'}}>
-                    ↗ แชร์ {Number(r.total_shares ?? 0).toLocaleString('th-TH')} · {r.items} รายการ</div>
-                </div>
-              ))}
-            </div>
-          )}
-          {['song','archive'].map(t => (statTop[t]?.length > 0 && (
-            <div key={t} style={{marginBottom:'1rem'}}>
-              <div style={{fontWeight:600,fontSize:'0.85rem',marginBottom:'0.4rem'}}>
-                {t === 'song' ? '🎵 เพลงยอดนิยม 15 อันดับ' : '📜 เหตุการณ์ยอดนิยม 15 อันดับ'}</div>
-              {statTop[t].map((r, i) => (
-                <div key={r.target_id} style={{display:'flex',gap:'10px',fontSize:'0.8rem',
-                  padding:'5px 0',borderBottom:'1px solid rgba(42,63,92,0.3)'}}>
-                  <span style={{color:'var(--muted)',width:'22px'}}>{i+1}.</span>
-                  <a href={`/${t === 'song' ? 'songs' : 'archive'}/${r.target_id}`}
-                    style={{flex:1,color:'var(--gold2)',overflow:'hidden',textOverflow:'ellipsis'}}>{r.target_id}</a>
-                  <span>👁 {r.views}</span><span style={{color:'var(--jade)'}}>↗ {r.shares}</span>
-                </div>
-              ))}
-            </div>
-          )))}
-          {statSum.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดสถิติ" (ต้องรัน thma_stats.sql ก่อน)</div>}
-        </div>
-      )}
-
-      {tab === 'content' && (
-        <div className="card">
-          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🖼 เนื้อหาเว็บที่ถูกแก้ไข</div>
-          <div style={{fontSize:'0.74rem',color:'var(--muted)',lineHeight:1.9,marginBottom:'0.8rem'}}>
-            วิธีแก้ข้อความ/รูป: เข้าหน้านั้นๆ ขณะล็อกอินเป็น Admin แล้วกดปุ่ม ✏️ ข้างข้อความ หรือปุ่ม ＋ เพิ่มรูป บนกรอบรูป<br/>
-            ตารางนี้แสดงรายการที่แก้ไปแล้ว กด "คืนค่าเดิม" เพื่อกลับไปใช้ข้อความต้นฉบับในโค้ด
-            <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadSC}>โหลดรายการ</button>
-          </div>
-          {scMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{scMsg}</div>}
-          {scRows.map(r => (
-            <div key={r.key} style={{display:'flex',gap:'10px',alignItems:'flex-start',
-              padding:'8px 0',borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:'0.72rem',color:'var(--gold)'}}>{r.key}</div>
-                <div style={{fontSize:'0.8rem',color:'var(--cream)',whiteSpace:'pre-wrap',
-                  maxHeight:'60px',overflow:'hidden'}}>{r.text_value ?? (r.image_path ? '🖼 ' + r.image_path : '—')}</div>
-              </div>
-              <button className="btn btn-outline btn-sm" onClick={() => clearSC(r.key)}
-                style={{fontSize:'0.68rem'}}>↺ คืนค่าเดิม</button>
-            </div>
-          ))}
-          {scRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>ยังไม่มีการแก้ไข (หรือกดโหลดรายการ)</div>}
-        </div>
-      )}
-
-      {tab === 'perm' && (
-        <div className="card">
-          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🔐 ตารางสิทธิ์การมองเห็น</div>
-          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
-            ติ๊ก = เปิดให้เห็น/ใช้งาน · บันทึกและมีผลทันทีทั้งเว็บ · คอลัมน์ Admin ล็อกเปิดเสมอ
-            {permRows.length === 0 && <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadPerms}>โหลดตาราง</button>}
-          </div>
-          {permMsg && <div style={{fontSize:'0.78rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{permMsg}</div>}
-          {permRows.length > 0 && (
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
-                <thead><tr style={{borderBottom:'2px solid var(--border)'}}>
-                  <th style={{textAlign:'left',padding:'6px'}}>สิทธิ์</th>
-                  <th style={{padding:'6px'}}>👤 ผู้เยี่ยมชม</th>
-                  <th style={{padding:'6px'}}>สมาชิกฟรี</th>
-                  <th style={{padding:'6px'}}>💎 อุปถัมภ์</th>
-                  <th style={{padding:'6px'}}>Admin</th>
-                </tr></thead>
-                <tbody>
-                  {permRows.map((row, i) => (
-                    <>
-                      {(i === 0 || permRows[i-1].section !== row.section) && (
-                        <tr key={row.section}><td colSpan={5} style={{padding:'10px 6px 4px',color:'var(--gold)',fontWeight:700,fontSize:'0.75rem'}}>▸ {row.section}</td></tr>
-                      )}
-                      <tr key={row.feature_key} style={{borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
-                        <td style={{padding:'6px'}}>{row.label}</td>
-                        {['guest','free','premium'].map(tk => (
-                          <td key={tk} style={{textAlign:'center'}}>
-                            <input type="checkbox" checked={!!row[tk]} onChange={() => togglePerm(row, tk)}
-                              style={{width:'17px',height:'17px',accentColor:'var(--gold)',cursor:'pointer'}} />
-                          </td>
-                        ))}
-                        <td style={{textAlign:'center'}}>
-                          <input type="checkbox" checked disabled style={{width:'17px',height:'17px',accentColor:'var(--jade)'}} />
-                        </td>
-                      </tr>
-                    </>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-          {permRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดตาราง" (ต้องรัน thma_permissions.sql ก่อน)</div>}
-        </div>
-      )}
-
       {tab === 'members' && (
         <div className="card">
           <div style={{fontWeight:600,marginBottom:'0.7rem'}}>👥 จัดการสมาชิก — ตั้ง Admin / สมาชิกอุปถัมภ์</div>
@@ -1335,7 +1099,7 @@ export default function AdminPage() {
                 <option value="free">ฟรี</option>
                 <option value="premium">💎 อุปถัมภ์</option>
               </select>
-              <button className="btn btn-jade btn-sm" onClick={() => saveMember(m)}>💾</button>
+              <button className="btn btn-jade btn-sm btn-icon" onClick={() => saveMember(m)}>💾</button>
             </div>
           ))}
           {memberList.length === 0 && <div style={{color:'var(--muted)',fontSize:'0.8rem'}}>กดค้นหาเพื่อแสดงรายชื่อ</div>}

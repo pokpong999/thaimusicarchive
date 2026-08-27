@@ -92,9 +92,13 @@ function Portfolio() {
     if (!draft) return;
     setBusy(true); setMsg('');
     const row = { title: draft.title, subtitle: draft.subtitle || null, intro: draft.intro || null, template: draft.template, paper: draft.paper, orientation: draft.orientation, one_per_page: !!draft.one_per_page, is_public: !!draft.is_public, items: draft.items };
+    // เดิมไม่ส่ง user_id/updated_at มาเลย — ถ้าฐานไม่ได้ตั้ง default auth.uid() ไว้ เล่มใหม่จะไม่โผล่ในรายการตลอดไป
+    // และ "แก้ล่าสุด" จะค้างที่เวลาสร้าง (Pk 27 ส.ค. 69 · sql/21 ตั้ง default + trigger ให้ด้วยอีกชั้น)
+    const { data: au } = await supabase.auth.getUser();
+    const stamped = { ...row, updated_at: new Date().toISOString() };
     const res = draft.id
-      ? await supabase.from('portfolios').update(row).eq('id', draft.id).select().single()
-      : await supabase.from('portfolios').insert(row).select().single();
+      ? await supabase.from('portfolios').update(stamped).eq('id', draft.id).select().single()
+      : await supabase.from('portfolios').insert({ ...stamped, user_id: au?.user?.id ?? null }).select().single();
     setBusy(false);
     if (res.error) { setMsg('⚠ บันทึกไม่สำเร็จ: ' + res.error.message); return; }
     setDraft({ ...res.data, items: Array.isArray(res.data.items) ? res.data.items : [] });
@@ -154,7 +158,7 @@ function Portfolio() {
           </div>
           <Link href={`/portfolio/view?b=${bk.id}`}><button className="btn btn-outline btn-sm">👁 เปิดเล่ม / พิมพ์</button></Link>
           <button className="btn btn-outline btn-sm" onClick={() => setDraft({ ...bk, items: Array.isArray(bk.items) ? bk.items : [] })}>✎ แก้</button>
-          <button className="btn btn-danger btn-sm" onClick={() => del(bk)}>🗑</button>
+          <button className="btn btn-danger btn-sm btn-icon" onClick={() => del(bk)}>🗑</button>
         </div>
       ))}
     </main>
@@ -270,7 +274,7 @@ function Portfolio() {
                     <input className="form-input" placeholder="คำบรรยายเพิ่มในเล่ม (ไม่บังคับ)" value={it.note ?? ''} onChange={e => setNote(i, e.target.value)} style={{ flex: 2, minWidth: 180, fontSize: '0.76rem' }} />
                     <button className="btn btn-outline btn-sm" onClick={() => move(i, -1)} disabled={i === 0}>↑</button>
                     <button className="btn btn-outline btn-sm" onClick={() => move(i, 1)} disabled={i === draft.items.length - 1}>↓</button>
-                    <button className="btn btn-outline btn-sm" onClick={() => toggle(it.t, it.id)}>✕</button>
+                    <button className="btn btn-outline btn-sm btn-icon" onClick={() => toggle(it.t, it.id)}>✕</button>
                   </div>
                 );
               })}

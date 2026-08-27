@@ -224,6 +224,8 @@ export default function SamplesAdmin() {
             </div>
             {open === inst.slug && (
               <div style={{ marginTop: '0.8rem', borderTop: '1px solid var(--border)', paddingTop: '0.8rem' }}>
+                {/* instruments.note มีช่องกรอกและบันทึกจริง แต่ไม่เคยแสดงที่ไหนเลย (Pk 27 ส.ค. 69) */}
+                {inst.note && <div style={{ fontSize: '0.75rem', color: 'var(--muted)', marginBottom: '0.6rem', lineHeight: 1.7 }}>📝 {inst.note}</div>}
                 <div style={{ fontSize: '0.74rem', lineHeight: 2, marginBottom: '0.6rem' }}>
                   <span style={{ color: 'var(--muted)' }}>ไฟล์ที่ควรมี ({inst.naming === 'note' ? 'ชื่อโน้ต' : 'เลขลำดับ'}): </span>
                   {chk.map(c => (
@@ -240,8 +242,8 @@ export default function SamplesAdmin() {
                       <span style={{ color: st == null ? 'var(--gold)' : 'var(--jade)', fontSize: '0.75rem' }}>
                         {st == null ? '⚠ อ่านชื่อไม่ออก' : '= ' + noteLabel(NOTES_TH[((st % 7) + 7) % 7], Math.floor(st / 7))}</span>
                       <span style={{ color: 'var(--muted)', fontSize: '0.7rem' }}>{Math.round((f.metadata?.size ?? 0) / 1024)} KB</span>
-                      <button className="btn btn-outline btn-sm" onClick={() => preview(inst.slug, f.name)}>▶</button>
-                      <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => removeFile(inst.slug, f.name)}>🗑</button>
+                      <button className="btn btn-outline btn-sm btn-icon" onClick={() => preview(inst.slug, f.name)}>▶</button>
+                      <button className="btn btn-danger btn-sm btn-icon" disabled={busy} onClick={() => removeFile(inst.slug, f.name)}>🗑</button>
                     </div>
                   );
                 })}
@@ -303,7 +305,7 @@ export default function SamplesAdmin() {
                     <span style={{ flex: 1, fontFamily: 'monospace' }}>{f.name}</span>
                     <span style={{ color: 'var(--muted)', fontSize: '0.7rem' }}>{Math.round((f.metadata?.size ?? 0) / 1024)} KB</span>
                     <button className="btn btn-outline btn-sm" onClick={() => preview(slug, f.name)}>▶ ฟัง</button>
-                    <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => removeFile(slug, f.name)}>🗑</button>
+                    <button className="btn btn-danger btn-sm btn-icon" disabled={busy} onClick={() => removeFile(slug, f.name)}>🗑</button>
                   </div>
                 ))}
                 <label className="btn btn-primary btn-sm" style={{ marginTop: '0.8rem', cursor: 'pointer', display: 'inline-block' }}>
@@ -597,11 +599,11 @@ function NoteTable({ inst, files: fl }) {
                       value={r.file ?? ''} placeholder={inst.naming === 'note' ? '—' : String(r.idx).padStart(2, '0')}
                       onChange={e => set(r.idx, { file: e.target.value })} list={`fl-${inst.slug}`} /></td>
                     <td style={tdS}>
-                      <button className="btn btn-outline btn-sm" style={{ padding: '1px 6px' }} disabled={busy}
+                      <button className="btn btn-outline btn-sm btn-icon" disabled={busy}
                         title="วัดความถี่จริงจากไฟล์เสียง" onClick={() => measureOne(r)}>🎧</button>
-                      <button className="btn btn-outline btn-sm" style={{ padding: '1px 6px', marginLeft: 4 }}
+                      <button className="btn btn-outline btn-sm btn-icon" style={{ marginLeft: 6 }}
                         title="ฟังเสียงเดิม (ยังไม่จูน)" onClick={() => { const f = fileOf(r); if (f) playBuf(inst.slug, f, 1); else setMsg('⚠ ยังไม่มีไฟล์'); }}>▶</button>
-                      <button className="btn btn-primary btn-sm" style={{ padding: '1px 6px', marginLeft: 4 }}
+                      <button className="btn btn-primary btn-sm" style={{ marginLeft: 6 }}
                         title="ฟังเสียงที่จูนแล้ว" onClick={() => { const f = fileOf(r); if (f) playBuf(inst.slug, f, nominal / (+r.hz > 0 ? +r.hz : nominal)); else setMsg('⚠ ยังไม่มีไฟล์'); }}>▶ จูน</button>
                       {meta[r.idx] && <span style={{ marginLeft: 6, fontSize: '0.68rem',
                         color: meta[r.idx].q < 0.6 || Math.abs(meta[r.idx].cents ?? 0) > 50 ? 'var(--gold)' : 'var(--jade)' }}

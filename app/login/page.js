@@ -214,7 +214,8 @@ export default function LoginPage() {
 
         {isLogin && (
           <div style={{textAlign:'center',marginTop:'1rem',fontSize:'0.76rem'}}>
-            <a data-t="forgot" style={{color:'var(--muted)',cursor:'pointer'}} onClick={doReset}>ลืมรหัสผ่าน?</a>
+            <a data-t="forgot" style={{color:'var(--gold2)',cursor:'pointer',textDecoration:'underline',
+              display:'inline-block',padding:'8px 10px',fontSize:'0.85rem'}} onClick={doReset}>ลืมรหัสผ่าน?</a>
           </div>
         )}
 

@@ -6,7 +6,7 @@ import RankBadge from '../../components/RankBadge';
 import Avatar from '../../components/Avatar';
 import { getRank, getNextRank } from '../../lib/ranks';
 import { listDrafts, deleteDraft, draftSummary } from '../../lib/drafts';
-import { fmtDT } from '../../lib/fmtdate';
+import { fmtDT, ago } from '../../lib/fmtdate';
 
 const Status = ({ ok }) => (
   <span className="badge" style={{
@@ -25,6 +25,7 @@ export default function DashboardPage() {
   const [pdfs, setPdfs] = useState([]);
   const [songs, setSongs] = useState([]);
   const [comments, setComments] = useState([]);
+  const [approvers, setApprovers] = useState({});
   const [drafts, setDrafts] = useState([]);        // ฉบับร่างที่ยังไม่ได้ส่ง (Pk 2026-08-26)
   const [loading, setLoading] = useState(true);
 
@@ -39,15 +40,15 @@ export default function DashboardPage() {
   async function load(uid) {
     const [p, r, v, t, f, s, c] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', uid).single(),
-      supabase.from('archive_records').select('id, what_text, when_text, approved, created_at')
+      supabase.from('archive_records').select('id, what_text, when_text, approved, created_at, approved_by, approved_at')
         .eq('submitted_by', uid).order('created_at', { ascending: false }),
-      supabase.from('song_videos').select('id, song_id, title, approved, created_at, songs(name_th)')
+      supabase.from('song_videos').select('id, song_id, title, approved, created_at, approved_by, approved_at, songs(name_th)')
         .eq('submitted_by', uid).order('created_at', { ascending: false }),
-      supabase.from('melody_submissions').select('id, song_id, instrument, approved, created_at, songs(name_th)')
+      supabase.from('melody_submissions').select('id, song_id, instrument, approved, created_at, approved_by, approved_at, songs(name_th)')
         .eq('submitted_by', uid).order('created_at', { ascending: false }),
-      supabase.from('song_files').select('id, song_id, title, approved, created_at, songs(name_th)')
+      supabase.from('song_files').select('id, song_id, title, approved, created_at, approved_by, approved_at, songs(name_th)')
         .eq('submitted_by', uid).order('created_at', { ascending: false }),
-      supabase.from('song_submissions').select('id, name_th, instrument, approved, assigned_song_id, created_at')
+      supabase.from('song_submissions').select('id, name_th, instrument, approved, assigned_song_id, created_at, approved_by, approved_at')
         .eq('submitted_by', uid).order('created_at', { ascending: false }),
       supabase.from('comments').select('id, target_type, target_id, body, created_at')
         .eq('user_id', uid).order('created_at', { ascending: false }).limit(30),
@@ -55,6 +56,13 @@ export default function DashboardPage() {
     setProfile(p.data); setRecords(r.data ?? []); setVideos(v.data ?? []);
     setTangs(t.data ?? []); setPdfs(f.data ?? []); setSongs(s.data ?? []);
     setComments(c.data ?? []);
+    // ชื่อผู้ตรวจ — เดิม approved_by ถูกบันทึกไว้ทุกครั้งแต่ไม่มีที่ไหนอ่านเลยทั้งเว็บ (Pk 27 ส.ค. 69)
+    const appIds = [...new Set([...(r.data ?? []), ...(v.data ?? []), ...(t.data ?? []), ...(f.data ?? []), ...(s.data ?? [])]
+      .map(x => x.approved_by).filter(Boolean))];
+    if (appIds.length) {
+      const { data: ap } = await supabase.from('profiles').select('id, display_name').in('id', appIds);
+      const m = {}; (ap ?? []).forEach(x => m[x.id] = x.display_name); setApprovers(m);
+    }
     // ร่างอ่านแยก — ถ้ายังไม่ได้รัน sql/18 ให้เงียบ ๆ ไป ไม่ให้หน้าพัง
     try { const { drafts: dl } = await listDrafts(); setDrafts(dl ?? []); } catch (e) { setDrafts([]); }
     setLoading(false);
@@ -89,6 +97,15 @@ export default function DashboardPage() {
   );
   if (loading) return <main className="container">กำลังโหลด...</main>;
 
+  // แถบสถานะรายชิ้น: ส่งเมื่อไร · อนุมัติเมื่อไร · ใครตรวจ (เดิมเห็นแค่ "⏳ รอตรวจ" ลอย ๆ)
+  const When = ({ it }) => (
+    <div style={{fontSize:'0.7rem',color:'var(--muted)',marginTop:'2px'}}>
+      {it.created_at && <>🕒 ส่งเมื่อ {fmtDT(it.created_at)}</>}
+      {it.approved && it.approved_at && <> · ✓ อนุมัติ {fmtDT(it.approved_at)}</>}
+      {it.approved && it.approved_by && <> · ตรวจโดย {approvers[it.approved_by] ?? 'ผู้ดูแล'}</>}
+      {!it.approved && it.created_at && <> · <span style={{color:'var(--gold)'}}>{ago(it.created_at)}แล้ว</span></>}
+    </div>
+  );
   const rank = getRank(profile?.points);
   const next = getNextRank(profile?.points);
   const pts = profile?.points ?? 0;
@@ -104,7 +121,7 @@ export default function DashboardPage() {
         : items.map(it => (
           <div key={it.id} style={{display:'flex',gap:'8px',alignItems:'center',
             padding:'6px 0',borderBottom:'1px solid rgba(42,63,92,0.35)',flexWrap:'wrap'}}>
-            <div style={{flex:1,minWidth:'220px',fontSize:'0.83rem'}}>{render(it)}</div>
+            <div style={{flex:1,minWidth:'220px',fontSize:'0.83rem'}}>{render(it)}<When it={it} /></div>
             <Status ok={it.approved} />
             {table && (
               <button className="btn btn-danger btn-sm" onClick={() => del(table, it.id, it)}>🗑 ลบ</button>
@@ -206,7 +223,7 @@ export default function DashboardPage() {
               <Link href={c.target_type === 'song' ? `/songs/${c.target_id}` : `/archive/${c.target_id}`} style={{flex:1}}>
                 <span style={{fontSize:'0.8rem',cursor:'pointer'}}>{(c.body ?? '(รูปภาพ)').slice(0, 90)}</span>
               </Link>
-              <button className="btn btn-danger btn-sm" onClick={() => del('comments', c.id)}>🗑</button>
+              <button className="btn btn-danger btn-sm btn-icon" onClick={() => del('comments', c.id)}>🗑</button>
             </div>
           ))}
       </div>

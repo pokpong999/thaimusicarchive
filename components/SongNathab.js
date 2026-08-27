@@ -177,7 +177,7 @@ export default function SongNathab({ song, verses, onRules }) {
                 <select className="filter-select" value={x.drum} onChange={e => setExtra(i, { drum: e.target.value })}>
                   <option value="">เครื่องเดิม</option>{DRUMS.map(d => <option key={d} value={d}>{drumLabel(d)}</option>)}
                 </select>
-                <button className="btn btn-outline btn-sm" onClick={() => setDraft(d => ({ ...d, extra: d.extra.filter((_, j) => j !== i) }))}>🗑</button>
+                <button className="btn btn-outline btn-sm btn-icon" onClick={() => setDraft(d => ({ ...d, extra: d.extra.filter((_, j) => j !== i) }))}>🗑</button>
               </div>
               <div className="sn-cover" style={{ fontSize: '0.64rem', color: coverage[i]?.length ? 'var(--muted)' : 'var(--gold)', marginLeft: 4 }}>
                 {coverage[i]?.length ? `ครอบ: ${coverage[i].join(' · ')}` : x.section.trim() ? 'ไม่ตรงกับท่อนไหนในโน้ตเลย' : ''}

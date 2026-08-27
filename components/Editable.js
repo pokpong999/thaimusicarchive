@@ -80,7 +80,7 @@ export function EText({ k, children, as: Tag = 'div', className, style, multilin
             setDraft(stored ?? (typeof children === 'string' ? children : '')); setEditing(true); }}
           style={{marginLeft:'6px',verticalAlign:'middle',background:'rgba(201,168,76,0.15)',
             border:'1px solid var(--gold)',color:'var(--gold)',borderRadius:'6px',
-            fontSize:'0.62rem',padding:'1px 5px',cursor:'pointer',lineHeight:1.6}}>✏️</button>
+            fontSize:'0.8rem',padding:'5px 9px',minHeight:'30px',cursor:'pointer',lineHeight:1.2}}>✏️</button>
       )}
     </Tag>
   );
@@ -132,7 +132,7 @@ export function EImage({ k, alt = '', style, className, height = 220 }) {
             <input type="file" accept="image/*" style={{display:'none'}} disabled={busy}
               onChange={e => upload(e.target.files[0])} />
           </label>
-          {url && <button className="btn btn-sm" disabled={busy} onClick={removeImg}
+          {url && <button className="btn btn-sm btn-icon" disabled={busy} onClick={removeImg}
             style={{background:'rgba(15,27,45,0.9)',border:'1px solid #C0574B',color:'#E08878',fontSize:'0.7rem'}}>🗑</button>}
         </div>
       )}

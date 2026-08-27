@@ -172,13 +172,12 @@ export default function ArchiveContributions({ recordId, recordOwner }) {
                 <span style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>{fmtDate(c.created_at)}</span>
               </div>
               {canManage && editId !== c.id && (
-                <div style={{ display: 'flex', gap: '10px', fontSize: '0.7rem' }}>
-                  <span onClick={() => { setEditId(c.id); setEditBody(c.body ?? ''); }}
-                    style={{ color: 'var(--gold2)', cursor: 'pointer' }}>แก้ไข</span>
-                  <span onClick={() => remove(c)} style={{ color: 'var(--danger)', cursor: 'pointer' }}>ลบ</span>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button className="btn btn-outline btn-sm" onClick={() => { setEditId(c.id); setEditBody(c.body ?? ''); }}>✎ แก้ไข</button>
+                  <button className="btn btn-danger btn-sm" onClick={() => remove(c)}>🗑 ลบ</button>
                   {me.isAdmin && (
-                    <span onClick={() => toggleVerify(c)} style={{ color: 'var(--muted)', cursor: 'pointer' }}>
-                      {c.verified ? 'ถอดป้ายตรวจสอบ' : 'ติดป้ายตรวจสอบ'}</span>
+                    <button className="btn btn-outline btn-sm" onClick={() => toggleVerify(c)}>
+                      {c.verified ? 'ถอดป้ายตรวจสอบ' : '✓ ติดป้ายตรวจสอบ'}</button>
                   )}
                 </div>
               )}
@@ -212,9 +211,10 @@ export default function ArchiveContributions({ recordId, recordOwner }) {
                           border: '1px solid var(--border)' }} />
                     </a>
                     {canManage && (
-                      <span onClick={() => delImage(m)} title="ลบรูปนี้"
-                        style={{ position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.65)',
-                          color: '#fff', borderRadius: '4px', fontSize: '0.66rem', padding: '1px 6px', cursor: 'pointer' }}>✕</span>
+                      <button onClick={() => delImage(m)} title="ลบรูปนี้"
+                        style={{ position: 'absolute', top: '5px', right: '5px', background: 'rgba(0,0,0,0.72)',
+                          border: '1px solid rgba(255,255,255,0.35)', color: '#fff', borderRadius: '6px',
+                          fontSize: '0.9rem', lineHeight: 1, width: '30px', height: '30px', cursor: 'pointer' }}>✕</button>
                     )}
                   </div>
                 ))}

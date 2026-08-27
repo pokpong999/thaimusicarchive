@@ -17,15 +17,20 @@ a { color:inherit; text-decoration:none; }
 .nav a:hover, .nav a.active { color:var(--gold); border-bottom-color:var(--gold); }
 .topbar-right { display:flex; align-items:center; gap:10px; }
 
-.btn { padding:7px 16px; border-radius:5px; font-size:0.82rem; cursor:pointer; font-family:inherit; border:none; transition:all 0.2s; display:inline-flex; align-items:center; gap:6px; }
+.btn { padding:9px 18px; border-radius:6px; font-size:0.86rem; min-height:38px; cursor:pointer; font-family:inherit; border:none; transition:all 0.2s; display:inline-flex; align-items:center; justify-content:center; gap:6px; }
 .btn-outline { background:transparent; border:1px solid var(--border); color:var(--muted); }
 .btn-outline:hover { border-color:var(--gold); color:var(--gold); }
 .btn-primary { background:var(--gold); color:var(--navy); font-weight:600; }
 .btn-primary:hover { background:var(--gold2); }
 .btn-jade { background:var(--jade); color:#fff; font-weight:600; }
 .btn-jade:hover { background:var(--jade2); }
-.btn-danger { background:transparent; border:1px solid var(--danger); color:var(--danger); }
-.btn-sm { padding:4px 10px; font-size:0.75rem; }
+/* ปุ่มลบ: เดิมพื้นโปร่งใสล้วน ดูไม่ต่างจากปุ่มธรรมดาเลย (Pk 27 ส.ค. 69) */
+.btn-danger { background:rgba(212,122,143,0.14); border:1px solid var(--danger); color:var(--danger); font-weight:600; }
+.btn-danger:hover { background:rgba(212,122,143,0.28); }
+.btn-sm { padding:6px 12px; font-size:0.8rem; min-height:34px; }
+/* ปุ่มไอคอนล้วน (🗑 ✏️ ✕ 💾) ต้องเป็นสี่เหลี่ยมจัตุรัสพอให้นิ้วกดถูก */
+.btn-icon { min-width:38px; padding-left:10px; padding-right:10px; font-size:1rem; }
+.btn-sm.btn-icon { min-width:34px; }
 
 .container { max-width:1100px; margin:0 auto; padding:1.8rem; }
 .section-title { font-family:'Noto Serif Thai',serif; font-size:1.3rem; font-weight:600; }
@@ -76,9 +81,9 @@ tbody tr:hover td { background:rgba(255,255,255,0.02); }
 .meta-value { font-size:0.85rem; margin-top:2px; }
 
 .pagination { display:flex; align-items:center; justify-content:space-between; margin-top:1rem; flex-wrap:wrap; gap:8px; }
-.page-btn { background:var(--navy2); border:1px solid var(--border); color:var(--muted); padding:5px 11px; border-radius:4px; font-size:0.78rem; cursor:pointer; font-family:monospace; }
+.page-btn { min-height:34px; background:var(--navy2); border:1px solid var(--border); color:var(--muted); padding:5px 11px; border-radius:4px; font-size:0.78rem; cursor:pointer; font-family:monospace; }
 .page-btn:hover, .page-btn.active { border-color:var(--gold); color:var(--gold); }
-.page-btn:disabled { opacity:0.3; cursor:default; }
+.page-btn:disabled { opacity:0.45; cursor:default; }
 
 .toast { position:fixed; bottom:2rem; right:2rem; z-index:999; background:var(--navy3); border:1px solid var(--jade); border-radius:8px; padding:12px 18px; font-size:0.85rem; }
 .footer { background:var(--navy2); border-top:1px solid var(--border); padding:1.2rem 2rem; font-size:0.72rem; color:var(--muted); text-align:center; margin-top:3rem; }
@@ -184,8 +189,10 @@ table { max-width: 100%; }
     -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .tab-row::-webkit-scrollbar, .btn-row::-webkit-scrollbar { display: none; }
 
-  .btn { font-size: 0.8rem; padding: 0.42rem 0.7rem; }
-  .btn-sm { font-size: 0.74rem; padding: 0.32rem 0.55rem; }
+  /* มือถือใช้นิ้วกด ปุ่มต้องไม่เล็กกว่าเดสก์ท็อป (เดิมย่อลงจนกดพลาด — Pk 27 ส.ค. 69) */
+  .btn { font-size: 0.86rem; padding: 0.6rem 0.9rem; min-height: 42px; }
+  .btn-sm { font-size: 0.82rem; padding: 0.5rem 0.8rem; min-height: 38px; }
+  .btn-icon, .btn-sm.btn-icon { min-width: 42px; }
   .form-input, .filter-select { font-size: 16px; }  /* 16px กัน iOS ซูมเองตอนพิมพ์ */
 
   .hero-title { font-size: 1.5rem !important; }

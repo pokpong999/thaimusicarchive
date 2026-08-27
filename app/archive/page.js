@@ -167,7 +167,7 @@ export default function ArchivePage() {
                       {r.created_at && <>🕒 {fmtDT(r.created_at)}</>}
                     </div>}
                   </div>
-                  {(isAdmin || r.submitted_by === myId) && <button className="btn btn-danger btn-sm"
+                  {(isAdmin || r.submitted_by === myId) && <button className="btn btn-danger btn-sm btn-icon"
                     style={{marginLeft:'auto',alignSelf:'flex-start',flexShrink:0}}
                     onClick={(e) => adminDeleteRecord(e, r)} title="ลบบันทึก">🗑</button>}
                 </div>

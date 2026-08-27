@@ -78,9 +78,12 @@ function Diary() {
       paths.push(path);
     }
     const row = { entry_date: date || todayISO(), title: title.trim() || null, body, images: paths };
+    // ใส่ user_id/updated_at เอง ไม่พึ่ง default ในฐานอย่างเดียว (ดูเหตุผลใน app/portfolio/page.js)
+    const { data: au } = await supabase.auth.getUser();
+    const stamped = { ...row, updated_at: new Date().toISOString() };
     const { error } = editId
-      ? await supabase.from('diary_entries').update(row).eq('id', editId)
-      : await supabase.from('diary_entries').insert(row);
+      ? await supabase.from('diary_entries').update(stamped).eq('id', editId)
+      : await supabase.from('diary_entries').insert({ ...stamped, user_id: au?.user?.id ?? null });
     setBusy(false);
     if (error) { setMsg('⚠ บันทึกไม่สำเร็จ: ' + error.message); return; }
     setMsg((editId ? '✓ แก้ไขแล้ว' : '✓ บันทึกแล้ว') + (skipped.length ? ` · รูปที่ข้าม: ${skipped.join(', ')}` : ''));
@@ -167,13 +170,13 @@ function Diary() {
             {images.map(p => (
               <div key={p} style={{ position: 'relative' }}>
                 <img src={diaryImageUrl(p)} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 6, border: '1px solid var(--border)' }} />
-                <button onClick={() => removeImage(p)} title="เอารูปออก" style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10, border: 'none', background: 'var(--danger, #c0392b)', color: '#fff', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                <button onClick={() => { if (confirm('เอารูปนี้ออกจากบันทึก?')) removeImage(p); }} title="เอารูปออก" style={{ position: 'absolute', top: -8, right: -8, width: 30, height: 30, borderRadius: 15, border: '2px solid var(--navy2)', background: 'var(--danger, #c0392b)', color: '#fff', cursor: 'pointer', fontSize: 15, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
               </div>
             ))}
             {pending.map((f, i) => (
               <div key={i} style={{ position: 'relative' }}>
                 <img src={URL.createObjectURL(f)} alt="" style={{ width: 84, height: 84, objectFit: 'cover', borderRadius: 6, border: '1px dashed var(--gold)', opacity: 0.85 }} />
-                <button onClick={() => setPending(pending.filter((_, j) => j !== i))} style={{ position: 'absolute', top: -6, right: -6, width: 20, height: 20, borderRadius: 10, border: 'none', background: 'var(--danger, #c0392b)', color: '#fff', cursor: 'pointer', fontSize: 11 }}>✕</button>
+                <button onClick={() => setPending(pending.filter((_, j) => j !== i))} style={{ position: 'absolute', top: -8, right: -8, width: 30, height: 30, borderRadius: 15, border: '2px solid var(--navy2)', background: 'var(--danger, #c0392b)', color: '#fff', cursor: 'pointer', fontSize: 15, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
               </div>
             ))}
           </div>
@@ -235,7 +238,7 @@ function Entry({ e, onEdit, onDel, busy }) {
         <div style={{ display: 'flex', gap: 6, marginTop: 6, alignItems: 'center' }}>
           <span style={{ fontSize: '0.64rem', color: 'var(--muted)', flex: 1 }}>{e.updated_at && e.updated_at !== e.created_at ? 'แก้ไขล่าสุด ' + thaiDate(e.updated_at) : ''}</span>
           <button className="btn btn-outline btn-sm" onClick={onEdit} disabled={busy}>✏️ แก้</button>
-          <button className="btn btn-danger btn-sm" onClick={onDel} disabled={busy}>🗑</button>
+          <button className="btn btn-danger btn-sm btn-icon" onClick={onDel} disabled={busy}>🗑</button>
         </div>
       </div>
     </div>

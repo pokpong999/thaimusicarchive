@@ -142,7 +142,7 @@ export default function HomePage() {
                     ? <span style={{color:'var(--jade)',fontSize:'0.78rem'}}>▶ {videoCounts[s.id]}</span>
                     : <span style={{color:'var(--border)'}}>—</span>}</td>
                   {isAdmin && <td>
-                    <button className="btn btn-danger btn-sm" onClick={() => adminDeleteSong(s)}
+                    <button className="btn btn-danger btn-sm btn-icon" onClick={() => adminDeleteSong(s)}
                       title="ลบเพลง (Admin)">🗑</button>
                   </td>}
                 </tr>

@@ -150,7 +150,7 @@ export default function NotationImport({ open = true, onClose, getVerses, onImpo
         <Tab id="file" label="📂 จากไฟล์" /><Tab id="paste" label="📋 วางข้อความ" />
         {raw && <Tab id="review" label="🔍 ตรวจก่อนใส่" />}
         <Tab id="export" label="⬇ ส่งออก/แปลง" />
-        {!embedded && <button type="button" className="btn btn-outline btn-sm" onClick={onClose}>✕</button>}
+        {!embedded && <button type="button" className="btn btn-outline btn-sm btn-icon" onClick={onClose}>✕</button>}
       </div>
       {busy && <div style={{ fontSize: '0.8rem', color: 'var(--gold)', marginBottom: 6 }}>⏳ {busy}</div>}
       {err && <div style={{ fontSize: '0.8rem', color: 'var(--gold)', marginBottom: 6 }}>{err}</div>}
