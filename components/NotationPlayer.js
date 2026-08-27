@@ -776,14 +776,16 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           <option value="synth">〰 เสียงสังเคราะห์</option>
         </select>
         {/* ค่า option ต้องเท่ากับ String(ตัวเลข) เป๊ะ ("0.06" ไม่ใช่ "0.060") ไม่งั้น dropdown แสดงค่าผิด */}
-        <select className="filter-select" value={String(sabatGap)} onChange={e => setSabatGap(parseFloat(e.target.value))}
-          disabled={playState !== 'stopped'} title="ช่องไฟระหว่างเสียงสะบัด (วินาที)">
-          <option value="0.04">สะบัดรัวเร็ว (40 ms)</option>
-          <option value="0.06">สะบัดค่อนข้างเร็ว (60 ms)</option>
-          <option value="0.08">สะบัดปกติ (80 ms)</option>
-          <option value="0.1">สะบัดหนืด (100 ms)</option>
-          <option value="0.12">สะบัดช้า (120 ms)</option>
-        </select>
+        {can('player_sabat') && (
+          <select className="filter-select" value={String(sabatGap)} onChange={e => setSabatGap(parseFloat(e.target.value))}
+            disabled={playState !== 'stopped'} title="ช่องไฟระหว่างเสียงสะบัด (วินาที)">
+            <option value="0.04">สะบัดรัวเร็ว (40 ms)</option>
+            <option value="0.06">สะบัดค่อนข้างเร็ว (60 ms)</option>
+            <option value="0.08">สะบัดปกติ (80 ms)</option>
+            <option value="0.1">สะบัดหนืด (100 ms)</option>
+            <option value="0.12">สะบัดช้า (120 ms)</option>
+          </select>
+        )}
         {marksView.cover.size > 0 && (
           <select className="filter-select" value={String(kroGap)} onChange={e => setKroGap(parseFloat(e.target.value))}
             disabled={playState !== 'stopped'} title="ความถี่ของการกรอ (วินาทีต่อไม้) — ยิ่งน้อยยิ่งตีถี่">
@@ -794,16 +796,20 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
             <option value="0.12">〰 กรอห่างมาก (120 ms)</option>
           </select>
         )}
-        <select className="filter-select" value={tuning} onChange={e => setTuning(e.target.value)} disabled={playState !== 'stopped'}
-          title="ระบบเสียง: ความถี่จริงของโน้ตแต่ละเสียง (ตารางความถี่เสียงดนตรีไทย กรมศิลปากร)">
-          {(tunes.length ? tunes : [{ slug: DEFAULT_TUNING, name_th: 'กรมศิลปากร — เครื่องสาย / มโหรี' }])
-            .map(t => <option key={t.slug} value={t.slug}>🎚 {t.name_th}</option>)}
-        </select>
-        <select className="filter-select" value={tang ?? ''} onChange={e => setTang(e.target.value === '' ? null : +e.target.value)}
-          disabled={playState !== 'stopped'} title="ทาง (บันไดเสียง) ที่อยากฟัง">
-          <option value="">🎼 ทางตามโน้ต ({tangOf(homeTang).short}{declaredTang ? '' : ' · ระบบเดาให้'})</option>
-          {TANGS.map(t => <option key={t.no} value={t.no}>🎼 {t.name}</option>)}
-        </select>
+        {can('player_tuning') && (
+          <select className="filter-select" value={tuning} onChange={e => setTuning(e.target.value)} disabled={playState !== 'stopped'}
+            title="ระบบเสียง: ความถี่จริงของโน้ตแต่ละเสียง (ตารางความถี่เสียงดนตรีไทย กรมศิลปากร)">
+            {(tunes.length ? tunes : [{ slug: DEFAULT_TUNING, name_th: 'กรมศิลปากร — เครื่องสาย / มโหรี' }])
+              .map(t => <option key={t.slug} value={t.slug}>🎚 {t.name_th}</option>)}
+          </select>
+        )}
+        {can('player_tang') && (
+          <select className="filter-select" value={tang ?? ''} onChange={e => setTang(e.target.value === '' ? null : +e.target.value)}
+            disabled={playState !== 'stopped'} title="ทาง (บันไดเสียง) ที่อยากฟัง">
+            <option value="">🎼 ทางตามโน้ต ({tangOf(homeTang).short}{declaredTang ? '' : ' · ระบบเดาให้'})</option>
+            {TANGS.map(t => <option key={t.no} value={t.no}>🎼 {t.name}</option>)}
+          </select>
+        )}
         {tang != null && tang !== homeTang &&
           <select className="filter-select" value={tangView} onChange={e => setTangView(e.target.value)}
             title="เปลี่ยนทางแล้วโน้ตบนจอขยับตามหรือไม่">
@@ -829,41 +835,51 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           onChange={e => { nathabTouchedRef.current = true; setNathab(e.target.value); }} title="หน้าทับจากคลังกลาง (/nathab)">
           <option value="none">🥁 ไม่มีกลอง</option>
           {nathabRules?.length > 0 && <option value="auto">🥁 ตามที่เพลงกำหนด ({nathabRules.find(r => !r.section)?.nathab ?? 'รายท่อน'})</option>}
-          {can('player_perc') && (libNames.length ? libNames : ['ปรบไก่', 'สองไม้']).map(n => <option key={n} value={n}>หน้าทับ{n}</option>)}
+          {can('player_perc') && can('player_nathab') && (libNames.length ? libNames : ['ปรบไก่', 'สองไม้']).map(n => <option key={n} value={n}>หน้าทับ{n}</option>)}
         </select>}
-        {nathab !== 'none' && can('player_perc') && (
+        {nathab !== 'none' && can('player_perc') && can('player_drum') && (
           <select className="filter-select" value={drumInst} onChange={e => setDrumInst(e.target.value)} disabled={playState !== 'stopped'}>
             {DRUMS.map(d => <option key={d} value={d}>{drumLabel(d)}</option>)}
           </select>
         )}
-        <select className="filter-select" value={level} onChange={e => setLevel(e.target.value)} disabled={playState !== 'stopped'}>
-          <option value="สามชั้น">สามชั้น</option>
-          <option value="สองชั้น">สองชั้น</option>
-          <option value="ชั้นเดียว">ชั้นเดียว</option>
-        </select>
-        <select className="filter-select" value={repeat} onChange={e => setRepeat(e.target.value)}
-          disabled={playState !== 'stopped'} title="การกลับต้น">
-          <option value="none">▶ เที่ยวเดียวจบ</option>
-          <option value="section">🔁 กลับต้นทุกท่อน (ท่อนละ 2 เที่ยว)</option>
-          <option value="piece">🔁 กลับต้นเที่ยวใหญ่ (ทั้งเพลง 2 เที่ยว)</option>
-          <option value="loop">♾ วนกลับต้นไปเรื่อย ๆ</option>
-        </select>
-        <label style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'0.78rem',color:'var(--muted)',cursor:'pointer'}}>
-          <input type="checkbox" checked={chingOn} onChange={e => setChingOn(e.target.checked)}
-            disabled={playState !== 'stopped'} style={{accentColor:'var(--gold)'}} />
-          ฉิ่ง
-        </label>
-        <select className="filter-select" value={hongsPerLine} onChange={e => setHongsPerLine(+e.target.value)}>
-          <option value="2">2 ห้อง/บรรทัด</option>
-          <option value="4">4 ห้อง/บรรทัด</option>
-          <option value="8">8 ห้อง/บรรทัด</option>
-          <option value="16">16 ห้อง/บรรทัด</option>
-        </select>
-        <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'0.75rem',color:'var(--muted)'}}>
-          ช้า <input type="range" min="50" max="220" value={bpm} onChange={e => setBpm(+e.target.value)}
-            style={{accentColor:'var(--gold)'}} disabled={playState !== 'stopped'} /> เร็ว
-          <span style={{fontFamily:'monospace'}}>{bpm}</span>
-        </div>
+        {can('player_level') && (
+          <select className="filter-select" value={level} onChange={e => setLevel(e.target.value)} disabled={playState !== 'stopped'}>
+            <option value="สามชั้น">สามชั้น</option>
+            <option value="สองชั้น">สองชั้น</option>
+            <option value="ชั้นเดียว">ชั้นเดียว</option>
+          </select>
+        )}
+        {can('player_repeat') && (
+          <select className="filter-select" value={repeat} onChange={e => setRepeat(e.target.value)}
+            disabled={playState !== 'stopped'} title="การกลับต้น">
+            <option value="none">▶ เที่ยวเดียวจบ</option>
+            <option value="section">🔁 กลับต้นทุกท่อน (ท่อนละ 2 เที่ยว)</option>
+            <option value="piece">🔁 กลับต้นเที่ยวใหญ่ (ทั้งเพลง 2 เที่ยว)</option>
+            <option value="loop">♾ วนกลับต้นไปเรื่อย ๆ</option>
+          </select>
+        )}
+        {can('player_ching') && (
+          <label style={{display:'flex',alignItems:'center',gap:'4px',fontSize:'0.78rem',color:'var(--muted)',cursor:'pointer'}}>
+            <input type="checkbox" checked={chingOn} onChange={e => setChingOn(e.target.checked)}
+              disabled={playState !== 'stopped'} style={{accentColor:'var(--gold)'}} />
+            ฉิ่ง
+          </label>
+        )}
+        {can('player_layout') && (
+          <select className="filter-select" value={hongsPerLine} onChange={e => setHongsPerLine(+e.target.value)}>
+            <option value="2">2 ห้อง/บรรทัด</option>
+            <option value="4">4 ห้อง/บรรทัด</option>
+            <option value="8">8 ห้อง/บรรทัด</option>
+            <option value="16">16 ห้อง/บรรทัด</option>
+          </select>
+        )}
+        {can('player_tempo') && (
+          <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'0.75rem',color:'var(--muted)'}}>
+            ช้า <input type="range" min="50" max="220" value={bpm} onChange={e => setBpm(+e.target.value)}
+              style={{accentColor:'var(--gold)'}} disabled={playState !== 'stopped'} /> เร็ว
+            <span style={{fontFamily:'monospace'}}>{bpm}</span>
+          </div>
+        )}
         {sampleCount != null && sound !== 'synth' && (() => {
           const it = insts.find(i => i.slug === sound) || insts[0];
           const want = it?.note_count || 16;
@@ -883,7 +899,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>💡 กดที่ห้องใดก็ได้เพื่อเล่นจากตรงนั้น</span>
       </div>
 
-      {/* ── จังหวะท้ายท่อน: ถอน / ทอด (Pk 27 ส.ค. 69) ── */}
+      {/* ── จังหวะท้ายท่อน: ถอน / ทอด (Pk 27 ส.ค. 69) · เปิด-ปิดตามสิทธิ์ player_thonthot ── */}
+      {can('player_thonthot') && (
       <div className="card" style={{marginBottom:'1rem',borderColor: tempoOn ? 'rgba(201,168,76,0.45)' : 'var(--border)'}}>
         <label style={{display:'flex',gap:'8px',alignItems:'center',cursor:'pointer',fontSize:'0.86rem',fontWeight:600}}>
           <input type="checkbox" checked={tempoOn} onChange={e => setTempoOn(e.target.checked)}
@@ -960,6 +977,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           </div>
         )}
       </div>
+      )}
 
       <style>{`.np-cell.np-on{background:rgba(201,168,76,0.4)}
         .np-damp{font-weight:900}

@@ -20,6 +20,8 @@ import { loadMelodyBank, playMelodyNote } from '../lib/melodybank';
 import { loadInstruments } from '../lib/instruments';
 import { loadTunings, loadInstrumentNotes, notesToHzMap } from '../lib/tuning';
 import { parsePattern, playPercussion, playHit, loadSetBanks, loadDrumBank, loadNathabLibrary, nathabNames, findPattern, approvedRows, DRUMS, drumLabel } from '../lib/nathab';
+import { usePermissions } from './Gate';
+import { applyBoardGates } from '../lib/perms';
 
 const StaffNotation = dynamic(() => import('./StaffNotation'), { ssr: false });
 
@@ -60,6 +62,7 @@ function writeDraft(key, data) { try { localStorage.setItem(DRAFT_PREFIX + key, 
 function dropDraft(key) { try { localStorage.removeItem(DRAFT_PREFIX + key); } catch (e) {} }
 
 const NotationInput = forwardRef(function NotationInput({ initialVerses, initialText, options = {}, onChange }, ref) {
+  const { can, loading: permsLoading } = usePermissions();
   const rootRef = useRef(null);
   const engRef = useRef(null);
   const onChangeRef = useRef(onChange);
@@ -157,6 +160,18 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── สิทธิ์บนกระดาน: ซ่อนปุ่มที่บัญชีนี้ไม่มีสิทธิ์ใช้ (Pk 27 ส.ค. 69) ──
+  //   กระดานเป็น HTML ที่เอนจินสร้างเอง จึงคุมด้วย selector ใน lib/perms.js
+  //   ทำใหม่ทุกครั้งที่สิทธิ์เปลี่ยน เพราะตารางสิทธิ์เป็น realtime
+  useEffect(() => {
+    if (permsLoading || !rootRef.current) return;
+    applyBoardGates(rootRef.current, can);
+    // เอนจินวาดแถบเครื่องมือใหม่ได้ระหว่างใช้งาน — เฝ้าดูแล้วทากฎซ้ำ
+    const mo = new MutationObserver(() => applyBoardGates(rootRef.current, can));
+    mo.observe(rootRef.current, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, [permsLoading, can]);
+
   useEffect(() => {
     showStaffRef.current = showStaff;
     if (showStaff && engRef.current) {
@@ -204,7 +219,7 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
           <button className="btn btn-outline btn-sm" type="button" onClick={() => setShowStaff(s => !s)}>
             {showStaff ? '▾ ซ่อนโน้ตสากล' : '▸ โน้ตสากล 5 เส้น'}
           </button>
-          {!options.readOnly && (
+          {!options.readOnly && can('board_import') && (
             <button className="btn btn-outline btn-sm" type="button" style={{marginLeft:8}} onClick={() => setShowImport(true)}
               title="นำเข้าจาก PDF / Word / Excel / รูปภาพ / MusicXML / MIDI · แปลงเป็นโน้ตสากล">📥 นำเข้าไฟล์ / 🔁 แปลงโน้ต</button>
           )}

@@ -86,17 +86,27 @@ export function usePermissions() {
     } catch (e) {}
     return () => { if (ch) supabase.removeChannel(ch); };
   }, []);
-  // superuser ใช้เลนส์ 'admin' เฉพาะการมองเห็น — ปุ่มจัดการทั้งหมดเช็ค isAdmin แยกอยู่แล้ว
-  const tier = me.loading ? null
-    : (me.isAdmin || me.isViewer) ? 'admin'
-    : !me.user ? 'guest' : (me.tier === 'premium' ? 'premium' : 'free');
+  // คนหนึ่งเป็นได้หลายอย่างพร้อมกัน — ครูที่เป็นผู้อุปถัมภ์ด้วย ได้สิทธิ์รวมกัน
+  //   จึงเก็บเป็น "รายการเลนส์" แล้วให้ can() คิดแบบเปิดชนะปิด (Pk 27 ส.ค. 69)
+  //   superuser ใช้เลนส์ admin เฉพาะการมองเห็น — ปุ่มจัดการเช็ค isAdmin แยกอยู่แล้ว
+  const lenses = me.loading ? null
+    : (me.isAdmin || me.isViewer) ? ['admin']
+    : !me.user ? ['guest']
+    : ['free',
+       ...(me.tier === 'premium' ? ['premium'] : []),
+       ...(me.isStudent ? ['student'] : []),
+       ...(me.isTeacher ? ['teacher'] : [])];
+  const tier = lenses ? lenses[lenses.length - 1] : null;   // เลนส์เด่นสุด ไว้โชว์เฉย ๆ
   function can(key) {
-    if (tier === 'admin') return true;
+    if (!lenses || lenses[0] === 'admin') return true;
     const r = perms?.[key];
     if (!r) return true;                 // ไม่มีในตาราง = เปิด
-    return !!r[tier ?? 'guest'];
+    // คอลัมน์ student/teacher อาจยังไม่มีถ้ายังไม่ได้รัน sql/28
+    // ถ้าไม่มีคอลัมน์นั้น ให้ตกไปใช้เลนส์พื้นฐานแทน จะได้ไม่ล็อกใครโดยไม่ตั้งใจ
+    return lenses.some(l => (l in r ? !!r[l] : !!r.free));
   }
-  return { can, tier, isAdmin: me.isAdmin, isRealAdmin: me.isRealAdmin, role: me.role,
+  return { can, tier, lenses, isAdmin: me.isAdmin, isRealAdmin: me.isRealAdmin, role: me.role,
+    isTeacher: me.isTeacher, isStudent: me.isStudent,
     user: me.user, loading: me.loading || perms == null };
 }
 

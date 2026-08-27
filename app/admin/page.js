@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Fragment } from 'react';
 import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../lib/supabase';
 import { textToVerses, versesToRows, rowsToVerses } from '../../lib/notation-core';
@@ -8,6 +8,8 @@ import { NathabPreview } from '../../components/NathabEditor';
 import { invalidateNathabLibrary, saveSongDefaults } from '../../lib/nathab';
 import { refreshSongStats } from '../../lib/songstats';
 import { pointsFor, awardLabel } from '../../lib/points';
+import { LENSES as PERM_LENSES, PERM_BY_KEY } from '../../lib/perms';
+const PERM_HINTS = Object.fromEntries(Object.entries(PERM_BY_KEY).map(([k, v]) => [k, v.hint]).filter(([, h]) => h));
 import { fmtDT, ago } from '../../lib/fmtdate';
 
 // กระดานอ่านอย่างเดียวสำหรับดู/ฟังโน้ตที่ส่งมาก่อนอนุมัติ
@@ -60,6 +62,10 @@ export default function AdminPage() {
   // เรียงตารางสมาชิก: กดหัวคอลัมน์ · กดซ้ำสลับ มาก→น้อย
   const [memberSort, setMemberSort] = useState({ key: 'points', dir: -1 });
   const [recountMsg, setRecountMsg] = useState('');
+  const [permQ, setPermQ] = useState('');
+  // เข้าแท็บสิทธิ์แล้วโหลดให้เอง — ของเดิมต้องกด "โหลดตาราง" ก่อนทุกครั้ง
+  useEffect(() => { if (tab === 'perm' && permRows.length === 0) loadPerms(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
   const sortMembers = key => setMemberSort(s => ({ key, dir: s.key === key ? -s.dir : (key === 'points' || key === 'joined' || key === 'lastseen' ? -1 : 1) }));
   const memberVal = (m, key) => {
     if (key === 'joined') return activity[m.id]?.joined_at ?? m.created_at ?? '';
@@ -120,8 +126,20 @@ export default function AdminPage() {
     setTimeout(() => setScMsg(''), 2500);
   }
   async function loadPerms() {
-    const { data } = await supabase.from('feature_permissions').select('*').order('sort');
+    const { data, error } = await supabase.from('feature_permissions').select('*').order('sort');
+    if (error) { setPermMsg('⚠ ' + error.message); return; }
     setPermRows(data ?? []);
+  }
+  // เปิด/ปิดทั้งหมวดรวดเดียว — ตั้งค่าสิทธิ์ทีละช่องกับ 46 รายการเป็นงานที่ทรมานมาก
+  async function setSection(rows, on) {
+    const keys = rows.map(r => r.feature_key);
+    const cols = PERM_LENSES.map(l => l.key);
+    const patch = Object.fromEntries(cols.map(c => [c, on]));
+    setPermRows(permRows.map(r => (keys.includes(r.feature_key) ? { ...r, ...patch } : r)));
+    const { error } = await supabase.from('feature_permissions').update(patch).in('feature_key', keys);
+    setPermMsg(error ? '⚠ ' + error.message
+      : `✓ ${on ? 'เปิด' : 'ปิด'} "${rows[0]?.section ?? ''}" ทั้งหมวด (${keys.length} รายการ) — มีผลทันที`);
+    setTimeout(() => setPermMsg(''), 3000);
   }
   async function togglePerm(row, tierKey) {
     const next = { ...row, [tierKey]: !row[tierKey] };
@@ -964,47 +982,87 @@ export default function AdminPage() {
 
       {tab === 'perm' && (
         <div className="card">
-          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🔐 ตารางสิทธิ์การมองเห็น</div>
-          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
-            ติ๊ก = เปิดให้เห็น/ใช้งาน · บันทึกและมีผลทันทีทั้งเว็บ · คอลัมน์ Admin ล็อกเปิดเสมอ
-            {permRows.length === 0 && <button className="btn btn-outline btn-sm" style={{marginLeft:'8px'}} onClick={loadPerms}>โหลดตาราง</button>}
+          <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🔐 ตารางสิทธิ์ — กำหนดแยกทีละประเภทสมาชิก</div>
+          <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.7rem',lineHeight:1.8}}>
+            ติ๊ก = เปิดให้เห็น/ใช้งาน · บันทึกและมีผลทันทีทั้งเว็บ · ผู้ดูแลเปิดทุกอย่างเสมอ ไม่มีให้ติ๊ก<br/>
+            คนหนึ่งเป็นได้หลายประเภทพร้อมกัน (ครูที่เป็นผู้อุปถัมภ์ด้วย) — จะได้สิทธิ์รวมกันแบบ “เปิดชนะปิด”
+          </div>
+
+          <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center',marginBottom:'0.8rem'}}>
+            <input className="form-input" style={{flex:'1 1 220px'}} value={permQ}
+              onChange={e => setPermQ(e.target.value)} placeholder="ค้นหาสิทธิ์… เช่น หน้าทับ ฉิ่ง เสียงตั้ง ทาง" />
+            <button className="btn btn-outline btn-sm" onClick={loadPerms}>↻ โหลดใหม่</button>
           </div>
           {permMsg && <div style={{fontSize:'0.78rem',color:'var(--jade)',marginBottom:'0.5rem'}}>{permMsg}</div>}
-          {permRows.length > 0 && (
-            <div style={{overflowX:'auto'}}>
-              <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
-                <thead><tr style={{borderBottom:'2px solid var(--border)'}}>
-                  <th style={{textAlign:'left',padding:'6px'}}>สิทธิ์</th>
-                  <th style={{padding:'6px'}}>👤 ผู้เยี่ยมชม</th>
-                  <th style={{padding:'6px'}}>สมาชิกฟรี</th>
-                  <th style={{padding:'6px'}}>💎 อุปถัมภ์</th>
-                  <th style={{padding:'6px'}}>Admin</th>
-                </tr></thead>
-                <tbody>
-                  {permRows.map((row, i) => (
-                    <>
-                      {(i === 0 || permRows[i-1].section !== row.section) && (
-                        <tr key={row.section}><td colSpan={5} style={{padding:'10px 6px 4px',color:'var(--gold)',fontWeight:700,fontSize:'0.75rem'}}>▸ {row.section}</td></tr>
-                      )}
-                      <tr key={row.feature_key} style={{borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
-                        <td style={{padding:'6px'}}>{row.label}</td>
-                        {['guest','free','premium'].map(tk => (
-                          <td key={tk} style={{textAlign:'center'}}>
-                            <input type="checkbox" checked={!!row[tk]} onChange={() => togglePerm(row, tk)}
-                              style={{width:'17px',height:'17px',accentColor:'var(--gold)',cursor:'pointer'}} />
-                          </td>
-                        ))}
-                        <td style={{textAlign:'center'}}>
-                          <input type="checkbox" checked disabled style={{width:'17px',height:'17px',accentColor:'var(--jade)'}} />
-                        </td>
-                      </tr>
-                    </>
-                  ))}
-                </tbody>
-              </table>
+
+          {permRows.length === 0 && (
+            <div style={{fontSize:'0.8rem',color:'var(--muted)'}}>
+              ยังไม่มีตารางสิทธิ์ — ต้องรัน <code>sql/28_permissions.sql</code> ก่อน แล้วกด “↻ โหลดใหม่”
             </div>
           )}
-          {permRows.length === 0 && <div style={{fontSize:'0.78rem',color:'var(--muted)'}}>กด "โหลดตาราง" (ต้องรัน thma_permissions.sql ก่อน)</div>}
+
+          {permRows.length > 0 && (() => {
+            const q = permQ.trim();
+            const rows = q ? permRows.filter(r => (r.label ?? '').includes(q) || (r.section ?? '').includes(q)
+                                                  || (r.feature_key ?? '').includes(q)) : permRows;
+            const shown = rows.filter(r => (r.section ?? '') !== 'zz_ระบบ');
+            if (!shown.length) return <div style={{fontSize:'0.8rem',color:'var(--muted)'}}>ไม่พบสิทธิ์ที่ค้นหา</div>;
+            const lensCols = PERM_LENSES;
+            return (
+              <div className="table-wrap">
+                <table style={{width:'100%',borderCollapse:'collapse',fontSize:'0.8rem'}}>
+                  <thead><tr style={{borderBottom:'2px solid var(--border)'}}>
+                    <th style={{textAlign:'left',padding:'6px',minWidth:'200px'}}>สิทธิ์</th>
+                    {lensCols.map(l => (
+                      <th key={l.key} style={{padding:'6px',whiteSpace:'nowrap',fontSize:'0.74rem'}}>{l.icon} {l.label}</th>
+                    ))}
+                    <th style={{padding:'6px',fontSize:'0.74rem'}}>⭐ ผู้ดูแล</th>
+                  </tr></thead>
+                  <tbody>
+                    {shown.map((row, i) => {
+                      const newSection = i === 0 || shown[i-1].section !== row.section;
+                      const secRows = shown.filter(r => r.section === row.section);
+                      return (
+                        <Fragment key={row.feature_key}>
+                          {newSection && (
+                            <tr>
+                              <td colSpan={lensCols.length + 2} style={{padding:'12px 6px 4px'}}>
+                                <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap'}}>
+                                  <span style={{color:'var(--gold)',fontWeight:700,fontSize:'0.78rem'}}>▸ {row.section}</span>
+                                  <button className="btn btn-outline btn-sm" style={{fontSize:'0.68rem',padding:'2px 8px',minHeight:0}}
+                                    onClick={() => setSection(secRows, true)}>เปิดทั้งหมวด</button>
+                                  <button className="btn btn-outline btn-sm" style={{fontSize:'0.68rem',padding:'2px 8px',minHeight:0}}
+                                    onClick={() => setSection(secRows, false)}>ปิดทั้งหมวด</button>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                          <tr style={{borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
+                            <td style={{padding:'6px'}}>
+                              {row.label}
+                              {PERM_HINTS[row.feature_key] && (
+                                <div style={{fontSize:'0.68rem',color:'var(--muted)'}}>{PERM_HINTS[row.feature_key]}</div>
+                              )}
+                            </td>
+                            {lensCols.map(l => (
+                              <td key={l.key} style={{textAlign:'center'}}>
+                                <input type="checkbox" checked={!!row[l.key]} onChange={() => togglePerm(row, l.key)}
+                                  style={{width:'18px',height:'18px',accentColor:'var(--gold)',cursor:'pointer'}} />
+                              </td>
+                            ))}
+                            <td style={{textAlign:'center'}}>
+                              <input type="checkbox" checked disabled
+                                style={{width:'18px',height:'18px',accentColor:'var(--jade)'}} />
+                            </td>
+                          </tr>
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
       )}
 
