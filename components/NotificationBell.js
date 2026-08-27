@@ -2,8 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
-
-const ICON = { pending: '🔔', approved: '✓', comment: '💬' };
+import { notifText, notifSub, notifIcon, notifRead, notifLink } from '../lib/notif';
 
 function ago(iso) {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
@@ -18,7 +17,7 @@ export default function NotificationBell({ userId }) {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
   const boxRef = useRef(null);
-  const unread = items.filter(n => !n.read).length;
+  const unread = items.filter(n => !notifRead(n)).length;
 
   // ⚠️ ของเดิมดึงและมาร์คอ่าน "ทุกแถวในตาราง" โดยไม่กรอง user_id
   //    ถ้า RLS ไม่รัดกุมจะเห็น/แก้แจ้งเตือนของสมาชิกคนอื่น — แก้แล้วตรงนี้
@@ -53,7 +52,7 @@ export default function NotificationBell({ userId }) {
     const next = !open;
     setOpen(next);
     if (next && unread > 0) {
-      setItems(items.map(n => ({ ...n, read: true })));
+      setItems(items.map(n => ({ ...n, read: true, is_read: true })));
       await supabase.from('notifications').update({ read: true })
         .eq('user_id', userId).eq('read', false);
     }
@@ -90,20 +89,23 @@ export default function NotificationBell({ userId }) {
           {items.length === 0 && (
             <div style={{padding:'1rem',fontSize:'0.8rem',color:'var(--muted)'}}>ยังไม่มีการแจ้งเตือน</div>
           )}
-          {items.map(n => (
-            <Link key={n.id} href={n.link ?? '#'} onClick={() => setOpen(false)}>
+          {items.map(n => {
+            const sub = notifSub(n);
+            return (
+            <Link key={n.id} href={notifLink(n)} onClick={() => setOpen(false)}>
               <div style={{padding:'0.7rem 1rem',borderBottom:'1px solid rgba(42,63,92,0.35)',cursor:'pointer',
-                fontSize:'0.8rem',lineHeight:1.6,background: n.read ? 'transparent' : 'rgba(201,168,76,0.07)'}}>
+                fontSize:'0.8rem',lineHeight:1.6,background: notifRead(n) ? 'transparent' : 'rgba(201,168,76,0.07)'}}>
                 <div style={{fontWeight:600}}>
-                  <span style={{marginRight:'5px'}}>{ICON[n.kind] ?? '•'}</span>{n.title}
+                  <span style={{marginRight:'5px'}}>{notifIcon(n)}</span>{notifText(n)}
                 </div>
-                {n.body && <div style={{color:'var(--muted)',fontSize:'0.76rem',
+                {sub && <div style={{color:'var(--muted)',fontSize:'0.76rem',
                   overflow:'hidden',textOverflow:'ellipsis',display:'-webkit-box',
-                  WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{n.body}</div>}
+                  WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>{sub}</div>}
                 <div style={{color:'var(--muted)',fontSize:'0.68rem',marginTop:'2px'}}>{ago(n.created_at)}</div>
               </div>
             </Link>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
