@@ -463,7 +463,7 @@ export default function SongDetailClient() {
               <div style={{fontWeight:600,marginBottom:'0.7rem'}}>🎙 อัปโหลดบันทึกเสียง (MP3/M4A ≤25MB)</div>
               <input type="file" accept="audio/*" onChange={e => setAudioFile(e.target.files[0])}
                 style={{fontSize:'0.78rem',marginBottom:'0.6rem',color:'var(--muted)'}} />
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'0.6rem'}}>
+              <div className="m1col" style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'0.6rem'}}>
                 <input className="form-input" placeholder="ชื่อชุด/รายการ" value={audioMeta.title}
                   onChange={e => setAudioMeta({...audioMeta, title: e.target.value})} />
                 <input className="form-input" placeholder="ผู้บรรเลง/วง" value={audioMeta.performer}
