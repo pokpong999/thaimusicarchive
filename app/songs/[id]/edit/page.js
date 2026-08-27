@@ -12,6 +12,10 @@ import { useMe } from '../../../../components/Gate';
 import NotationInput from '../../../../components/NotationInput';
 import { rowsToVerses, versesToRows, versesToText, checkVerses, hasSound } from '../../../../lib/notation-core';
 import { loadSongNathab, mainRule, saveSongDefaults } from '../../../../lib/nathab';
+import { fetchMelody } from '../../../../lib/songparts';
+
+// รุ่นของหน้าแก้โน้ต — ขึ้นเป็นป้ายเล็ก ๆ ไว้ตรวจว่าไฟล์นี้ถูกวางทับแล้ว (Pk 27 ส.ค. 69)
+export const EDITPAGE_VERSION = '27 ส.ค. 69 · r2 (รองรับเพลงย่อย)';
 
 const INSTS = ['ระนาดเอก','ระนาดทุ้ม','ฆ้องวงใหญ่','ฆ้องวงเล็ก','ปี่ใน','ขลุ่ยเพียงออ','ซอด้วง','ซออู้','ซอสามสาย','จะเข้','ขิม','อื่น ๆ'];
 
@@ -38,15 +42,15 @@ export default function EditMelodyPage() {
   useEffect(() => {
     if (me.loading) return;
     (async () => {
-      const { data: s } = await supabase.from('songs').select('id, name_th, contributed_by').eq('id', id).single();
+      const { data: s } = await supabase.from('songs').select('id, name_th, contributed_by, parent_song_id').eq('id', id).single();
       setSong(s || null);
       try {
         const m = mainRule(await loadSongNathab(id));
         setDefaults(m ? { nathab: m.nathab && m.nathab !== '-' ? m.nathab : 'none', drum: m.drum || undefined, ching: !!m.ching, bpm: m.bpm || undefined, level: m.level || undefined } : {});
       } catch (e) { setDefaults({}); }
       if (isNew) { setRows([]); setCanEdit(!!me.user); setWhy(me.user ? '' : 'ต้องเข้าสู่ระบบก่อน'); return; }
-      const { data: r } = await supabase.from('song_melody').select('*')
-        .eq('song_id', id).eq('instrument', instrument).order('verse_no');
+      // เพลงย่อยของเพลงเรื่อง: โน้ตอยู่ที่เพลงเรื่อง fetchMelody กรอง+นับเลขใหม่ให้ (sql/30)
+      const { rows: r } = await fetchMelody(id, { instrument });
       const list = r || [];
       setRows(list);
       if (!me.user) { setCanEdit(false); setWhy('ต้องเข้าสู่ระบบก่อน'); return; }
@@ -97,7 +101,18 @@ export default function EditMelodyPage() {
 
     // ── แก้ตรง (แอดมิน หรือเจ้าของทาง) → song_melody ──
     const approved = me.isAdmin ? true : (rows.length ? rows.every(x => x.approved) : false);
-    const base = { song_id: id, instrument, approved };
+    // ── เพลงย่อยของเพลงเรื่อง ──────────────────────────────────────
+    //   แก้ตัวโน้ตในวรรคเดิมได้เต็มที่ (แถวเดียวกับเพลงเรื่อง เปลี่ยนพร้อมกัน)
+    //   แต่ "เพิ่ม/ลบวรรค" ต้องไปทำที่หน้าเพลงเรื่อง เพราะเลขวรรคเป็นของทั้งเรื่อง
+    //   ถ้าปล่อยให้ทำตรงนี้ เลขวรรคจะไปชนกับเพลงย่อยตัวถัดไป
+    const isPart = !!song?.parent_song_id;
+    if (isPart && newRows.length !== rows.length) {
+      setBusy(false);
+      setMsg(`⚠ เพลงนี้เป็นเพลงย่อยใน ${song.parent_song_id} — แก้ตัวโน้ตได้ แต่เพิ่ม/ลบวรรคต้องทำที่หน้าเพลงเรื่อง `
+        + `(ตอนนี้ ${rows.length} วรรค กำลังจะบันทึก ${newRows.length} วรรค)`);
+      return;
+    }
+    const base = isPart ? { instrument, approved } : { song_id: id, instrument, approved };
     const existing = new Map(rows.map(r => [r.verse_no, r]));
     const errs = [];
     for (const nr of newRows) {
@@ -109,10 +124,11 @@ export default function EditMelodyPage() {
         tang: st.tangHome ?? null, ensemble: st.notEns ?? st.ensemble ?? null, tuning: st.tuning ?? null };
       const old = existing.get(nr.verse_no);
       if (old) {
-        const { error } = await supabase.from('song_melody').update(payload).eq('id', old.id);
+        // อัปเดตด้วยกุญแจหลักของแถว — เพลงย่อยจึงเขียนลงแถวเดียวกับเพลงเรื่องเป๊ะ
+        const { error } = await supabase.from('song_melody').update(payload).eq('id', old._rowId ?? old.id);
         if (error) errs.push('ว.' + nr.verse_no + ': ' + error.message);
       } else {
-        const { error } = await supabase.from('song_melody').insert({ ...payload, submitted_by: me.user.id });
+        const { error } = await supabase.from('song_melody').insert({ ...payload, song_id: id, submitted_by: me.user.id });
         if (error) errs.push('ว.' + nr.verse_no + ': ' + error.message);
       }
     }
@@ -176,7 +192,30 @@ export default function EditMelodyPage() {
           {me.isAdmin && <span className="badge badge-variable">ผู้ดูแล — บันทึกแล้วขึ้นเว็บทันที</span>}
           {!me.isAdmin && !isNew && <span className="badge badge-variable">ทางของคุณ — บันทึกแล้วขึ้นเว็บทันที (ระบบเก็บรุ่นก่อนแก้ไว้)</span>}
           {!me.isAdmin && isNew && <span className="badge badge-pending">ส่งแล้วรอผู้ดูแลตรวจ</span>}
+          {/* ป้ายรุ่น — เพลงย่อยเคยเปิดมาแล้วกระดานว่าง เพราะไฟล์นี้ยังเป็นของเดิม มองไม่ออกจากหน้าจอ */}
+          <span data-editver style={{fontSize:'0.66rem',color:'var(--muted)',marginLeft:'auto'}}>
+            หน้าแก้โน้ตรุ่น {EDITPAGE_VERSION}
+          </span>
         </div>
+        {/* เพลงย่อย: บอกให้ชัดว่าแก้ที่นี่แล้วเพลงเรื่องเปลี่ยนตามด้วย */}
+        {song?.parent_song_id && (
+          <div data-partedit style={{margin:'0.6rem 0',padding:'0.6rem 0.8rem',borderRadius:'8px',
+            background:'rgba(201,168,76,0.08)',border:'1px solid rgba(201,168,76,0.28)',fontSize:'0.8rem',lineHeight:1.8}}>
+            🧩 เพลงย่อยใน <b style={{color:'var(--gold2)'}}>{song.parent_song_id}</b> ·
+            โน้ตชุดเดียวกัน <b>แก้ที่นี่แล้วในเพลงเรื่องเปลี่ยนตามทันที</b>
+            <div style={{fontSize:'0.72rem',color:'var(--muted)'}}>
+              แก้ตัวโน้ตได้เต็มที่ · แต่ "เพิ่ม/ลบทั้งวรรค" ต้องไปทำที่หน้าเพลงเรื่อง
+              เพราะเลขวรรคเป็นของทั้งเรื่อง
+            </div>
+          </div>
+        )}
+        {!isNew && rows !== null && rows.length === 0 && (
+          <div data-editempty style={{margin:'0.6rem 0',padding:'0.6rem 0.8rem',borderRadius:'8px',
+            background:'rgba(212,122,143,0.10)',border:'1px solid var(--danger)',fontSize:'0.8rem'}}>
+            ⚠ ไม่พบโน้ตของทาง{instrument} สำหรับเพลงนี้ — กระดานจึงว่าง
+            {song?.parent_song_id && ' · ถ้าเป็นเพลงย่อย ให้ตรวจว่าแยกเพลงเรียบร้อยแล้วจากหน้าผู้ดูแล'}
+          </div>
+        )}
 
         <NotationInput ref={padRef} initialVerses={initialVerses} onChange={onChange}
           options={{ base: 4, lineHong: 8, twoHands, system, instrument,
