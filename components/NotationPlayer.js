@@ -206,22 +206,20 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   };
   const ctxRef = useRef(null);
   const stopRef = useRef(null);
-  // หยุดเสียงเมื่อสลับแท็บ/ย่อหน้าต่าง และเมื่อออกจากหน้านี้
+  // สลับแท็บ/พับหน้าจอ = เล่นต่อ (Pk 27 ส.ค. 69) — เดิมสั่งหยุดทันทีที่ document.hidden
+  //   ปิดหน้าต่าง/ออกจากหน้าเพลงยังหยุดเหมือนเดิม
   useEffect(() => {
-    function onHide() {
-      if (document.hidden && playStateRef.current !== 'stopped') stopRef.current?.();
-    }
-    document.addEventListener('visibilitychange', onHide);
-    window.addEventListener('pagehide', onHide);
+    function onLeave() { stopRef.current?.(); }
+    window.addEventListener('pagehide', onLeave);
     return () => {
-      document.removeEventListener('visibilitychange', onHide);
-      window.removeEventListener('pagehide', onHide);
+      window.removeEventListener('pagehide', onLeave);
       stopRef.current?.();          // ออกจากหน้าเพลง = หยุดเสียงเสมอ
     };
   }, []);
 
   const buffersRef = useRef(null);
   const rafRef = useRef(null);
+  const driverRef = useRef(null);      // ตัวขับเสียง (setInterval) — ทำงานต่อแม้แท็บถูกพับ
   const playIdRef = useRef(0);
 
   // ── แปลงโน้ตทุกวรรคครั้งเดียว: ความยาวจริงต่อวรรค + offset สะสม ──
@@ -555,19 +553,33 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     function tick() {
       if (playIdRef.current !== myId) return;
       const now = ctx.currentTime;
+      // ข้ามตำแหน่งที่เลยมาแล้ว อัปเดตเฉพาะตำแหน่งล่าสุดครั้งเดียวต่อเฟรม
+      let last = null;
+      while (idx < cursorTimeline.length && cursorTimeline[idx].time <= now) { last = cursorTimeline[idx]; idx++; }
+      if (last) moveCursor({ verseIdx: last.verseIdx, pos: last.pos });
+      if (now < endTime + 0.1) rafRef.current = requestAnimationFrame(tick);
+    }
+
+    /* ตัวขับเสียง — ใช้ "ตั้งเวลา" ไม่ใช่ requestAnimationFrame (Pk 27 ส.ค. 69)
+       พอสลับแท็บหรือพับหน้าจอ เบราว์เซอร์หยุดเรียก rAF ทั้งหมด ถ้าฝากการนัดเสียงไว้กับ rAF
+       เพลงจะเงียบทันทีที่คิวที่นัดไว้ล่วงหน้า (LOOKAHEAD) หมด
+       setInterval ยังเดินอยู่แม้แท็บถูกพับ (ถูกหรี่เหลือ ~1 ครั้ง/วินาที ซึ่งยังทันคิว 5 วินาที) */
+    const drive = () => {
+      if (playIdRef.current !== myId) { clearInterval(driverRef.current); return; }
+      const now = ctx.currentTime;
       // วนกลับต้นไปเรื่อย ๆ: พอใกล้จบ นัดเที่ยวถัดไปต่อท้าย (นัดล่วงหน้าอย่างน้อย 8 วิ)
       while (repeat === 'loop' && totalSteps > 0 && endTime - now < 8) {
         scheduleSteps(wholeOnce());
         endTime = tCur;
       }
       pump(now);
-      // ข้ามตำแหน่งที่เลยมาแล้ว อัปเดตเฉพาะตำแหน่งล่าสุดครั้งเดียวต่อเฟรม
-      let last = null;
-      while (idx < cursorTimeline.length && cursorTimeline[idx].time <= now) { last = cursorTimeline[idx]; idx++; }
-      if (last) moveCursor({ verseIdx: last.verseIdx, pos: last.pos });
-      if (now < endTime + 0.1) rafRef.current = requestAnimationFrame(tick);
-      else { setPlayState('stopped'); moveCursor(null); }
-    }
+      if (now >= endTime + 0.1) {
+        clearInterval(driverRef.current); driverRef.current = null;
+        setPlayState('stopped'); moveCursor(null);
+      }
+    };
+    clearInterval(driverRef.current);
+    driverRef.current = setInterval(drive, 300);
     rafRef.current = requestAnimationFrame(tick);
   }
 
@@ -580,6 +592,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
 
   function stop() {
     playIdRef.current++;
+    if (driverRef.current) { clearInterval(driverRef.current); driverRef.current = null; }
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     if (ctxRef.current) { ctxRef.current.close().catch(() => {}); ctxRef.current = null; }
     setPlayState('stopped'); moveCursor(null);
