@@ -10,6 +10,7 @@ import { refreshSongStats } from '../../lib/songstats';
 import { pointsFor, awardLabel } from '../../lib/points';
 import { LENSES as PERM_LENSES, PERM_BY_KEY } from '../../lib/perms';
 import SongTypeAdmin from '../../components/SongTypeAdmin';
+import SuiteSplitter from '../../components/SuiteSplitter';
 import SongTypeSelect from '../../components/SongTypeSelect';
 const PERM_HINTS = Object.fromEntries(Object.entries(PERM_BY_KEY).map(([k, v]) => [k, v.hint]).filter(([, h]) => h));
 import { fmtDT, ago } from '../../lib/fmtdate';
@@ -822,6 +823,7 @@ export default function AdminPage() {
         <>
           {mgMsg && <div style={{fontSize:'0.8rem',color:'var(--jade)',marginBottom:'0.6rem'}}>{mgMsg}</div>}
           <SongTypeAdmin />
+          <SuiteSplitter />
           <div className="card">
             <div style={{fontWeight:600,marginBottom:'0.6rem'}}>🎼 เพลง — แก้ไข / ลบ</div>
             <div style={{display:'flex',gap:'8px',marginBottom:'0.8rem'}}>

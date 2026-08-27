@@ -156,7 +156,12 @@ export default function HomePage() {
               ) : songs.map(s => (
                 <tr key={s.id}>
                   <td className="song-id">{s.id}</td>
-                  <td><Link href={`/songs/${s.id}`}><span className="song-name">{s.name_th}</span></Link></td>
+                  <td>
+                    <Link href={`/songs/${s.id}`}><span className="song-name">{s.name_th}</span></Link>
+                    {/* เพลงย่อยที่แยกจากเพลงเรื่อง — บอกที่มาไว้ จะได้ไม่งงว่ามาจากไหน (Pk 27 ส.ค. 69) */}
+                    {s.parent_song_id && <span style={{fontSize:'0.68rem',color:'var(--muted)',marginLeft:'6px'}}
+                      title={'เพลงย่อยใน ' + s.parent_song_id}>🧩 {s.parent_song_id}</span>}
+                  </td>
                   <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.type || <span style={{color:'var(--border)'}}>—</span>}</td>
                   <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.style || <span style={{color:'var(--border)'}}>—</span>}</td>
                   <td style={{fontFamily:'monospace',color:'var(--jade)'}}>{s.total_verses}</td>
