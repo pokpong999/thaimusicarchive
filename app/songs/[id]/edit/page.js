@@ -4,6 +4,7 @@
 //   /songs/KSY001/edit?inst=ระนาดเอก&new=1   เสนอทางใหม่ (สมาชิก → รอตรวจ · แอดมิน → ขึ้นเว็บทันที)
 // กฎที่บังคับจริงอยู่ที่ RLS ใน Supabase (thma_edit_permissions.sql) — หน้านี้แค่ซ่อน/แสดงให้ตรงกัน
 import { useEffect, useRef, useState } from 'react';
+import { refreshSongStats } from '../../../../lib/songstats';
 import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '../../../../lib/supabase';
@@ -31,6 +32,7 @@ export default function EditMelodyPage() {
   // ค่าเริ่มต้นของเพลง (ฉิ่ง/กลอง/ความเร็ว) ที่บันทึกไว้ — ใส่กลับเข้ากระดาน แล้วบันทึกทับตอนกดบันทึกโน้ต
   const [defaults, setDefaults] = useState(null);
   const [saveDefaults, setSaveDefaults] = useState(true);
+  const [subNote, setSubNote] = useState('');   // ที่มาโน้ต/หมายเหตุถึงผู้ดูแล — ฟอร์มเพลงใหม่มีช่องนี้ ฟอร์มนี้เดิมไม่มี
   const padRef = useRef(null);
 
   useEffect(() => {
@@ -81,8 +83,11 @@ export default function EditMelodyPage() {
       const { error } = await supabase.from('melody_submissions').insert({
         song_id: id, instrument, submitted_by: me.user.id,
         notation_text: versesToText(verses, { lines: st.lines }),
+        note: subNote.trim() || null,
         notation_json: { rows: newRows, base: st.base, line_hong: st.lineHong, two_hands: st.twoHands, system: st.system, lines: st.lines, ensemble: st.ensemble,
-                         tang: st.tangHome, notation_ensemble: st.notEns, level: st.level },
+                         tang: st.tangHome, notation_ensemble: st.notEns, level: st.level,
+                         // ฉิ่ง/กลอง/ความเร็วที่ตั้งบนกระดาน — เดิมไม่ได้ส่งมา ทางที่อนุมัติแล้วจึงไม่มีค่าเริ่มต้น (Pk 27 ส.ค. 69)
+                         ching: st.chingOn, nathab: st.nathab, drum: st.drum, bpm: st.bpm },
       });
       setBusy(false);
       if (error) { setMsg('⚠ ' + error.message); return; }
@@ -99,7 +104,9 @@ export default function EditMelodyPage() {
       const payload = { ...base, verse_no: nr.verse_no, section: nr.section, line_no: nr.line_no,
         combined: nr.combined, right_hand: nr.right_hand, left_hand: nr.left_hand, third_hand: nr.third_hand ?? null,
         notation_system: nr.notation_system ?? null, krasuan: nr.krasuan, luktok: nr.luktok, level: nr.level ?? null, ching: nr.ching ?? null,
-        marks: nr.marks ?? null };
+        marks: nr.marks ?? null,
+        // ทาง/วง/ระบบเสียงที่ผู้ถอดโน้ตตั้งไว้ — เดิมไม่ถูกเก็บ เครื่องเล่นเลยต้องเดาเอง (sql/21)
+        tang: st.tangHome ?? null, ensemble: st.notEns ?? st.ensemble ?? null, tuning: st.tuning ?? null };
       const old = existing.get(nr.verse_no);
       if (old) {
         const { error } = await supabase.from('song_melody').update(payload).eq('id', old.id);
@@ -123,6 +130,8 @@ export default function EditMelodyPage() {
     }
     setBusy(false);
     if (errs.length) { setMsg('⚠ บันทึกไม่ครบ — ' + errs.slice(0, 3).join(' · ') + (errs.length > 3 ? ' …' : '')); return; }
+    // จำนวนวรรค/กระสวนไม่ซ้ำบนหน้าเพลง เดิมค้างค่าเก่าตลอดหลังแก้โน้ต (Pk 27 ส.ค. 69)
+    await refreshSongStats(id, instrument);
     setDirty(false); padRef.current.clearDraft();
     setMsg('✓ บันทึกแล้ว ' + newRows.length + ' วรรค' + (approved ? '' : ' (รอผู้ดูแลอนุมัติ)') + defMsg);
     const { data: r2 } = await supabase.from('song_melody').select('*').eq('song_id', id).eq('instrument', instrument).order('verse_no');
@@ -174,6 +183,16 @@ export default function EditMelodyPage() {
                      nathab: defaults.nathab, drum: defaults.drum, ching: undefined,
                      chingOn: defaults.ching, bpm: defaults.bpm, level: defaults.level,
                      draftKey: `edit:${id}:${instrument}${isNew ? ':new' : ''}` }} />
+
+        {isNew && !me.isAdmin && (
+          <div style={{marginTop:'0.9rem'}}>
+            <label style={{display:'block',fontSize:'0.8rem',color:'var(--muted)',marginBottom:'4px'}}>
+              ที่มาของโน้ต / หมายเหตุถึงผู้ดูแล <span style={{opacity:.7}}>(ไม่บังคับ — ช่วยให้ผู้ตรวจเข้าใจที่มา อนุมัติเร็วขึ้น)</span>
+            </label>
+            <input className="form-input" style={{width:'100%'}} value={subNote} onChange={e => setSubNote(e.target.value)}
+              placeholder="เช่น ถอดจากโน้ตครูสมพงษ์ พ.ศ. ๒๕๓๐ / บันทึกจากการบรรเลงของวง…" />
+          </div>
+        )}
 
         {!isNew && (
           <label style={{display:'flex',gap:'8px',alignItems:'center',marginTop:'0.9rem',fontSize:'0.8rem',cursor:'pointer'}}>
