@@ -38,6 +38,7 @@ export default function SongDetailClient() {
   const [pdfMsg, setPdfMsg] = useState('');
   const [showPdfForm, setShowPdfForm] = useState(false);
   const [videos, setVideos] = useState([]);
+  const [videoNames, setVideoNames] = useState({});
   const [user, setUser] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
   // แท็บจำไว้ใน #hash (รีเฟรชแล้วกลับมาแท็บเดิม — Pk 2026-08-25) · ทางเครื่องใน ?inst= · ตำแหน่งเลื่อนใน sessionStorage
@@ -61,7 +62,7 @@ export default function SongDetailClient() {
   const [krasuan, setKrasuan] = useState(null);
   const [audios, setAudios] = useState([]);
   const [audioFile, setAudioFile] = useState(null);
-  const [audioMeta, setAudioMeta] = useState({ title:'', performer:'', year:'' });
+  const [audioMeta, setAudioMeta] = useState({ title:'', performer:'', year:'', license:'' });
   const [audioMsg, setAudioMsg] = useState('');
   const [copied, setCopied] = useState(false);
   const [luktok, setLuktok] = useState(null);
@@ -125,6 +126,12 @@ export default function SongDetailClient() {
     const { data: v } = await supabase.from('song_videos')
       .select('*').eq('song_id', id).eq('approved', true).order('created_at');
     setVideos(v ?? []);
+    // ชื่อคนส่งวิดีโอ — ดึงแยกรอบ (submitted_by ชี้ไป auth.users จะ embed profiles ตรง ๆ ไม่ได้)
+    const vids = [...new Set((v ?? []).map(x => x.submitted_by).filter(Boolean))];
+    if (vids.length) {
+      const { data: vp } = await supabase.from('profiles').select('id, display_name').in('id', vids);
+      const m = {}; (vp ?? []).forEach(pr => m[pr.id] = pr.display_name); setVideoNames(m);
+    }
     const { data: pf } = await supabase.from('song_files')
       .select('*').eq('song_id', id).eq('approved', true).order('created_at');
     setPdfs(pf ?? []);
@@ -203,7 +210,8 @@ export default function SongDetailClient() {
     if (e1) { setAudioMsg('⚠ ' + e1.message); return; }
     const { error: e2 } = await supabase.from('song_audio').insert({
       song_id: id, title: audioMeta.title || null, performer: audioMeta.performer || null,
-      year_recorded: audioMeta.year || null, storage_path: pathName, submitted_by: user.id,
+      year_recorded: audioMeta.year || null, license: audioMeta.license || null,
+      storage_path: pathName, submitted_by: user.id,
     });
     setAudioMsg(e2 ? '⚠ ' + e2.message : '✓ ส่งแล้ว รอ Admin ตรวจสอบ (+10 ศักดินาเมื่อผ่าน)');
     setAudioFile(null);
@@ -463,6 +471,14 @@ export default function SongDetailClient() {
                 <input className="form-input" placeholder="ปีที่บันทึก" value={audioMeta.year}
                   onChange={e => setAudioMeta({...audioMeta, year: e.target.value})} />
               </div>
+              <select className="form-input" style={{marginTop:'0.6rem',width:'100%'}} value={audioMeta.license}
+                onChange={e => setAudioMeta({...audioMeta, license: e.target.value})}>
+                <option value="">— สิทธิ์เผยแพร่ (ไม่บังคับ) —</option>
+                <option value="บันทึกเอง เผยแพร่ได้">บันทึกเอง เผยแพร่ได้</option>
+                <option value="ได้รับอนุญาตจากเจ้าของ">ได้รับอนุญาตจากเจ้าของ</option>
+                <option value="เผยแพร่เพื่อการศึกษา">เผยแพร่เพื่อการศึกษาเท่านั้น</option>
+                <option value="สาธารณสมบัติ">สาธารณสมบัติ (หมดอายุลิขสิทธิ์)</option>
+              </select>
               <div style={{fontSize:'0.68rem',color:'var(--muted)',margin:'0.5rem 0'}}>
                 ⚠ อัปโหลดเฉพาะเสียงที่คุณมีสิทธิ์เผยแพร่ (บันทึกเอง หรือได้รับอนุญาตจากเจ้าของ)</div>
               <button className="btn btn-jade btn-sm" onClick={uploadAudio}>✓ ส่งไฟล์เสียง</button>
@@ -511,7 +527,8 @@ export default function SongDetailClient() {
                   <div className="video-body">
                     <div className="video-title">{v.title || song.name_th}</div>
                     <div className="video-meta" style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                      <span>▶ {v.channel_name}{v.created_at && <span style={{color:'var(--muted)',fontSize:'0.66rem'}}> · 🕒 {fmtDT(v.created_at)}</span>}</span>
+                      {/* เดิมโชว์ v.channel_name ซึ่งไม่เคยถูกบันทึกลงฐานเลย การ์ดทุกใบจึงขึ้น "▶ " ว่าง (แก้ 27 ส.ค. 69) */}
+                      <span>▶ {videoNames[v.submitted_by] ? 'ส่งโดย ' + videoNames[v.submitted_by] : song.name_th}{v.created_at && <span style={{color:'var(--muted)',fontSize:'0.66rem'}}> · 🕒 {fmtDT(v.created_at)}</span>}</span>
                       {user && v.submitted_by === user.id && (
                         <button className="btn btn-danger btn-sm" onClick={async () => {
                           if (!confirm('ลบวิดีโอนี้?')) return;
