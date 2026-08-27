@@ -30,16 +30,25 @@ export default function TopArchivists() {
     <div style={{
       background: 'linear-gradient(90deg, rgba(201,168,76,0.18), rgba(201,168,76,0.06), rgba(201,168,76,0.18))',
       border: '1px solid rgba(201,168,76,0.35)', borderRadius: '8px',
-      margin: '0 0 1.2rem', overflow: 'hidden', display: 'flex', alignItems: 'center',
-    }}>
+      margin: '0 0 1.2rem', overflow: 'hidden',
+    }} className="thma-top">
       <style>{`
         @keyframes thma-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        .thma-top { display:flex; align-items:center; }
         .thma-marquee-track { display:flex; width:max-content; animation: thma-marquee 26s linear infinite; }
         .thma-marquee-wrap:hover .thma-marquee-track { animation-play-state: paused; }
         @media (prefers-reduced-motion: reduce) { .thma-marquee-track { animation: none; } }
+        /* จอมือถือ: ป้ายหัวเรื่องกินความกว้างไปครึ่งจอ เหลือที่ให้ชื่อคนวิ่งแค่นิดเดียว
+           → ย้ายป้ายขึ้นไปอยู่บรรทัดบน แล้วให้ตัววิ่งได้เต็มความกว้าง (Pk 27 ส.ค. 69) */
+        @media (max-width: 560px) {
+          .thma-top { flex-direction: column; align-items: stretch; }
+          .thma-top-label { border-right: none !important; border-bottom: 1px solid rgba(201,168,76,0.35);
+            justify-content: center; padding: 7px 10px !important; font-size: 0.8rem !important; }
+          .thma-marquee-track { animation-duration: 18s; }
+        }
       `}</style>
 
-      <div style={{
+      <div className="thma-top-label" style={{
         fontFamily: "'Noto Serif Thai', serif", fontWeight: 700, color: 'var(--gold)',
         fontSize: '0.86rem', whiteSpace: 'nowrap', padding: '10px 14px', flexShrink: 0,
         display: 'flex', alignItems: 'center', gap: '8px',

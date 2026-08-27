@@ -50,12 +50,13 @@ export default function RandomEvents() {
 
   return (
     <section style={{margin:'0 0 1.6rem'}}>
-      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:'12px',marginBottom:'0.7rem'}}>
-        <div>
+      <div style={{display:'flex',alignItems:'baseline',justifyContent:'space-between',gap:'12px',flexWrap:'wrap',marginBottom:'0.7rem'}}>
+        <div style={{flex:'1 1 200px',minWidth:0}}>
           <div className="section-title" style={{margin:0}}>สุ่มเหตุการณ์ดนตรีไทย</div>
           <div style={{fontSize:'0.74rem',color:'var(--muted)'}}>หยิบมาจากหอจดหมายเหตุแบบสุ่ม · เข้าหน้านี้ใหม่ก็ได้เรื่องใหม่</div>
         </div>
-        <button className="btn btn-outline btn-sm" onClick={() => pick(ids)} disabled={loading || !ids}>
+        <button className="btn btn-outline btn-sm" onClick={() => pick(ids)} disabled={loading || !ids}
+          style={{whiteSpace:'nowrap',flex:'0 0 auto'}}>
           🎲 สุ่มใหม่
         </button>
       </div>

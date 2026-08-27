@@ -888,7 +888,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
         <label style={{display:'flex',gap:'8px',alignItems:'center',cursor:'pointer',fontSize:'0.86rem',fontWeight:600}}>
           <input type="checkbox" checked={tempoOn} onChange={e => setTempoOn(e.target.checked)}
             disabled={playState !== 'stopped'} style={{accentColor:'var(--gold)',width:'18px',height:'18px'}} />
-          🎚 จังหวะไม่สม่ำเสมอ — เร่งขึ้นทั้งท่อน แล้วจบท่อนแบบ <b>ถอน</b> หรือ <b>ทอด</b>
+          {/* จอแคบ: ข้อความต้องไหลเป็นก้อนเดียว ไม่งั้น <b> ถูกดันไปคนละมุม (Pk 27 ส.ค. 69) */}
+          <span style={{flex:1,minWidth:0}}>
+            🎚 จังหวะไม่สม่ำเสมอ — เร่งขึ้นทั้งท่อน แล้วจบท่อนแบบ <b>ถอน</b> หรือ <b>ทอด</b>
+          </span>
         </label>
         {!tempoOn && <div style={{fontSize:'0.74rem',color:'var(--muted)',marginTop:'6px'}}>
           ปิดอยู่ = เดินจังหวะสม่ำเสมอตลอดเพลงเหมือนเดิม</div>}
