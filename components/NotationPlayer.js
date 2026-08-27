@@ -18,7 +18,7 @@ const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
 import { buildVoices, SABAT_GAP_DEFAULT, kroSpans, kroStrikes, KRO_GAP_DEFAULT, DAMP_DUR_DEFAULT, CHAR_MARK,
-  HAND_BIT, DAMP_ALL, pairLead } from '../lib/notation-core';
+  HAND_BIT, DAMP_ALL, pairLead, sabatChain, sabatVel } from '../lib/notation-core';
 import { tempoPlan, TEMPO_DEFAULTS, MODE_LABEL, halfCycleOfLevel, bpmAt, isContinuousSection, CONTINUOUS_WHY } from '../lib/tempo';
 import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
@@ -400,6 +400,23 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       const lead = consumed.length > 1
         ? pairLead(Array.from({ length: consumed.length }, (_, li) => (G[li][s] || []).map(n => ({ ch: n.ch, reg: n.register || 0 }))))
         : [];
+
+      // ── สะบัดที่คร่อมสองมือ (Pk 27 ส.ค. 69) ──
+      //   ขวา-ขวา-ซ้าย ต้องเว้นระยะเท่ากันทั้งสามไม้ ตัวสุดท้ายลงตรงจังหวะ
+      //   เดิมคิดทีละแนว เสียงที่ 2 กับ 3 จึงลงพร้อมกัน ฟังเป็นสะดุด
+      //   ตอนนี้รวมทุกแนวเป็นชุดเดียวก่อน แล้วค่อยวางเวลา · ไม่ใช้ pairLead ในกรณีนี้
+      //   เพราะลำดับถูกกำหนดด้วยระยะห่างอยู่แล้ว ถ้าเลื่อนซ้ำจะเพี้ยนอีกแบบ
+      const chain = sabatChain(G, runs, consumed, s, consumed.length, totalSteps);
+      if (chain) {
+        chain.forEach((c, i) => {
+          const back = chain.length - 1 - i;
+          const tt = tBase - back * sabatGap;
+          const dmp = consumed.length > 1 && hand === 'both' ? !!(mask & HAND_BIT[HKp[c.lane]]) : !!mask;
+          q(tt, () => scheduleNote(c.note, tt, sabatVel(back), dmp));
+        });
+        return;
+      }
+
       for (let li = 0; li < consumed.length; li++) {   // ทุกบรรทัดตามระบบบันทึก (ขิม/จะเข้ = 3)
         if (consumed[li][s]) continue;
         // ประคบแยกรายมือ · เลือกฟังมือเดียวอยู่ (hand !== 'both') เสียงถูกยกมาไว้แนว 0 แล้ว จึงดูทั้งก้อน
@@ -794,8 +811,9 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
             disabled={playState !== 'stopped'} title="ความถี่ของการกรอ (วินาทีต่อไม้) — ยิ่งน้อยยิ่งตีถี่">
             <option value="0.045">〰 กรอถี่มาก (45 ms)</option>
             <option value="0.055">〰 กรอถี่ (55 ms)</option>
-            <option value="0.07">〰 กรอปกติ (70 ms)</option>
-            <option value="0.09">〰 กรอห่าง (90 ms)</option>
+            <option value="0.07">〰 กรอค่อนข้างถี่ (70 ms)</option>
+            <option value="0.08">〰 กรอปกติ (80 ms)</option>
+            <option value="0.1">〰 กรอห่าง (100 ms)</option>
             <option value="0.12">〰 กรอห่างมาก (120 ms)</option>
           </select>
         )}
