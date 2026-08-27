@@ -148,7 +148,7 @@ export default function SongDetailClient() {
   useEffect(() => {
     // fetchMelody รู้เองว่า id นี้เป็นเพลงเรื่องหรือเพลงย่อย และนับเลขวรรคใหม่ให้
     fetchMelody(id, { instrument, approvedOnly: true })
-      .then(({ rows, error, ref }) => {
+      .then(({ rows, error, ref, unapproved }) => {
         setMelody(rows ?? []);
         // ★ โน้ตไม่ขึ้นต้องบอกสาเหตุ ไม่ใช่โชว์หน้าว่างเปล่าให้เดาเอง (Pk เจอตอนแยกเพลงย่อย)
         setMelodyWhy(
@@ -156,6 +156,7 @@ export default function SongDetailClient() {
                   + (/part_song_id|schema cache|column/i.test(error.message)
                      ? ' — ยังไม่ได้รัน sql/30-31 หรือ Supabase ยังไม่รีเฟรชคอลัมน์ใหม่' : '')
           : ref && !ref.ready ? 'ยังไม่ได้รัน sql/30 — ระบบเพลงย่อยยังไม่พร้อม'
+          : unapproved ? 'โน้ตชุดนี้ยังไม่ได้อนุมัติ — แสดงให้ดูไว้ก่อน กดอนุมัติที่หน้าผู้ดูแลเพื่อให้ทุกคนเห็น'
           : (rows ?? []).length === 0 && ref?.isPart
               ? `ยังไม่มีวรรคไหนถูกผูกกับเพลงย่อยนี้ — ลองแยกใหม่จากหน้าผู้ดูแล (เพลงเรื่อง ${ref.parentId})`
           : '');
