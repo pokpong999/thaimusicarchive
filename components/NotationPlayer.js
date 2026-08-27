@@ -18,6 +18,7 @@ const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
 import { buildVoices, SABAT_GAP_DEFAULT, kroSpans, kroStrikes, KRO_GAP_DEFAULT, DAMP_DUR_DEFAULT, CHAR_MARK,
   HAND_BIT, DAMP_ALL, pairLead } from '../lib/notation-core';
+import { tempoPlan, TEMPO_DEFAULTS, MODE_LABEL, halfCycleOfLevel, bpmAt } from '../lib/tempo';
 import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
 import { stepOf, noteOfStep } from '../lib/instruments';
@@ -91,6 +92,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const [insts, setInsts] = useState([]);              // ทะเบียนเครื่องดำเนินทำนอง (โหลดสดจากฐาน)
   const [tang, setTang] = useState(null);              // ทางที่ผู้ฟังเลือก (null = ตามที่เพลงบันทึก)
   const [tangView, setTangView] = useState('fix');     // fix = ตรึงโน้ต · real = ย้ายโน้ตจริง
+  // จังหวะไม่สม่ำเสมอ: เร่งขึ้นทั้งท่อน + จบท่อนแบบถอน/ทอด (Pk 27 ส.ค. 69)
+  //   ค่าเริ่มต้นปิดไว้ = จังหวะสม่ำเสมอเหมือนเดิมทุกประการ
+  const [tempoOn, setTempoOn] = useState(false);
+  const [tempoOpts, setTempoOpts] = useState({ accel: TEMPO_DEFAULTS.accel, accelThon: TEMPO_DEFAULTS.accelThon,
+                                               thonRatio: TEMPO_DEFAULTS.thonRatio, thotRatio: TEMPO_DEFAULTS.thotRatio });
+  const [secModes, setSecModes] = useState({});        // หมายเลขบล็อกท่อน → '' | 'thon' | 'thot'
   const [tunes, setTunes] = useState([]);              // ชุดความถี่ในตาราง tunings
   const [tuning, setTuning] = useState(DEFAULT_TUNING); // slug ของชุดที่เลือก
   const [sabatGap, setSabatGap] = useState(SABAT_DEFAULT);
@@ -378,11 +385,11 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     const spans = kroSpans({ total: totalSteps, markOf: markOfStep, notesOf: notesOfStep });
     const kroAt = new Map(spans.map(sp => [sp.start, sp]));
 
-    const scheduleMelodyAt = (s, tBase) => {
+    const scheduleMelodyAt = (s, tBase, stepNow = stepDur) => {
       const t = tBase;
       const sp = kroAt.get(s);
       if (sp) {
-        kroStrikes({ dur: (sp.end - sp.start) * stepDur, gap: kroGap, low: sp.low, high: sp.high })
+        kroStrikes({ dur: (sp.end - sp.start) * stepNow, gap: kroGap, low: sp.low, high: sp.high })
           .forEach(k => { const tt = t + k.t; q(tt, () => scheduleNote({ ch: k.note.ch, register: k.note.reg }, tt, 0.95 * k.vel)); });
         return;
       }
@@ -503,19 +510,32 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     // กดเล่นจากกลางเพลง: เริ่มที่ตำแหน่งนั้นครั้งแรกที่พบ แล้วเล่นตามผังกลับต้นต่อ
     if (startStep > 0) { const k = seq.indexOf(startStep); if (k > 0) seq = seq.slice(k); }
 
-    let schedLen = 0;
+    // ── จังหวะไม่สม่ำเสมอ (Pk 27 ส.ค. 69) ──
+    //   คิดจาก "ลำดับที่เล่นจริง" เพราะการกลับต้นทำให้ท่อนเดิมถูกเล่นซ้ำ
+    //   และการถอนของเที่ยวก่อนต้องส่งผลถึงเที่ยวถัดไป
+    const planFor = steps => tempoPlan({
+      seq: steps,
+      blockOf: st => blockOfStep[st] ?? 0,
+      modeOf: b => secModes[b] || '',
+      halfCycleOf: b => halfCycleOfLevel(levelOf(secBlocks[b]?.viFrom ?? 0)),
+      base: bpm,
+      opts: { on: tempoOn, ...tempoOpts },
+    });
+
+    let schedLen = 0, tCur = t0;
     const scheduleSteps = steps => {
-      for (const s of steps) {
-        const t = t0 + schedLen * stepDur;
-        scheduleMelodyAt(s, t);
+      const { durs } = planFor(steps);
+      steps.forEach((s, i) => {
+        const t = tCur, d = durs[i] ?? stepDur;
+        scheduleMelodyAt(s, t, d);
         schedulePercAt(s, schedLen, t);
         cursorTimeline.push({ time: t, verseIdx: stepInfo[s].vi, pos: stepInfo[s].pos });
-        schedLen++;
-      }
+        tCur += d; schedLen++;
+      });
     };
     scheduleSteps(seq);
 
-    let endTime = t0 + schedLen * stepDur;
+    let endTime = tCur;
     soundEvents.sort((a, b) => a.t - b.t);
     let evIdx = 0;
     const LOOKAHEAD = 5; // วินาที
@@ -536,7 +556,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       // วนกลับต้นไปเรื่อย ๆ: พอใกล้จบ นัดเที่ยวถัดไปต่อท้าย (นัดล่วงหน้าอย่างน้อย 8 วิ)
       while (repeat === 'loop' && totalSteps > 0 && endTime - now < 8) {
         scheduleSteps(wholeOnce());
-        endTime = t0 + schedLen * stepDur;
+        endTime = tCur;
       }
       pump(now);
       // ข้ามตำแหน่งที่เลยมาแล้ว อัปเดตเฉพาะตำแหน่งล่าสุดครั้งเดียวต่อเฟรม
@@ -640,6 +660,24 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     if (rec3) return reg === '1' ? pv.rh : reg === '0' ? pv.lh : pv.xh;
     return pv.cb.map(notes => notes.filter(n => String(n.register) === reg));
   }
+
+  // ── บล็อกท่อน: วรรคติดกันที่ section เดียวกัน (ท่อนชื่อซ้ำคนละที่ในเพลง = คนละบล็อก) ──
+  const secBlocks = useMemo(() => {
+    const out = [];
+    parsed.forEach((pv, vi) => {
+      const name = pv.v.section ?? null;
+      const last = out[out.length - 1];
+      if (last && last.name === name && last.viTo === vi - 1) { last.viTo = vi; last.to = pv.offset + pv.len; }
+      else out.push({ i: out.length, name, viFrom: vi, viTo: vi, from: pv.offset, to: pv.offset + pv.len });
+    });
+    return out;
+  }, [parsed]);
+  const levelHint = vi => parsed[vi]?.v?.level || level;
+  const blockOfStep = useMemo(() => {
+    const arr = new Array(totalSteps).fill(0);
+    secBlocks.forEach(b => { for (let s = b.from; s < b.to && s < totalSteps; s++) arr[s] = b.i; });
+    return arr;
+  }, [secBlocks, totalSteps]);
 
   // ── จัดกลุ่มวรรคลงบรรทัด ตามจำนวนห้องต่อบรรทัดที่เลือก ──
   const lineGroups = useMemo(() => {
@@ -790,6 +828,79 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           </span>
         )}
         <span style={{fontSize:'0.68rem',color:'var(--muted)'}}>💡 กดที่ห้องใดก็ได้เพื่อเล่นจากตรงนั้น</span>
+      </div>
+
+      {/* ── จังหวะท้ายท่อน: ถอน / ทอด (Pk 27 ส.ค. 69) ── */}
+      <div className="card" style={{marginBottom:'1rem',borderColor: tempoOn ? 'rgba(201,168,76,0.45)' : 'var(--border)'}}>
+        <label style={{display:'flex',gap:'8px',alignItems:'center',cursor:'pointer',fontSize:'0.86rem',fontWeight:600}}>
+          <input type="checkbox" checked={tempoOn} onChange={e => setTempoOn(e.target.checked)}
+            disabled={playState !== 'stopped'} style={{accentColor:'var(--gold)',width:'18px',height:'18px'}} />
+          🎚 จังหวะไม่สม่ำเสมอ — เร่งขึ้นทั้งท่อน แล้วจบท่อนแบบ <b>ถอน</b> หรือ <b>ทอด</b>
+        </label>
+        {!tempoOn && <div style={{fontSize:'0.74rem',color:'var(--muted)',marginTop:'6px'}}>
+          ปิดอยู่ = เดินจังหวะสม่ำเสมอตลอดเพลงเหมือนเดิม</div>}
+        {tempoOn && (
+          <div style={{marginTop:'0.8rem'}}>
+            <div style={{fontSize:'0.74rem',color:'var(--muted)',lineHeight:1.9,marginBottom:'0.7rem'}}>
+              <b style={{color:'var(--gold2)'}}>ถอน</b> = เร่งเต็มจนถึงเสียงสุดท้ายของท่อน แล้วท่อนถัดไปเริ่มที่ครึ่งหนึ่งของความเร็วท้ายท่อนนั้น ·
+              <b style={{color:'var(--gold2)'}}> ทอด</b> = ครึ่งหลังของจังหวะหน้าทับสุดท้ายค่อย ๆ ผ่อนลง แล้วท่อนถัดไปกลับมาความเร็วปกติ ·
+              ทำนอง ฉิ่ง กลอง ขยับไปพร้อมกันทั้งหมด
+            </div>
+            <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'0.9rem'}}>
+              {secBlocks.map(b => {
+                const mode = secModes[b.i] || '';
+                const hongs = Math.round((b.to - b.from) / 4);
+                return (
+                  <div key={b.i} style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',
+                    padding:'6px 0',borderBottom:'1px solid rgba(42,63,92,0.35)'}}>
+                    <span style={{flex:1,minWidth:'150px',fontSize:'0.84rem'}}>
+                      {b.name ?? 'ทั้งเพลง'}
+                      <span style={{color:'var(--muted)',fontSize:'0.72rem'}}> · {hongs} ห้อง</span>
+                    </span>
+                    {['', 'thon', 'thot'].map(m => (
+                      <button key={m} type="button" className={'btn btn-sm ' + (mode === m ? 'btn-jade' : 'btn-outline')}
+                        disabled={playState !== 'stopped'}
+                        onClick={() => setSecModes({ ...secModes, [b.i]: m })}>{MODE_LABEL[m]}</button>
+                    ))}
+                    <span style={{fontSize:'0.7rem',color:'var(--muted)',fontFamily:'monospace',minWidth:'96px',textAlign:'right'}}>
+                      {(() => {
+                        const steps = Array.from({ length: b.to - b.from }, (_, k) => b.from + k);
+                        const pl = tempoPlan({ seq: steps, blockOf: () => b.i, modeOf: () => mode,
+                          halfCycleOf: () => halfCycleOfLevel(levelHint(b.viFrom)), base: bpm,
+                          opts: { on: true, ...tempoOpts } });
+                        const f = pl.factors;
+                        return `${bpmAt(bpm, f[0])} → ${bpmAt(bpm, f[f.length - 1])}`;
+                      })()}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(210px,1fr))',gap:'10px',fontSize:'0.74rem',color:'var(--muted)'}}>
+              <label>เร่งขึ้นต่อท่อน (ท่อนธรรมดา) <b style={{color:'var(--gold2)'}}>{Math.round(tempoOpts.accel * 100)}%</b>
+                <input type="range" min="0" max="80" value={Math.round(tempoOpts.accel * 100)} disabled={playState !== 'stopped'}
+                  onChange={e => setTempoOpts({ ...tempoOpts, accel: +e.target.value / 100 })}
+                  style={{width:'100%',accentColor:'var(--gold)'}} /></label>
+              <label>เร่งขึ้นของท่อนที่ <b>ถอน</b> <b style={{color:'var(--gold2)'}}>{Math.round(tempoOpts.accelThon * 100)}%</b>
+                <input type="range" min="20" max="200" value={Math.round(tempoOpts.accelThon * 100)} disabled={playState !== 'stopped'}
+                  onChange={e => setTempoOpts({ ...tempoOpts, accelThon: +e.target.value / 100 })}
+                  style={{width:'100%',accentColor:'var(--gold)'}} /></label>
+              <label>ขึ้นท่อนใหม่หลังถอน เหลือ <b style={{color:'var(--gold2)'}}>{Math.round(tempoOpts.thonRatio * 100)}%</b>
+                <input type="range" min="30" max="90" value={Math.round(tempoOpts.thonRatio * 100)} disabled={playState !== 'stopped'}
+                  onChange={e => setTempoOpts({ ...tempoOpts, thonRatio: +e.target.value / 100 })}
+                  style={{width:'100%',accentColor:'var(--gold)'}} /></label>
+              <label>ทอดแล้วผ่อนลงเหลือ <b style={{color:'var(--gold2)'}}>{Math.round(tempoOpts.thotRatio * 100)}%</b>
+                <input type="range" min="40" max="95" value={Math.round(tempoOpts.thotRatio * 100)} disabled={playState !== 'stopped'}
+                  onChange={e => setTempoOpts({ ...tempoOpts, thotRatio: +e.target.value / 100 })}
+                  style={{width:'100%',accentColor:'var(--gold)'}} /></label>
+            </div>
+            <div style={{fontSize:'0.72rem',color:'var(--muted)',marginTop:'0.7rem',lineHeight:1.8}}>
+              💡 ท่อนที่ถอนต้องเร่งให้มากพอ ไม่งั้นพอขึ้นท่อนใหม่จังหวะจะยืดยาดเกินไป —
+              ถ้าตั้ง "เร่งของท่อนถอน" ไว้ ๑๐๐% และ "เหลือ" ๕๐% ท่อนใหม่จะกลับมาที่ความเร็วตั้งต้นพอดี
+              (ตัวเลขท้ายแต่ละท่อนคือความเร็วต้นท่อน → ท้ายท่อน)
+            </div>
+          </div>
+        )}
       </div>
 
       <style>{`.np-cell.np-on{background:rgba(201,168,76,0.4)}
