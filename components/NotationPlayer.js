@@ -18,7 +18,7 @@ const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
 import { buildVoices, SABAT_GAP_DEFAULT, kroSpans, kroStrikes, KRO_GAP_DEFAULT, DAMP_DUR_DEFAULT, CHAR_MARK,
   HAND_BIT, DAMP_ALL, pairLead } from '../lib/notation-core';
-import { tempoPlan, TEMPO_DEFAULTS, MODE_LABEL, halfCycleOfLevel, bpmAt } from '../lib/tempo';
+import { tempoPlan, TEMPO_DEFAULTS, MODE_LABEL, halfCycleOfLevel, bpmAt, isContinuousSection, CONTINUOUS_WHY } from '../lib/tempo';
 import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
 import { stepOf, noteOfStep } from '../lib/instruments';
@@ -518,6 +518,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       blockOf: st => blockOfStep[st] ?? 0,
       modeOf: b => secModes[b] || '',
       halfCycleOf: b => halfCycleOfLevel(levelOf(secBlocks[b]?.viFrom ?? 0)),
+      // ข้อยกเว้น: ชั้นเดียว/ลูกหมด ไม่ถอนไม่ทอด เดินต่อเนื่อง (Pk 27 ส.ค. 69)
+      continuousOf: b => isContinuousSection({ level: levelOf(secBlocks[b]?.viFrom ?? 0), name: secBlocks[b]?.name }),
       base: bpm,
       opts: { on: tempoOn, ...tempoOpts },
     });
@@ -673,11 +675,47 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     return out;
   }, [parsed]);
   const levelHint = vi => parsed[vi]?.v?.level || level;
+  // เส้นความเร็วของทั้งเพลง (เที่ยวเดียว) ไว้โชว์ตัวเลขข้างแต่ละท่อน — ต้องคิดทั้งเพลงเพราะท่อนต่อเนื่องรับช่วงจากท่อนก่อน
   const blockOfStep = useMemo(() => {
     const arr = new Array(totalSteps).fill(0);
     secBlocks.forEach(b => { for (let s = b.from; s < b.to && s < totalSteps; s++) arr[s] = b.i; });
     return arr;
   }, [secBlocks, totalSteps]);
+
+  // รายละเอียดประจำท่อน ไว้ขึ้นหัวท่อนบนตารางโน้ต — ชื่อท่อน (เพลงเรื่องมักใส่ชื่อเพลงไว้ตรงนี้)
+  //   + อัตรา · หน้าทับของท่อนนั้น · ทาง · จำนวนวรรค/ห้อง · ลูกตกท้ายท่อน
+  const secInfo = useMemo(() => {
+    const plan = (nathabRules?.length && parsed.length)
+      ? planSongNathab(parsed.map(pv => pv.v), nathabRules, { level }) : null;
+    return secBlocks.map(b => {
+      const lv = levelHint(b.viFrom);
+      const nb = plan?.[b.viFrom]?.nathab || null;
+      const tg = parsed[b.viFrom]?.v?.tang;
+      const lastVerse = parsed[b.viTo]?.v;
+      return {
+        ...b, level: lv, nathab: nb,
+        tang: (tg != null && +tg >= 1 && +tg <= 7) ? tangOf(+tg).short : null,
+        verses: b.viTo - b.viFrom + 1,
+        hongs: Math.round((b.to - b.from) / 4),
+        luktok: lastVerse?.luktok || null,
+      };
+    });
+  }, [secBlocks, parsed, nathabRules, level]);
+  const secStartAt = useMemo(() => {
+    const m = {}; secInfo.forEach(b => { m[b.viFrom] = b; }); return m;
+  }, [secInfo]);
+
+  const previewFactors = useMemo(() => {
+    if (!tempoOn || !totalSteps) return new Array(totalSteps).fill(1);
+    return tempoPlan({
+      seq: Array.from({ length: totalSteps }, (_, i) => i),
+      blockOf: st => blockOfStep[st] ?? 0,
+      modeOf: b => secModes[b] || '',
+      halfCycleOf: b => halfCycleOfLevel(levelHint(secBlocks[b]?.viFrom ?? 0)),
+      continuousOf: b => isContinuousSection({ level: levelHint(secBlocks[b]?.viFrom ?? 0), name: secBlocks[b]?.name }),
+      base: bpm, opts: { on: true, ...tempoOpts },
+    }).factors;
+  }, [tempoOn, totalSteps, blockOfStep, secBlocks, secModes, tempoOpts, bpm, parsed, level]);
 
   // ── จัดกลุ่มวรรคลงบรรทัด ตามจำนวนห้องต่อบรรทัดที่เลือก ──
   const lineGroups = useMemo(() => {
@@ -685,7 +723,9 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     let cur = [], curHongs = 0;
     parsed.forEach((pv, vi) => {
       const h = pv.len / 4;
-      if (cur.length > 0 && curHongs + h > hongsPerLine) { groups.push(cur); cur = []; curHongs = 0; }
+      // ขึ้นท่อนใหม่ = ขึ้นบรรทัดใหม่เสมอ ไม่งั้นหัวท่อนจะไปโผล่กลางบรรทัดไม่ได้ (Pk 27 ส.ค. 69)
+      const newSec = vi > 0 && (pv.v.section ?? null) !== (parsed[vi - 1].v.section ?? null);
+      if (cur.length > 0 && (newSec || curHongs + h > hongsPerLine)) { groups.push(cur); cur = []; curHongs = 0; }
       cur.push(vi); curHongs += h;
     });
     if (cur.length) groups.push(cur);
@@ -848,7 +888,9 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
             </div>
             <div style={{display:'flex',flexDirection:'column',gap:'8px',marginBottom:'0.9rem'}}>
               {secBlocks.map(b => {
-                const mode = secModes[b.i] || '';
+                const cont = isContinuousSection({ level: levelHint(b.viFrom), name: b.name });
+                const why = CONTINUOUS_WHY({ level: levelHint(b.viFrom), name: b.name });
+                const mode = cont ? '' : (secModes[b.i] || '');
                 const hongs = Math.round((b.to - b.from) / 4);
                 return (
                   <div key={b.i} style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap',
@@ -857,20 +899,19 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
                       {b.name ?? 'ทั้งเพลง'}
                       <span style={{color:'var(--muted)',fontSize:'0.72rem'}}> · {hongs} ห้อง</span>
                     </span>
-                    {['', 'thon', 'thot'].map(m => (
-                      <button key={m} type="button" className={'btn btn-sm ' + (mode === m ? 'btn-jade' : 'btn-outline')}
-                        disabled={playState !== 'stopped'}
-                        onClick={() => setSecModes({ ...secModes, [b.i]: m })}>{MODE_LABEL[m]}</button>
-                    ))}
+                    {cont
+                      ? <span style={{fontSize:'0.74rem',color:'var(--gold2)'}}
+                          title={why === 'ลูกหมด'
+                            ? 'ลูกหมดไม่มีทอดไม่มีถอน — เร่งขึ้นตั้งแต่ต้นลูกหมดจนถึงเสียงสุดท้าย'
+                            : 'ชั้นเดียวไม่ทอดไม่ถอนชัดเจน จังหวะเร็วต่อเนื่องกันไป'}>
+                          ⤳ {why} — เร่งต่อเนื่อง ไม่ถอนไม่ทอด</span>
+                      : ['', 'thon', 'thot'].map(m => (
+                        <button key={m} type="button" className={'btn btn-sm ' + (mode === m ? 'btn-jade' : 'btn-outline')}
+                          disabled={playState !== 'stopped'}
+                          onClick={() => setSecModes({ ...secModes, [b.i]: m })}>{MODE_LABEL[m]}</button>
+                      ))}
                     <span style={{fontSize:'0.7rem',color:'var(--muted)',fontFamily:'monospace',minWidth:'96px',textAlign:'right'}}>
-                      {(() => {
-                        const steps = Array.from({ length: b.to - b.from }, (_, k) => b.from + k);
-                        const pl = tempoPlan({ seq: steps, blockOf: () => b.i, modeOf: () => mode,
-                          halfCycleOf: () => halfCycleOfLevel(levelHint(b.viFrom)), base: bpm,
-                          opts: { on: true, ...tempoOpts } });
-                        const f = pl.factors;
-                        return `${bpmAt(bpm, f[0])} → ${bpmAt(bpm, f[f.length - 1])}`;
-                      })()}
+                      {`${bpmAt(bpm, previewFactors[b.from] ?? 1)} → ${bpmAt(bpm, previewFactors[b.to - 1] ?? 1)}`}
                     </span>
                   </div>
                 );
@@ -895,6 +936,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
                   style={{width:'100%',accentColor:'var(--gold)'}} /></label>
             </div>
             <div style={{fontSize:'0.72rem',color:'var(--muted)',marginTop:'0.7rem',lineHeight:1.8}}>
+              ⤳ <b>ชั้นเดียว</b> กับ <b>ลูกหมด</b> ไม่มีถอนไม่มีทอด — จังหวะเร่งต่อเนื่องรับช่วงจากท่อนก่อนไปจนจบ ·
               💡 ท่อนที่ถอนต้องเร่งให้มากพอ ไม่งั้นพอขึ้นท่อนใหม่จังหวะจะยืดยาดเกินไป —
               ถ้าตั้ง "เร่งของท่อนถอน" ไว้ ๑๐๐% และ "เหลือ" ๕๐% ท่อนใหม่จะกลับมาที่ความเร็วตั้งต้นพอดี
               (ตัวเลขท้ายแต่ละท่อนคือความเร็วต้นท่อน → ท้ายท่อน)
@@ -921,8 +963,30 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           return (
             <div key={gi} data-line={gi} style={{paddingBottom:'0.5rem',
               borderBottom: gi < lineGroups.length-1 ? '1px dashed rgba(42,63,92,0.6)' : 'none'}}>
-              <div style={{fontSize:'0.62rem',color:'var(--muted)',marginBottom:'3px'}}>
-                {label}{first.section ? ` · ${first.section}` : ''}{luk ? ` · ลูกตก: ${luk}` : ''}
+              {/* หัวท่อน — ขึ้นเมื่อเริ่มท่อนใหม่ ชิดซ้ายเหนือโน้ต (Pk 27 ส.ค. 69) */}
+              {secStartAt[group[0]] && (() => {
+                const b = secStartAt[group[0]];
+                const mode = secModes[b.i] || '';
+                const contWhy = CONTINUOUS_WHY({ level: b.level, name: b.name });
+                const bits = [
+                  b.level, b.nathab && `🥁 หน้าทับ${b.nathab}`, b.tang && `ทาง${b.tang}`,
+                  `${b.verses} วรรค · ${b.hongs} ห้อง`, b.luktok && `ลูกตก ${b.luktok}`,
+                  tempoOn && (contWhy ? '⤳ เร่งต่อเนื่อง' : mode === 'thon' ? '⤳ ถอน' : mode === 'thot' ? '⤳ ทอด' : ''),
+                ].filter(Boolean);
+                return (
+                  <div data-sec={b.i} style={{margin: gi === 0 ? '0 0 .5rem' : '.6rem 0 .5rem',
+                    borderLeft:'3px solid var(--gold)', paddingLeft:'9px'}}>
+                    <div style={{fontSize:'1rem',fontWeight:700,color:'var(--gold2)',lineHeight:1.4}}>
+                      {b.name ?? 'ทั้งเพลง'}
+                    </div>
+                    {bits.length > 0 && (
+                      <div style={{fontSize:'0.72rem',color:'var(--muted)',lineHeight:1.7}}>{bits.join(' · ')}</div>
+                    )}
+                  </div>
+                );
+              })()}
+              <div style={{fontSize:'0.66rem',color:'var(--muted)',marginBottom:'3px'}}>
+                {label}{luk ? ` · ลูกตก: ${luk}` : ''}
               </div>
               {mode === 'combined' && renderMulti(segs(pv => pv.cb), null, null)}
               {mode === 'hands' && <>

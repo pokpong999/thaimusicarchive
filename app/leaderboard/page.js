@@ -8,15 +8,30 @@ import Avatar from '../../components/Avatar';
 import { getRank, getNextRank, RANKS } from '../../lib/ranks';
 import RankBadge from '../../components/RankBadge';
 
+// ทำเนียบเป็นการแข่งขันของสมาชิกจริง ๆ — ผู้ดูแลไม่ลงแข่ง (Pk 27 ส.ค. 69)
+//   แอดมิน/โมเดอเรเตอร์ไม่ขึ้นในตารางและไม่ถูกจัดอันดับ
+//   แต่ "เจ้าตัว" เห็นแถวของตัวเองปักไว้บนสุด คนอื่นไม่เห็น
+const STAFF = ['admin', 'moderator'];
+const isStaff = p => STAFF.includes(p?.role);
+
 export default function LeaderboardPage() {
   const [profiles, setProfiles] = useState([]);
+  const [me, setMe] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     supabase.from('profiles').select('id, display_name, points, role, avatar_url')
       .order('points', { ascending: false, nullsFirst: false }).limit(100)
       .then(({ data }) => { setProfiles(data ?? []); setLoading(false); });
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data?.user) return;
+      supabase.from('profiles').select('id, display_name, points, role, avatar_url')
+        .eq('id', data.user.id).maybeSingle().then(({ data: p }) => setMe(p ?? null));
+    });
   }, []);
+
+  const ranked = profiles.filter(p => !isStaff(p));      // ผู้ดูแลไม่ลงแข่ง
+  const myStaffRow = isStaff(me) ? me : null;            // เห็นเฉพาะเจ้าตัว
 
   return (
     <FeaturePage feature="page_leaderboard">
@@ -50,7 +65,30 @@ export default function LeaderboardPage() {
               <th style={{width:'50px'}}>อันดับ</th><th>สมาชิก</th><th>บรรดาศักดิ์</th><th style={{textAlign:'right'}}>ศักดินา</th><th>ก้าวต่อไป</th>
             </tr></thead>
             <tbody>
-              {profiles.map((p, i) => {
+              {myStaffRow && (() => {
+                const next = getNextRank(myStaffRow.points);
+                return (
+                  <tr key="me-staff" style={{background:'rgba(201,168,76,0.10)'}}>
+                    <td style={{fontFamily:'monospace',color:'var(--muted)'}} title="ผู้ดูแลไม่ถูกจัดอันดับ">—</td>
+                    <td style={{fontWeight:500}}>
+                      <Link href={`/members/${myStaffRow.id}`}>
+                      <div style={{display:'flex',alignItems:'center',gap:'8px',cursor:'pointer',flexWrap:'wrap'}}>
+                        <Avatar path={myStaffRow.avatar_url} name={myStaffRow.display_name} size={28} />
+                        {myStaffRow.display_name ?? 'ไม่ระบุชื่อ'}
+                        <span style={{fontSize:'0.66rem',color:'var(--gold2)',border:'1px solid rgba(201,168,76,0.5)',
+                          borderRadius:'4px',padding:'1px 6px'}}>ผู้ดูแล — เห็นเฉพาะคุณ ไม่นับอันดับ</span>
+                      </div>
+                      </Link>
+                    </td>
+                    <td><RankBadge points={myStaffRow.points} /></td>
+                    <td style={{textAlign:'right',fontFamily:'monospace',color:'var(--jade)'}}>{(myStaffRow.points ?? 0).toLocaleString()}</td>
+                    <td style={{fontSize:'0.72rem',color:'var(--muted)'}}>
+                      {next ? `อีก ${(next.min - (myStaffRow.points ?? 0)).toLocaleString()} → ${next.name}` : '— สูงสุดแล้ว —'}
+                    </td>
+                  </tr>
+                );
+              })()}
+              {ranked.map((p, i) => {
                 const next = getNextRank(p.points);
                 return (
                   <tr key={p.id}>
@@ -79,6 +117,7 @@ export default function LeaderboardPage() {
       )}
 
       <div style={{marginTop:'1.2rem',fontSize:'0.75rem',color:'var(--muted)',lineHeight:1.8}}>
+        <b style={{color:'var(--cream)'}}>หมายเหตุ:</b> ผู้ดูแลระบบไม่ลงแข่งขันในทำเนียบนี้ — ทำเนียบนับเฉพาะสมาชิก<br/>
         <b style={{color:'var(--cream)'}}>วิธีได้ศักดินา:</b> วิดีโอเพลงได้รับอนุมัติ +10 · บันทึกจดหมายเหตุได้รับอนุมัติ +10 · โบนัสบันทึกที่มีทั้งรูปและพิกัด +5
       </div>
     </main>
