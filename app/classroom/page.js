@@ -108,7 +108,8 @@ function TeacherView({ me }) {
 }
 
 function ClassCard({ cls, waiting = 0, open, onToggle, onChanged }) {
-  const [tab, setTab] = useState('progress');
+  // มีคนรออนุมัติอยู่ → เปิดห้องมาที่แท็บรายชื่อเลย จะได้กดรับเข้าห้องได้ทันที
+  const [tab, setTab] = useState(waiting > 0 ? 'members' : 'progress');
   const [members, setMembers] = useState([]);
   const [asg, setAsg] = useState([]);
   const [grid, setGrid] = useState({ students: [], assignments: [] });
@@ -147,7 +148,8 @@ function ClassCard({ cls, waiting = 0, open, onToggle, onChanged }) {
     setCode(c); setNote('เปลี่ยนรหัสใหม่แล้ว');
   }
   async function decide(id, ok) {
-    setBusy(true); await decideMember(id, ok); setBusy(false); refresh();
+    setBusy(true); await decideMember(id, ok); setBusy(false);
+    refresh(); onChanged();     // ให้ตัวเลข "รออนุมัติ" ที่หน้ารายการลดลงด้วย
   }
   async function addAssignment() {
     if (!aTitle.trim()) { setNote('⚠ ตั้งชื่องานก่อน'); return; }
@@ -184,9 +186,10 @@ function ClassCard({ cls, waiting = 0, open, onToggle, onChanged }) {
           {open ? 'ปิด' : '📋 เปิดห้อง'}
         </button>
         {(open ? pending.length : waiting) > 0 && (
-          <span style={{fontSize:'0.8rem',color:'var(--gold)'}}>
-            ⏳ มี {open ? pending.length : waiting} คนขอเข้าห้อง
-          </span>
+          <button className="btn btn-primary btn-sm"
+            onClick={() => { setTab('members'); if (!open) onToggle(); }}>
+            ⏳ มี {open ? pending.length : waiting} คนขอเข้าห้อง — ดูรายชื่อ
+          </button>
         )}
         {open && (
           <>
@@ -254,7 +257,18 @@ function ClassCard({ cls, waiting = 0, open, onToggle, onChanged }) {
             <>
               {pending.length > 0 && (
                 <div style={{marginBottom:'1rem'}}>
-                  <div style={{fontWeight:600,fontSize:'0.86rem',marginBottom:'0.5rem',color:'var(--gold)'}}>⏳ ขอเข้าห้อง</div>
+                  <div style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',marginBottom:'0.5rem'}}>
+                    <div style={{fontWeight:600,fontSize:'0.86rem',color:'var(--gold)'}}>⏳ ขอเข้าห้อง ({pending.length})</div>
+                    {pending.length > 1 && (
+                      <button className="btn btn-jade btn-sm" disabled={busy}
+                        onClick={async () => {
+                          if (!confirm(`รับทั้ง ${pending.length} คนเข้าห้อง "${cls.name}"?`)) return;
+                          setBusy(true);
+                          for (const m of pending) await decideMember(m.id, true);
+                          setBusy(false); refresh(); onChanged();
+                        }}>✓ รับทั้งหมด {pending.length} คน</button>
+                    )}
+                  </div>
                   {pending.map(m => (
                     <div key={m.id} style={{display:'flex',gap:'10px',alignItems:'center',flexWrap:'wrap',padding:'7px 0'}}>
                       <Avatar path={m.student?.avatar_url} name={m.student?.display_name} size={28} />
