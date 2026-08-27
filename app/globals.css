@@ -236,3 +236,97 @@ table { max-width: 100%; }
   .logo-en { display: none; }
   .logo-th { font-size: 0.76rem; max-width: 150px; }
 }
+
+/* ═══ รางไอคอนซ้าย (Pk 27 ส.ค. 69) ═══════════════════════════════
+   เปิด-ปิดได้จากปุ่มสลับ · lib/navpref.js ใส่คลาส .nav-rail ที่ <html>
+   รางกว้าง 56px และ "กางออกทับ" เนื้อหาเมื่อชี้เมาส์ จึงไม่กินความกว้าง
+   ของกระดานเขียนโน้ต ซึ่งต้องการราว 1,040px ที่ 8 ห้อง/บรรทัด        */
+
+.siderail { display:none; }
+.rail-mobbar, .rail-scrim { display:none; }
+
+html.nav-rail .topbar { display:none; }
+html.nav-rail body, html.nav-rail { --rail-w: 56px; }
+html.nav-rail body { padding-left: var(--rail-w); }
+
+html.nav-rail .siderail {
+  display:flex; flex-direction:column;
+  position:fixed; left:0; top:0; bottom:0; width:var(--rail-w); z-index:300;
+  background:var(--navy3); border-right:1px solid var(--border);
+  padding:8px 0; overflow:hidden;
+  transition:width .18s ease, box-shadow .18s ease;
+}
+html.nav-rail .siderail:hover,
+html.nav-rail .siderail:focus-within { width:232px; box-shadow:14px 0 34px rgba(4,9,18,.5); }
+
+.rail-brand { display:flex; align-items:center; gap:10px; padding:6px 15px 12px; flex:0 0 auto; }
+.rail-brandtxt { font-family:'Noto Serif Thai',serif; font-weight:700; font-size:0.78rem; color:var(--gold); }
+.rail-scroll { flex:1; overflow-y:auto; overflow-x:hidden; scrollbar-width:none; }
+.rail-scroll::-webkit-scrollbar { display:none; }
+.rail-group + .rail-group { margin-top:2px; }
+
+.rail-gname { padding:10px 15px 3px; }
+.rail-gname span {
+  font-size:0.6rem; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--muted); white-space:nowrap; opacity:.9;
+}
+/* ตอนหุบ: ชื่อกลุ่มกลายเป็นเส้นคั่นสั้น ๆ แทนตัวหนังสือที่อ่านไม่ทัน */
+html.nav-rail .siderail:not(:hover):not(:focus-within) .rail-gname { padding:9px 0 3px; }
+html.nav-rail .siderail:not(:hover):not(:focus-within) .rail-gname span { display:none; }
+html.nav-rail .siderail:not(:hover):not(:focus-within) .rail-gname::before {
+  content:''; display:block; width:22px; height:1px; background:var(--border); margin:5px auto 0;
+}
+
+.rail-item {
+  display:flex; align-items:center; gap:12px; height:42px; padding:0 0 0 17px;
+  color:var(--muted); white-space:nowrap; overflow:hidden; cursor:pointer;
+  border-left:2px solid transparent; border-right:0; border-top:0; border-bottom:0;
+  background:transparent; font:inherit; font-size:0.82rem; width:100%; text-align:left;
+}
+.rail-ico { font-size:1.05rem; flex:0 0 22px; display:flex; align-items:center; justify-content:center; }
+.rail-lbl { opacity:0; transition:opacity .14s ease; }
+html.nav-rail .siderail:hover .rail-lbl,
+html.nav-rail .siderail:focus-within .rail-lbl { opacity:1; }
+.rail-item:hover { background:rgba(201,168,76,.10); color:var(--cream); }
+.rail-item.on { background:rgba(201,168,76,.15); color:var(--gold); border-left-color:var(--gold); }
+.rail-item:focus-visible { outline:2px solid var(--gold); outline-offset:-2px; }
+.rail-foot { flex:0 0 auto; border-top:1px solid var(--border); padding-top:6px; }
+.rail-switch { color:var(--muted); }
+
+/* ── มือถือ: รางกลายเป็นลิ้นชัก ─────────────────────────────── */
+@media (max-width: 820px) {
+  html.nav-rail body { padding-left:0; padding-top:52px; }
+  html.nav-rail .rail-mobbar {
+    display:flex; align-items:center; gap:10px; position:fixed; top:0; left:0; right:0; height:52px;
+    padding:0 12px; background:var(--navy2); border-bottom:1px solid var(--border); z-index:320;
+  }
+  .rail-burger {
+    width:40px; height:40px; border-radius:8px; border:1px solid var(--border);
+    background:var(--navy3); color:var(--gold); font-size:1.1rem; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+  }
+  .rail-mobname { font-family:'Noto Serif Thai',serif; font-weight:600; font-size:0.84rem; color:var(--gold); }
+  html.nav-rail .siderail {
+    width:250px; transform:translateX(-100%); transition:transform .2s ease;
+    box-shadow:none; top:0; z-index:340;
+  }
+  html.nav-rail .siderail.open { transform:translateX(0); box-shadow:14px 0 34px rgba(4,9,18,.55); }
+  html.nav-rail .siderail:hover, html.nav-rail .siderail:focus-within { width:250px; box-shadow:none; }
+  html.nav-rail .siderail .rail-lbl { opacity:1 !important; }
+  html.nav-rail .siderail .rail-gname { padding:10px 15px 3px !important; }
+  html.nav-rail .siderail .rail-gname span { display:inline !important; }
+  html.nav-rail .siderail .rail-gname::before { display:none !important; }
+  html.nav-rail .rail-scrim {
+    display:block; position:fixed; inset:0; background:rgba(4,9,18,.55); z-index:330;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .siderail, .rail-lbl { transition:none !important; }
+}
+
+/* ปุ่มสลับที่อยู่บนแถบเมนูบน */
+.nav-switch {
+  cursor:pointer; font-size:0.8rem; border:1px solid var(--border); background:transparent;
+  border-radius:5px; padding:6px 10px; min-height:32px; color:var(--muted); font-family:inherit;
+}
+.nav-switch:hover { border-color:var(--gold); color:var(--gold); }

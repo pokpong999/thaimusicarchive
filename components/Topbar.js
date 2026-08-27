@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
+import { useNavMode } from '../lib/navpref';
 import RankBadge from './RankBadge';
 import Avatar from './Avatar';
 import NotificationBell from './NotificationBell';
@@ -11,6 +12,7 @@ export default function Topbar() {
   const { lang, setLang, t } = useLang();
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
+  const { isRail, toggle: toggleNav } = useNavMode();
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -37,6 +39,7 @@ export default function Topbar() {
   }
 
   return (
+    isRail ? null : (
     <header className="topbar">
       <Link href="/"><div className="logo-wrap">
         <svg width="32" height="32" viewBox="0 0 36 36" fill="none">
@@ -69,6 +72,9 @@ export default function Topbar() {
           style={{cursor:'pointer',fontSize:'0.8rem',border:'1px solid var(--border)',background:'transparent',
             borderRadius:'5px',padding:'6px 10px',minHeight:'32px',color:'var(--muted)',fontFamily:'inherit'}}>
           {lang === 'th' ? 'EN' : 'ไทย'}</button>
+        {/* สลับไปใช้รางไอคอนซ้าย — ลองใช้แล้วไม่ชอบก็กดกลับได้ (Pk 27 ส.ค. 69) */}
+        <button type="button" className="nav-switch" onClick={toggleNav}
+          title="ย้ายเมนูไปเป็นรางไอคอนด้านซ้าย">☰ เมนูข้าง</button>
         {(profile?.role === 'admin' || profile?.role === 'moderator') && <Link href="/admin">Admin</Link>}
       </nav>
       <div className="topbar-right">
@@ -88,5 +94,6 @@ export default function Topbar() {
         )}
       </div>
     </header>
+    )
   );
 }

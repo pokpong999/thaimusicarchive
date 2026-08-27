@@ -1,5 +1,6 @@
 import './globals.css';
 import Topbar from '../components/Topbar';
+import SideRail from '../components/SideRail';
 import { LangProvider } from '../lib/i18n';
 import FooterNav from '../components/FooterNav';
 import PWA from '../components/PWA';
@@ -40,8 +41,12 @@ export default function RootLayout({ children }) {
         <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600;700&family=Noto+Sans+Thai:wght@300;400;500;600&display=swap" rel="stylesheet" />
       </head>
       <body>
+        {/* อ่านความชอบเรื่องเมนูก่อน React จะเรนเดอร์ — กันหน้ากระพริบตอนโหลด */}
+        <script dangerouslySetInnerHTML={{ __html:
+          "try{if(localStorage.getItem('thma-nav')==='rail')document.documentElement.classList.add('nav-rail')}catch(e){}" }} />
         <LangProvider><ContentProvider>
         <Topbar />
+        <SideRail />
         {children}
         <footer className="footer" style={{lineHeight:2}}>
           <FooterNav />
