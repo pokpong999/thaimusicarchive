@@ -10,7 +10,11 @@ const F = [
   ['what_text', 'ทำอะไร (หัวเรื่อง) *', 'สรุปเหตุการณ์สั้นๆ'],
   ['when_text', 'เมื่อไหร่', 'เช่น พ.ศ. ๒๔๖๖ หรือ ราวรัชกาลที่ ๕'],
   ['where_text', 'ที่ไหน', 'สถานที่'],
-  ['era', 'ยุคสมัย', 'เช่น รัชกาลที่ 5'],
+];
+export const ERA_OPTIONS = [
+  ['past', 'อดีต — เหตุการณ์ที่ผ่านมาแล้ว'],
+  ['present', 'ปัจจุบัน — กำลังเกิดขึ้น'],
+  ['future', 'อนาคต — กำหนดการที่จะมาถึง'],
 ];
 
 export default function EditArchive() {
@@ -58,6 +62,17 @@ export default function EditArchive() {
       <a href={`/archive/${id}`} style={{fontSize:'0.8rem',color:'var(--gold2)'}}>← กลับหน้าเหตุการณ์</a>
       <div className="section-title" style={{fontSize:'1.2rem',marginTop:'0.8rem'}}>✏️ แก้ไขเหตุการณ์</div>
       <div className="card" style={{marginTop:'1rem'}}>
+        {/* ยุคต้องเป็นตัวเลือกชุดเดียวกับหน้า "เพิ่มเหตุการณ์" — เดิมเป็นช่องพิมพ์อิสระ
+            พอแก้ครั้งเดียว ค่าจะกลายเป็นข้อความที่ตัวกรองยุคหาไม่เจอ เหตุการณ์นั้นหายไปเลย (Pk 27 ส.ค. 69) */}
+        <div className="form-group">
+          <label className="form-label">ยุค *</label>
+          <select className="form-input" value={ERA_OPTIONS.some(([v]) => v === rec.era) ? rec.era : ''}
+            onChange={e => set('era', e.target.value)}>
+            {!ERA_OPTIONS.some(([v]) => v === rec.era) &&
+              <option value="">— ยังไม่ได้จัดยุค{rec.era ? ` (ของเดิม: ${rec.era})` : ''} —</option>}
+            {ERA_OPTIONS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+          </select>
+        </div>
         {F.map(([k, label, ph]) => (
           <div className="form-group" key={k}>
             <label className="form-label">{label}</label>
