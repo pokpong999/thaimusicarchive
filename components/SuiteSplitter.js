@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { suggestParts, partIdFor, makePart, unmakePart, listParts, partError,
-         suiteReport, reportSummary } from '../lib/songparts';
+         suiteReport, reportSummary, fetchMelody } from '../lib/songparts';
 
 const MAIN = 'ทำนองหลัก';
 
@@ -29,6 +29,7 @@ export default function SuiteSplitter() {
   const [report, setReport] = useState(null);   // ตรวจข้อมูลในฐาน (sql/31)
   const [instUsed, setInstUsed] = useState(null);
   const [gap, setGap] = useState(null);        // โน้ตในฐานไม่ครบตามที่บันทึกไว้
+  const [verify, setVerify] = useState(null);  // อ่านโน้ตของเพลงย่อยได้จริงไหม
 
   // เพลงที่น่าจะเป็นเพลงเรื่อง — ดูจากประเภท หรือชื่อที่มีคำว่า เรื่อง/ตับ
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function SuiteSplitter() {
   }, []);
 
   const loadSuite = useCallback(async id => {
-    setMsg(''); setErr(''); setLog([]); setRows(null); setParts([]); setDone([]); setGap(null);
+    setMsg(''); setErr(''); setLog([]); setRows(null); setParts([]); setDone([]); setGap(null); setVerify(null);
     if (!id) return;
     // ★ ต้องรับแถวที่ instrument เป็น null ด้วย — ข้อมูลนำเข้าจาก Excel หลายแถวไม่ได้ระบุทางไว้
     //   ถ้าใช้ eq('instrument','ทำนองหลัก') เฉย ๆ จะได้วรรคไม่ครบ แล้วแยกเพลงได้ไม่ครบตามไปด้วย
@@ -92,11 +93,20 @@ export default function SuiteSplitter() {
       out.push({ name: p.name, id: p.id, verses, error: error ? partError(error.message) : null });
       setLog([...out]);
     }
-    setBusy(false);
     const bad = out.filter(x => x.error);
     if (bad.length) setErr(`แยกไม่สำเร็จ ${bad.length} เพลง — ดูรายละเอียดข้างล่าง`);
     else setMsg(`✓ แยกครบ ${out.length} เพลง · รวม ${out.reduce((n, x) => n + x.verses, 0)} วรรค`);
     setDone(await listParts(sid));
+    // ── พิสูจน์ว่าเปิดเพลงย่อยแล้วอ่านโน้ตได้จริง ──
+    //   ตรวจจากที่นี่ เพราะไฟล์นี้อัพผ่าน GitHub ได้ตามปกติ
+    //   ถ้าตรงนี้บอกว่าอ่านได้ แต่หน้าเพลงยังว่าง = ไฟล์ของหน้าเพลงยังไม่ถูกวางทับ
+    const vf = [];
+    for (const p of taken.filter(x => !out.find(o => o.id === x.id)?.error)) {
+      const { rows, error } = await fetchMelody(p.id, { instrument: 'ทำนองหลัก' });
+      vf.push({ id: p.id, name: p.name, n: rows.length, error: error ? partError(error.message) : null });
+    }
+    setVerify(vf);
+    setBusy(false);
   }
 
   return (
@@ -249,6 +259,26 @@ export default function SuiteSplitter() {
             <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => loadSuite(sid)}>↺ เสนอใหม่</button>
             {problems.length > 0 && <span style={{fontSize:'0.74rem',color:'var(--gold2)'}}>แก้ข้อที่เตือนก่อนถึงจะแยกได้</span>}
           </div>
+
+          {verify && (
+            <div style={{marginTop:'0.8rem',padding:'0.6rem 0.8rem',borderRadius:'8px',fontSize:'0.8rem',lineHeight:1.9,
+              background: verify.every(v => v.n > 0) ? 'rgba(76,154,132,0.10)' : 'rgba(212,122,143,0.10)',
+              border: '1px solid ' + (verify.every(v => v.n > 0) ? 'var(--jade)' : 'var(--danger)')}} data-verify>
+              <b>ตรวจซ้ำ: เปิดเพลงย่อยแล้วอ่านโน้ตได้จริงไหม</b>
+              {verify.map(v => (
+                <div key={v.id} style={{color: v.n > 0 ? 'var(--jade)' : 'var(--danger)'}}>
+                  {v.n > 0 ? '✓' : '✗'} {v.id} {v.name} — {v.error ?? `${v.n} วรรค`}
+                </div>
+              ))}
+              {verify.every(v => v.n > 0) && (
+                <div style={{fontSize:'0.74rem',color:'var(--muted)',marginTop:'4px'}}>
+                  ข้อมูลผูกเรียบร้อยแล้ว · <b style={{color:'var(--gold2)'}}>ถ้าเปิดหน้าเพลงย่อยแล้วยังไม่เห็นโน้ต
+                  และไม่เห็นป้าย 🧩 ที่หัวเพลง</b> แปลว่าไฟล์ <code>app/songs/[id]/SongDetailClient.js</code>
+                  ยังไม่ได้ถูกวางทับ — หน้านั้นยังอ่านแบบเดิมอยู่ จึงหาโน้ตไม่เจอ
+                </div>
+              )}
+            </div>
+          )}
 
           {log.length > 0 && (
             <div style={{marginTop:'0.8rem',fontSize:'0.78rem',lineHeight:1.9}} data-log>
