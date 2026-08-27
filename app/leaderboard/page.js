@@ -6,6 +6,7 @@ import { supabase } from '../../lib/supabase';
 import Link from 'next/link';
 import Avatar from '../../components/Avatar';
 import { getRank, getNextRank, RANKS } from '../../lib/ranks';
+import { POINT_RULES, ruleAmount } from '../../lib/points';
 import RankBadge from '../../components/RankBadge';
 
 // ทำเนียบเป็นการแข่งขันของสมาชิกจริง ๆ — ผู้ดูแลไม่ลงแข่ง (Pk 27 ส.ค. 69)
@@ -39,6 +40,32 @@ export default function LeaderboardPage() {
       <EText k="board.title" className="section-title">ทำเนียบนักจดหมายเหตุ</EText>
       <div className="section-subtitle">
         อันดับผู้ร่วมสร้างหอจดหมายเหตุดนตรีไทย · สะสมศักดินาจากผลงานที่ได้รับอนุมัติ
+      </div>
+
+      {/* เงื่อนไขการได้ศักดินา — อ่านจาก lib/points.js ที่เดียว จะได้ตรงกับที่ระบบให้จริงเสมอ (Pk 27 ส.ค. 69) */}
+      <div className="card" style={{marginBottom:'1.4rem'}}>
+        <div style={{fontSize:'0.85rem',fontWeight:600,marginBottom:'0.2rem'}}>เงื่อนไขการได้ศักดินา</div>
+        <div style={{fontSize:'0.72rem',color:'var(--muted)',marginBottom:'0.8rem'}}>
+          ศักดินาเข้าเมื่อผู้ดูแลตรวจแล้ว "อนุมัติ" ผลงานเท่านั้น · ของที่ยังรอตรวจยังไม่นับ
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead><tr><th>ผลงาน</th><th style={{textAlign:'right',whiteSpace:'nowrap'}}>ศักดินา</th></tr></thead>
+            <tbody>
+              {POINT_RULES.map(r => (
+                <tr key={r.key} style={{opacity: r.pts ? 1 : 0.55}}>
+                  <td>
+                    <span style={{marginRight:'6px'}}>{r.icon}</span>{r.label}
+                    {r.bonus && <span style={{color:'var(--gold)',fontSize:'0.72rem'}}> · {r.bonus} +{r.bonusPts}</span>}
+                    {r.note && <div style={{fontSize:'0.66rem',color:'var(--muted)',marginTop:'2px'}}>{r.note}</div>}
+                  </td>
+                  <td style={{textAlign:'right',whiteSpace:'nowrap',fontFamily:'monospace',
+                              color: r.pts ? 'var(--jade)' : 'var(--muted)'}}>{ruleAmount(r)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="card" style={{marginBottom:'1.4rem'}}>

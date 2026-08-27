@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import AnniversaryBanner from '../components/AnniversaryBanner';
 import GoalBanner from '../components/GoalBanner';
+import TopArchivists from '../components/TopArchivists';
+import RandomEvents from '../components/RandomEvents';
 import { EText, EImage } from '../components/Editable';
 
 const PAGE_SIZE = 25;
@@ -90,6 +92,9 @@ export default function HomePage() {
         {/* ป้ายเป้าหมาย: โพสต์เหตุการณ์ → 300 ศักดินา → ขุน → ปลดล็อกกระดานโน้ตฟรี */}
         <GoalBanner />
 
+        {/* ตัววิ่งอันดับ 1-2-3 ของทำเนียบ (Pk 27 ส.ค. 69) */}
+        <TopArchivists />
+
         {/* ── Hero: สองหอ ── */}
         <section className="hero2">
           <a href="#songs" className="hero-card hero-songs">
@@ -116,6 +121,9 @@ export default function HomePage() {
           <EImage k="home.banner.right" height={200} />
         </div>
         <HeroAuth />
+
+        {/* สุ่มเหตุการณ์จากหอจดหมายเหตุ (Pk 27 ส.ค. 69) */}
+        <RandomEvents />
 
         <EText k="home.list.title" as="div" className="section-title" style={{}}>รายการเพลงทั้งหมด</EText>
         <div className="section-subtitle">Thai Classical Music Catalog · {count} songs</div>

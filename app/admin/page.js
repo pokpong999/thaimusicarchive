@@ -7,6 +7,7 @@ import NotationInput from '../../components/NotationInput';
 import { NathabPreview } from '../../components/NathabEditor';
 import { invalidateNathabLibrary, saveSongDefaults } from '../../lib/nathab';
 import { refreshSongStats } from '../../lib/songstats';
+import { pointsFor, awardLabel } from '../../lib/points';
 import { fmtDT, ago } from '../../lib/fmtdate';
 
 // กระดานอ่านอย่างเดียวสำหรับดู/ฟังโน้ตที่ส่งมาก่อนอนุมัติ
@@ -58,6 +59,7 @@ export default function AdminPage() {
   const [activity, setActivity] = useState({});   // id → {joined_at, last_sign_in_at}
   // เรียงตารางสมาชิก: กดหัวคอลัมน์ · กดซ้ำสลับ มาก→น้อย
   const [memberSort, setMemberSort] = useState({ key: 'points', dir: -1 });
+  const [recountMsg, setRecountMsg] = useState('');
   const sortMembers = key => setMemberSort(s => ({ key, dir: s.key === key ? -s.dir : (key === 'points' || key === 'joined' || key === 'lastseen' ? -1 : 1) }));
   const memberVal = (m, key) => {
     if (key === 'joined') return activity[m.id]?.joined_at ?? m.created_at ?? '';
@@ -214,17 +216,36 @@ export default function AdminPage() {
     setMgFiles(mf ?? []);
   }
 
-  // ให้ศักดินาผู้ส่ง — ปุ่มอนุมัติทุกปุ่มเขียนว่า "+10 ศักดินา" แต่เดิมให้จริงแค่ 2 เส้นทาง (แก้ 27 ส.ค. 69)
-  async function award(uid, pts = 10) {
-    if (!uid) return;
-    try { await supabase.rpc('add_points', { uid, pts }); } catch (e) { /* ไม่มีฟังก์ชันก็ยังอนุมัติได้ */ }
+  // ให้ศักดินาผู้ส่ง — อัตราอยู่ที่ lib/points.js ที่เดียว (Pk เคาะ 27 ส.ค. 69)
+  //   เดิมให้ +10 เท่ากันหมดทุกประเภท และบางเส้นทางลืมให้ → แต้มขาดบ้างเกินบ้าง
+  //   ถ้าฐานยังไม่ได้รัน sql/24 ฟังก์ชัน add_points อาจไม่มี — เตือนให้เห็น ไม่กลืนเงียบเหมือนเดิม
+  async function award(uid, kind, opts) {
+    const pts = pointsFor(kind, opts);
+    if (!uid || !pts) return;
+    const { error } = await supabase.rpc('add_points', { uid, pts });
+    if (error) alert('อนุมัติแล้ว แต่ให้ศักดินาไม่สำเร็จ: ' + error.message + '\n(ยังไม่ได้รัน sql/24 หรือเปล่า?)');
   }
+  // นับศักดินาใหม่ทั้งระบบ (เรียก sql/24) — ใช้เมื่อกติกาเปลี่ยน หรือสงสัยว่าแต้มใครเพี้ยน
+  async function recountPoints() {
+    if (!confirm('นับศักดินาของสมาชิกทุกคนใหม่จากผลงานที่อนุมัติจริง?\n\nแต้มจะถูกคำนวณใหม่ทั้งหมดตามกติกาปัจจุบัน ไม่ใช่บวกทับของเดิม')) return;
+    setRecountMsg('กำลังนับ...');
+    const { data, error } = await supabase.rpc('thma_recount_points');
+    if (error) { setRecountMsg('⚠ นับไม่สำเร็จ: ' + error.message + ' (ยังไม่ได้รัน sql/24 หรือเปล่า?)'); return; }
+    const rows = data ?? [];
+    if (!rows.length) { setRecountMsg('✓ นับเสร็จ — ทุกคนแต้มตรงกับผลงานอยู่แล้ว ไม่มีใครขยับ'); loadAll(); return; }
+    const top = rows.slice(0, 12).map(r =>
+      `${r.display_name ?? '—'}  ${r.old_points} → ${r.new_points}  (${r.diff > 0 ? '+' : ''}${r.diff})`).join('\n');
+    setRecountMsg(`✓ นับเสร็จ — ขยับ ${rows.length} คน\n${top}` + (rows.length > 12 ? `\n… และอีก ${rows.length - 12} คน` : ''));
+    loadAll();
+  }
+  // บันทึกจดหมายเหตุที่แนบรูปได้แต้มเพิ่ม — เช็คจากสื่อที่แนบมากับแถว
+  const recordHasImage = r => (r?.archive_media ?? []).some(m => m.media_type === 'image');
   async function approveVideo(id) {
     const row = pendingVideos.find(v => v.id === id);
     await supabase.from('song_videos').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
     }).eq('id', id);
-    await award(row?.submitted_by);
+    await award(row?.submitted_by, 'video');
     loadAll();
   }
   async function rejectVideo(id) {
@@ -236,7 +257,7 @@ export default function AdminPage() {
     await supabase.from('archive_records').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
     }).eq('id', id);
-    await award(row?.submitted_by);
+    await award(row?.submitted_by, 'archive', { hasImage: recordHasImage(row) });
     loadAll();
   }
   async function rejectRecord(id) {
@@ -277,7 +298,7 @@ export default function AdminPage() {
       await saveSongDefaults(sub.song_id, { nathab: j.nathab, level: j.level, drum: j.drum, ching: j.ching, bpm: j.bpm });
     } catch (e) { /* ยังไม่ได้รัน sql/18 ก็ยังอนุมัติได้ */ }
     await refreshSongStats(sub.song_id, inst);
-    await award(sub.submitted_by);
+    await award(sub.submitted_by, 'tang');
     loadAll();
   }
   async function rejectTang(id) {
@@ -290,7 +311,7 @@ export default function AdminPage() {
     await supabase.from('song_files').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
     }).eq('id', id);
-    await award(row?.submitted_by);
+    await award(row?.submitted_by, 'file');   // ไฟล์ PDF ไม่นับศักดินา (Pk 27 ส.ค. 69)
     loadAll();
   }
   async function rejectFile(id) {
@@ -382,7 +403,7 @@ export default function AdminPage() {
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(), assigned_song_id: sid,
     }).eq('id', sub.id);
     await refreshSongStats(sid, inst);
-    await award(sub.submitted_by);
+    await award(sub.submitted_by, 'song');
     alert(createSong ? `✓ สร้างเพลง ${sid} (${rows.length} วรรค) แล้ว` : `✓ เพิ่มทาง "${inst}" ให้เพลง ${sid} (${rows.length} วรรค) แล้ว`);
     loadAll();
   }
@@ -585,7 +606,7 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
-                  <button className="btn btn-jade btn-sm" onClick={() => approveRecord(r.id)}>✓ Approve</button>
+                  <button className="btn btn-jade btn-sm" onClick={() => approveRecord(r.id)}>{awardLabel('archive', { hasImage: recordHasImage(r) })}</button>
                   <button className="btn btn-danger btn-sm" onClick={() => rejectRecord(r.id)}>✕ Reject</button>
                 </div>
               </div>
@@ -606,7 +627,7 @@ export default function AdminPage() {
                   <By id={v.submitted_by} at={v.created_at} members={members} />
                 </div>
                 <div style={{display:'flex',gap:'8px'}}>
-                  <button className="btn btn-jade btn-sm" onClick={() => approveVideo(v.id)}>✓ Approve</button>
+                  <button className="btn btn-jade btn-sm" onClick={() => approveVideo(v.id)}>{awardLabel('video')}</button>
                   <button className="btn btn-danger btn-sm" onClick={() => rejectVideo(v.id)}>✕ Reject</button>
                 </div>
               </div>
@@ -641,7 +662,7 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
-                  <button className="btn btn-jade btn-sm" onClick={() => approveTang(t.id)}>✓ Approve</button>
+                  <button className="btn btn-jade btn-sm" onClick={() => approveTang(t.id)}>{awardLabel('tang')}</button>
                   <button className="btn btn-danger btn-sm" onClick={() => rejectTang(t.id)}>✕ Reject</button>
                 </div>
               </div>
@@ -664,7 +685,7 @@ export default function AdminPage() {
                     <By id={f.submitted_by} at={f.created_at} members={members} />
                   </div>
                   <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
-                    <button className="btn btn-jade btn-sm" onClick={() => approveFile(f.id)}>✓ Approve</button>
+                    <button className="btn btn-jade btn-sm" onClick={() => approveFile(f.id)}>{awardLabel('file')}</button>
                     <button className="btn btn-danger btn-sm" onClick={() => rejectFile(f.id)}>✕ Reject</button>
                   </div>
                 </div>
@@ -735,7 +756,7 @@ export default function AdminPage() {
                 <input className="form-input" style={{width:'140px'}} placeholder="Song ID เช่น USR001"
                   value={songIdInput[s.id] ?? ''} onChange={e => setSongIdInput({...songIdInput, [s.id]: e.target.value})} />
                 <button className="btn btn-outline btn-sm" title="หา Song ID ว่างถัดไปจากคำนำหน้าที่พิมพ์ (เช่น SMR → SMR002)" onClick={() => suggestId(s)}>💡 ID ว่าง</button>
-                <button className="btn btn-jade btn-sm" onClick={() => approveSong(s)}>✓ อนุมัติ + สร้างเพลง</button>
+                <button className="btn btn-jade btn-sm" onClick={() => approveSong(s)}>✓ อนุมัติ + สร้างเพลง (+{pointsFor('song')} ศักดินา)</button>
                 <button className="btn btn-danger btn-sm" onClick={() => rejectSong(s.id)}>✕ ปฏิเสธ</button>
               </div>
             </div>
@@ -758,8 +779,8 @@ export default function AdminPage() {
                     await supabase.from('song_audio').update({
                       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
                     }).eq('id', a.id);
-                    await award(a.submitted_by); loadAll();
-                  }}>✓ อนุมัติ (+10 ศักดินา)</button>
+                    await award(a.submitted_by, 'audio'); loadAll();
+                  }}>{awardLabel('audio')}</button>
                   <button className="btn btn-danger btn-sm" onClick={async () => {
                     if (!confirm('ปฏิเสธและลบไฟล์เสียงนี้?')) return;
                     await supabase.storage.from('song-audio').remove([a.storage_path]);
@@ -985,8 +1006,12 @@ export default function AdminPage() {
         <div className="card">
           <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.8rem'}}>
             <div style={{fontWeight:600}}>👥 สมาชิกทั้งหมด ({members.length})</div>
-            <button className="btn btn-jade btn-sm" onClick={exportMembers}>📊 Export Excel</button>
+            <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+              <button className="btn btn-outline btn-sm" onClick={recountPoints}>🧮 นับศักดินาใหม่ทั้งระบบ</button>
+              <button className="btn btn-jade btn-sm" onClick={exportMembers}>📊 Export Excel</button>
+            </div>
           </div>
+          {recountMsg && <div style={{fontSize:'0.78rem',color:'var(--jade)',marginBottom:'0.7rem',whiteSpace:'pre-wrap'}}>{recountMsg}</div>}
           <div className="table-wrap">
             <table>
               <thead><tr><Th k="display_name">ชื่อ / อีเมล</Th><Th k="phone">ติดต่อ</Th><Th k="organization">สำนัก / จังหวัด</Th><Th k="points">ศักดินา</Th><Th k="joined">สมัคร · เข้าใช้ล่าสุด</Th><Th k="role">สถานะ</Th></tr></thead>
