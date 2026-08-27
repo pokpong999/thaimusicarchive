@@ -12,6 +12,11 @@ import StatBadge from '../../../components/StatBadge';
 import ShareBar from '../../../components/ShareBar';
 import SongNathab from '../../../components/SongNathab';
 import { fmtDT } from '../../../lib/fmtdate';
+import { fetchMelody, listParts } from '../../../lib/songparts';
+import SongPartsBar from '../../../components/SongPartsBar';
+
+// รุ่นของหน้าเพลง — ขึ้นเป็นข้อความเล็ก ๆ ใต้ชื่อเพลง ไว้ตรวจว่าไฟล์นี้ถูกวางทับแล้ว
+export const SONGPAGE_VERSION = '27 ส.ค. 69 · r2 (รองรับเพลงย่อย)';
 
 export default function SongDetailClient() {
   const { can } = usePermissions();
@@ -22,6 +27,8 @@ export default function SongDetailClient() {
   const [instruments, setInstruments] = useState(['ทำนองหลัก']);
   const [contributors, setContributors] = useState({});
   const [instOwners, setInstOwners] = useState({});
+  const [parts, setParts] = useState([]);      // เพลงย่อย (ถ้าเพลงนี้เป็นเพลงเรื่อง)
+  const [melodyWhy, setMelodyWhy] = useState('');   // เหตุผลตอนโน้ตไม่ขึ้น
   const [songOwner, setSongOwner] = useState(null);
   const [instAt, setInstAt] = useState({});   // ทาง → created_at
   const [instrument, setInstrumentState] = useState(() => {
@@ -94,8 +101,12 @@ export default function SongDetailClient() {
     const { data: au } = await supabase.from('song_audio').select('*')
       .eq('song_id', id).eq('approved', true).order('created_at');
     setAudios(au ?? []);
+    // เพลงย่อยของเพลงเรื่องกรองด้วย part_song_id — โน้ตอยู่ที่เพลงเรื่อง ไม่ได้คัดลอกมา (sql/30)
+    const isPart = !!s?.parent_song_id;
+    setParts(isPart ? [] : await listParts(id));
     const { data: inst } = await supabase.from('song_melody')
-      .select('instrument, submitted_by, created_at').eq('song_id', id).eq('approved', true);
+      .select('instrument, submitted_by, created_at')
+      .eq(isPart ? 'part_song_id' : 'song_id', id).eq('approved', true);
     // วัน-เวลาที่บันทึกโน้ตแต่ละทาง (แถวแรกสุดของทางนั้น)
     const at = {};
     (inst ?? []).forEach(r => { const k = r.instrument ?? 'ทำนองหลัก'; if (r.created_at && (!at[k] || r.created_at < at[k])) at[k] = r.created_at; });
@@ -138,11 +149,20 @@ export default function SongDetailClient() {
   }
 
   useEffect(() => {
-    supabase.from('song_melody')
-      .select('*').eq('song_id', id).eq('instrument', instrument).eq('approved', true)
-      .order('verse_no')
-      .then(({ data }) => {
-        setMelody(data ?? []);
+    // fetchMelody รู้เองว่า id นี้เป็นเพลงเรื่องหรือเพลงย่อย และนับเลขวรรคใหม่ให้
+    fetchMelody(id, { instrument, approvedOnly: true })
+      .then(({ rows, error, ref, unapproved }) => {
+        setMelody(rows ?? []);
+        // ★ โน้ตไม่ขึ้นต้องบอกสาเหตุ ไม่ใช่โชว์หน้าว่างเปล่าให้เดาเอง (Pk เจอตอนแยกเพลงย่อย)
+        setMelodyWhy(
+          error ? 'อ่านโน้ตไม่ได้: ' + error.message
+                  + (/part_song_id|schema cache|column/i.test(error.message)
+                     ? ' — ยังไม่ได้รัน sql/30-31 หรือ Supabase ยังไม่รีเฟรชคอลัมน์ใหม่' : '')
+          : ref && !ref.ready ? 'ยังไม่ได้รัน sql/30 — ระบบเพลงย่อยยังไม่พร้อม'
+          : unapproved ? 'โน้ตชุดนี้ยังไม่ได้อนุมัติ — แสดงให้ดูไว้ก่อน กดอนุมัติที่หน้าผู้ดูแลเพื่อให้ทุกคนเห็น'
+          : (rows ?? []).length === 0 && ref?.isPart
+              ? `ยังไม่มีวรรคไหนถูกผูกกับเพลงย่อยนี้ — ลองแยกใหม่จากหน้าผู้ดูแล (เพลงเรื่อง ${ref.parentId})`
+          : '');
         // โน้ตโหลดแล้วค่อยเลื่อนกลับตำแหน่งเดิม (ครั้งแรกครั้งเดียว)
         if (!restoredRef.current) {
           restoredRef.current = true;
@@ -191,10 +211,10 @@ export default function SongDetailClient() {
   useEffect(() => {
     if (tab !== 'analysis' || krasuan !== null) return;
     supabase.from('krasuan_catalog').select('section, verse_no, code, pattern')
-      .eq('song_id', id).order('verse_no').limit(500)
+      .eq('song_id', id).order('verse_no').limit(2000)   // เพลงเรื่องยาวถึง 895 วรรค (Pk 27 ส.ค. 69)
       .then(({ data }) => setKrasuan(data ?? []));
     supabase.from('luktok_catalog').select('section, sentence_no, luktok_id, pair')
-      .eq('song_id', id).order('sentence_no').limit(300)
+      .eq('song_id', id).order('sentence_no').limit(2000)
       .then(({ data }) => setLuktok(data ?? []));
   }, [tab]);
 
@@ -248,6 +268,15 @@ export default function SongDetailClient() {
           {song.type && <span className="badge badge-mixed">{song.type}</span>}
           {song.notation && song.notation !== '-' && <span className="badge badge-fixed">{song.notation}</span>}
         </div>
+        <SongPartsBar song={song} parts={parts} />
+        {/* ป้ายรุ่น — ไว้ยืนยันว่าไฟล์นี้ถูกวางทับแล้ว (Pk 27 ส.ค. 69)
+            เพลงย่อยเคยไม่ขึ้นโน้ตเพราะไฟล์นี้ยังเป็นของเดิม มองจากหน้าจอไม่ออก */}
+        <div data-pagever style={{fontSize:'0.66rem',color:'var(--muted)',marginTop:'6px'}}>
+          หน้าเพลงรุ่น {SONGPAGE_VERSION}
+        </div>
+        {melodyWhy && <div data-melodywhy style={{marginTop:'0.6rem',padding:'0.6rem 0.8rem',borderRadius:'8px',
+          background:'rgba(212,122,143,0.10)',border:'1px solid var(--danger)',fontSize:'0.8rem',color:'var(--danger)'}}>
+          ⚠ {melodyWhy}</div>}
         {songOwner && <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
           ✍️ เพิ่มข้อมูลโดย: {songOwner}{song.created_at && <span style={{color:'var(--muted)'}}> · {fmtDT(song.created_at)}</span>}</div>}
         <div style={{marginTop:'0.8rem',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}}>
