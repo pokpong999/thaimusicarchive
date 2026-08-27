@@ -184,7 +184,7 @@ function Portfolio() {
         <div>
           {/* ข้อมูลเล่ม */}
           <div className="card">
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+            <div className="m1col" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
               <input className="form-input" placeholder="ชื่อเล่ม" value={draft.title} onChange={e => set({ title: e.target.value })} />
               <input className="form-input" placeholder="ชื่อรอง (ไม่บังคับ) เช่น ผลงานปีการศึกษา 2569" value={draft.subtitle ?? ''} onChange={e => set({ subtitle: e.target.value })} />
             </div>
