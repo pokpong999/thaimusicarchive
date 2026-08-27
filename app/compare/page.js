@@ -11,7 +11,7 @@ function SongCol({ side, songs, sel, setSel }) {
     if (!sel) { setVerses([]); return; }
     supabase.from('song_melody').select('verse_no, combined').eq('song_id', sel)
       .eq('approved', true).or('instrument.eq.ทำนองหลัก,instrument.is.null')
-      .order('verse_no').limit(400)
+      .order('verse_no').limit(2000)
       .then(({ data }) => setVerses(data ?? []));
   }, [sel]);
   return (

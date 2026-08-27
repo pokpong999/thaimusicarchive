@@ -46,7 +46,7 @@ export default function PrintPage() {
     const uniq = [...new Set((inst ?? []).map(r => r.instrument ?? 'ทำนองหลัก'))];
     setInstruments(uniq.length ? uniq : ['ทำนองหลัก']);
     const { data: kc } = await supabase.from('krasuan_catalog')
-      .select('verse_no, section').eq('song_id', id).limit(600);
+      .select('verse_no, section').eq('song_id', id).limit(2000);   // 610 วรรคเกินเพดานเดิม 600
     const secMap = {};
     (kc ?? []).forEach(r => secMap[r.verse_no] = r.section);
     setSections(secMap);

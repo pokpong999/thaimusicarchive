@@ -208,10 +208,10 @@ export default function SongDetailClient() {
   useEffect(() => {
     if (tab !== 'analysis' || krasuan !== null) return;
     supabase.from('krasuan_catalog').select('section, verse_no, code, pattern')
-      .eq('song_id', id).order('verse_no').limit(500)
+      .eq('song_id', id).order('verse_no').limit(2000)   // เพลงเรื่องยาวถึง 895 วรรค (Pk 27 ส.ค. 69)
       .then(({ data }) => setKrasuan(data ?? []));
     supabase.from('luktok_catalog').select('section, sentence_no, luktok_id, pair')
-      .eq('song_id', id).order('sentence_no').limit(300)
+      .eq('song_id', id).order('sentence_no').limit(2000)
       .then(({ data }) => setLuktok(data ?? []));
   }, [tab]);
 
