@@ -8,6 +8,11 @@ import TopArchivists from '../components/TopArchivists';
 import RandomEvents from '../components/RandomEvents';
 import { EText, EImage } from '../components/Editable';
 import SongTypeSelect from '../components/SongTypeSelect';
+import ProofBox from '../components/ProofBox';
+import { PROOF, proofProgress } from '../lib/proof';
+
+// รุ่นของหน้าแรก — ขึ้นเป็นข้อความเล็ก ๆ ใต้ตาราง ไว้ตรวจว่าไฟล์นี้ถูกอัพแล้ว (Pk 27 ส.ค. 69)
+export const HOME_VERSION = '27 ส.ค. 69 · r3 (ติ๊กตรวจทาน)';
 
 const PAGE_SIZE = 25;
 
@@ -33,12 +38,15 @@ export default function HomePage() {
   const [q, setQ] = useState('');
   const [fType, setFType] = useState('');      // กรองตามประเภทเพลง (Pk 27 ส.ค. 69)
   const [fStyle, setFStyle] = useState('');   // กรองตามลักษณะการบรรเลง
+  const [fProof, setFProof] = useState('');   // กรองตามสถานะตรวจทาน (Pk 27 ส.ค. 69)
+  const [prog, setProg] = useState(null);     // ความคืบหน้าการตรวจทานทั้งคลัง
+  const [names, setNames] = useState({});     // ชื่อผู้ดูแลที่ตรวจ
   const [loading, setLoading] = useState(true);
   const [videoCounts, setVideoCounts] = useState({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [stats, setStats] = useState(null);
 
-  useEffect(() => { load(); }, [page, q, fType, fStyle]);
+  useEffect(() => { load(); }, [page, q, fType, fStyle, fProof]);
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) return;
@@ -61,6 +69,9 @@ export default function HomePage() {
     })();
   }, []);
 
+  // ความคืบหน้าการตรวจทาน — โหลดเมื่อเป็นผู้ดูแล
+  useEffect(() => { if (isAdmin) proofProgress().then(r => setProg(r.counts)); }, [isAdmin]);
+
   async function adminDeleteSong(s) {
     if (!confirm(`ลบเพลง "${s.name_th}" (${s.id}) ถาวร?\nโน้ต วิดีโอ ไฟล์ และคอมเมนต์ของเพลงนี้จะถูกลบทั้งหมด`)) return;
     const { error } = await supabase.from('songs').delete().eq('id', s.id);
@@ -74,6 +85,9 @@ export default function HomePage() {
     if (q) query = query.or(`name_th.ilike.%${q}%,id.ilike.%${q}%`);
     if (fType)  query = query.eq('type', fType);
     if (fStyle) query = query.eq('style', fStyle);
+    if (fProof) query = fProof === 'none'
+      ? query.or('proof_status.is.null,proof_status.eq.none')   // แถวเก่าที่ยังไม่มีค่า = ยังไม่ตรวจ
+      : query.eq('proof_status', fProof);
     const { data, count: c } = await query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
     setSongs(data ?? []);
     setCount(c ?? 0);
@@ -85,6 +99,13 @@ export default function HomePage() {
       const vc = {};
       (vids ?? []).forEach(v => { vc[v.song_id] = (vc[v.song_id] ?? 0) + 1; });
       setVideoCounts(vc);
+      // ชื่อผู้ดูแลที่ตรวจทาน — ให้คนถัดไปเห็นว่าใครตรวจไปแล้ว จะได้ไม่ตรวจซ้ำ
+      const pu = [...new Set(data.map(s2 => s2.proof_by).filter(Boolean))];
+      if (pu.length) {
+        const { data: pn } = await supabase.from('profiles').select('id, display_name').in('id', pu);
+        const nm = {}; (pn ?? []).forEach(x => { nm[x.id] = x.display_name; });
+        setNames(n => ({ ...n, ...nm }));
+      }
     }
   }
 
@@ -140,19 +161,44 @@ export default function HomePage() {
             onChange={v => { setFType(v ?? ''); setPage(0); }} />
           <SongTypeSelect kind="style" value={fStyle} className="filter-select" blankLabel="ทุกลักษณะการบรรเลง"
             onChange={v => { setFStyle(v ?? ''); setPage(0); }} />
-          {(fType || fStyle) && (
-            <button className="btn btn-outline btn-sm" onClick={() => { setFType(''); setFStyle(''); setPage(0); }}>
+          {isAdmin && (
+            <select className="filter-select" value={fProof} onChange={e => { setFProof(e.target.value); setPage(0); }}
+              title="กรองตามสถานะการตรวจทานโน้ต">
+              <option value="">ทุกสถานะตรวจทาน</option>
+              {PROOF.map(p => <option key={p.v} value={p.v}>{p.icon} {p.label}</option>)}
+            </select>
+          )}
+          {(fType || fStyle || fProof) && (
+            <button className="btn btn-outline btn-sm" onClick={() => { setFType(''); setFStyle(''); setFProof(''); setPage(0); }}>
               ✕ ล้างตัวกรอง</button>
           )}
         </div>
+        {isAdmin && prog && (
+          <div data-proofprog style={{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',
+            fontSize:'0.76rem',margin:'0.2rem 0 0.6rem'}}>
+            <span style={{color:'var(--muted)'}}>ตรวจทานโน้ต:</span>
+            {PROOF.map(p => (
+              <button key={p.v} type="button" className="btn btn-outline btn-sm"
+                onClick={() => { setFProof(fProof === p.v ? '' : p.v); setPage(0); }}
+                style={{color:p.color,borderColor: fProof === p.v ? p.color : 'var(--border)',
+                  padding:'3px 9px',minHeight:'28px',fontSize:'0.74rem'}}>
+                {p.icon} {p.label} {prog[p.v] ?? 0}
+              </button>
+            ))}
+            <span style={{color:'var(--jade)'}}>
+              เสร็จแล้ว {Math.round(((prog.ok ?? 0) / Math.max(1, prog.total ?? 1)) * 100)}%
+              ({prog.ok ?? 0}/{prog.total ?? 0})
+            </span>
+          </div>
+        )}
         <div className="table-wrap">
           <table>
             <thead><tr>
-              <th>Song ID</th><th>ชื่อเพลง</th><th>ประเภท</th><th>ลักษณะการบรรเลง</th><th>วรรค</th><th>กระสวน</th><th>วิดีโอ</th>{isAdmin && <th></th>}
+              <th>Song ID</th><th>ชื่อเพลง</th><th>ประเภท</th><th>ลักษณะการบรรเลง</th><th>วรรค</th><th>กระสวน</th><th>วิดีโอ</th>{isAdmin && <th>ตรวจทาน</th>}{isAdmin && <th></th>}
             </tr></thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={isAdmin ? 8 : 7} style={{textAlign:'center',color:'var(--muted)'}}>กำลังโหลด...</td></tr>
+                <tr><td colSpan={isAdmin ? 9 : 7} style={{textAlign:'center',color:'var(--muted)'}}>กำลังโหลด...</td></tr>
               ) : songs.map(s => (
                 <tr key={s.id}>
                   <td className="song-id">{s.id}</td>
@@ -161,6 +207,9 @@ export default function HomePage() {
                     {/* เพลงย่อยที่แยกจากเพลงเรื่อง — บอกที่มาไว้ จะได้ไม่งงว่ามาจากไหน (Pk 27 ส.ค. 69) */}
                     {s.parent_song_id && <span style={{fontSize:'0.68rem',color:'var(--muted)',marginLeft:'6px'}}
                       title={'เพลงย่อยใน ' + s.parent_song_id}>🧩 {s.parent_song_id}</span>}
+                    {/* ให้ผู้ใช้ทั่วไปเห็นด้วยว่าโน้ตเพลงนี้ผ่านการตรวจทานแล้ว */}
+                    {s.proof_status === 'ok' && <span title="โน้ตผ่านการตรวจทานแล้ว"
+                      style={{fontSize:'0.68rem',color:'var(--jade)',marginLeft:'6px'}}>✅</span>}
                   </td>
                   <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.type || <span style={{color:'var(--border)'}}>—</span>}</td>
                   <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.style || <span style={{color:'var(--border)'}}>—</span>}</td>
@@ -170,6 +219,11 @@ export default function HomePage() {
                     ? <span style={{color:'var(--jade)',fontSize:'0.78rem'}}>▶ {videoCounts[s.id]}</span>
                     : <span style={{color:'var(--border)'}}>—</span>}</td>
                   {isAdmin && <td>
+                    <ProofBox song={s} names={names}
+                      onChange={u => { setSongs(list => list.map(x => x.id === u.id ? u : x));
+                                       proofProgress().then(r => setProg(r.counts)); }} />
+                  </td>}
+                  {isAdmin && <td>
                     <button className="btn btn-danger btn-sm btn-icon" onClick={() => adminDeleteSong(s)}
                       title="ลบเพลง (Admin)">🗑</button>
                   </td>}
@@ -177,6 +231,9 @@ export default function HomePage() {
               ))}
             </tbody>
           </table>
+        </div>
+        <div style={{fontSize:'0.66rem',color:'var(--muted)',margin:'0.3rem 0'}} data-homever>
+          หน้าแรกรุ่น {HOME_VERSION}
         </div>
         <div className="pagination">
           <div style={{fontSize:'0.75rem',color:'var(--muted)'}}>

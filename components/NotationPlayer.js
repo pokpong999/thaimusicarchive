@@ -666,7 +666,11 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   function renderMulti(segs, label, hk = null) {
     return (
       <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-        {label && <span style={{fontSize:'0.65rem',color:'var(--muted)',width:'26px',textAlign:'right',flexShrink:0}}>{label}</span>}
+        {/* ★ ช่องชื่อแนวเดิมกว้าง 26px ซึ่งแคบกว่าคำว่า "มือซ้าย" คำเลยตกบรรทัด (Pk 27 ส.ค. 69)
+            ต้องกว้างพอสำหรับป้ายที่ยาวที่สุด (มือขวา/มือซ้าย) และห้ามตัดคำเด็ดขาด
+            ใช้ความกว้างคงที่ ไม่ใช่ auto — ทุกแนวจะได้เริ่มโน้ตตรงกันพอดี */}
+        {label && <span style={{fontSize:'0.65rem',color:'var(--muted)',width:'46px',textAlign:'right',
+          flexShrink:0,whiteSpace:'nowrap',paddingRight:'2px'}}>{label}</span>}
         <div style={{display:'flex',flexWrap:'nowrap'}}>
           {segs.map((s, si) => (
             <span key={si} style={{display:'flex'}}>
