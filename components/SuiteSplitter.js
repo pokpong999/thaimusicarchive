@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { suggestParts, partIdFor, makePart, unmakePart, listParts, partError,
-         suiteReport, reportSummary, fetchMelody } from '../lib/songparts';
+         suiteReport, reportSummary, fetchMelody, suiteCheck, fixSuiteVerses } from '../lib/songparts';
 
 const MAIN = 'ทำนองหลัก';
 
@@ -30,6 +30,7 @@ export default function SuiteSplitter() {
   const [instUsed, setInstUsed] = useState(null);
   const [gap, setGap] = useState(null);        // โน้ตในฐานไม่ครบตามที่บันทึกไว้
   const [verify, setVerify] = useState(null);  // อ่านโน้ตของเพลงย่อยได้จริงไหม
+  const [dups, setDups] = useState(null);      // ลำดับวรรคพังไหม (sql/38)
 
   // เพลงที่น่าจะเป็นเพลงเรื่อง — ดูจากประเภท หรือชื่อที่มีคำว่า เรื่อง/ตับ
   useEffect(() => {
@@ -109,6 +110,16 @@ export default function SuiteSplitter() {
     setBusy(false);
   }
 
+  async function repair() {
+    setBusy(true); setErr(''); setMsg('');
+    const { rows: r, error } = await fixSuiteVerses(sid);
+    setBusy(false);
+    if (error) { setErr(partError(error.message)); return; }
+    const n = (r ?? []).reduce((a, x) => a + Number(x.fixed ?? 0), 0);
+    setMsg(`✓ ซ่อมลำดับวรรคแล้ว ${n} วรรค — เปิดหน้าเพลงเรื่องดูได้เลย`);
+    suiteCheck(sid).then(x => setDups(x.error ? null : x.rows));
+  }
+
   return (
     <div className="card" data-splitter>
       <div style={{fontWeight:600,marginBottom:'0.3rem'}}>🧩 แยกเพลงย่อยจากเพลงเรื่อง</div>
@@ -117,6 +128,30 @@ export default function SuiteSplitter() {
         <b style={{color:'var(--gold2)'}}>โน้ตไม่ถูกคัดลอก</b> — ยังเป็นชุดเดียวที่เพลงเรื่อง
         แก้ที่เพลงย่อยหรือที่เพลงเรื่องก็คือแถวเดียวกัน ไม่มีทางไม่ตรงกัน
       </div>
+
+      {/* ── ลำดับวรรคพัง: บันทึกจากหน้าเพลงย่อยรุ่นเก่าแล้วเลขวรรคไปทับของเพลงเรื่อง (Pk 28 ส.ค. 69) ── */}
+      {dups?.length > 0 && (
+        <div data-dupwarn style={{border:'1px solid var(--danger)',borderRadius:'8px',
+          padding:'0.8rem 1rem',marginBottom:'0.9rem',fontSize:'0.82rem',lineHeight:1.8}}>
+          <div style={{color:'var(--danger)',fontWeight:600}}>⚠ ลำดับวรรคของเพลงเรื่องนี้พัง</div>
+          {dups.map(d => (
+            <div key={d.instrument} style={{color:'var(--muted)'}}>
+              {d.instrument}: {d.rows_n} วรรค แต่เลขวรรคซ้ำกัน {d.dups} วรรค
+            </div>
+          ))}
+          <div style={{color:'var(--muted)'}}>
+            เกิดจากการบันทึกที่หน้าเพลงย่อยรุ่นก่อน แล้วเลขวรรคของเพลงย่อยไปทับเลขของเพลงเรื่อง
+            เปิดหน้าเพลงเรื่องจะเห็นท่อนสลับกันมั่ว — <b>ตัวโน้ตไม่ได้หายไปไหน แค่เรียงผิด</b>
+          </div>
+          <button className="btn btn-primary btn-sm" disabled={busy} onClick={repair}
+            style={{marginTop:'0.5rem'}}>🔧 ซ่อมลำดับวรรคให้ถูกต้อง</button>
+        </div>
+      )}
+      {dups?.length === 0 && sid && (
+        <div data-dupok style={{fontSize:'0.76rem',color:'var(--jade)',marginBottom:'0.7rem'}}>
+          ✓ ลำดับวรรคของเพลงเรื่องนี้เรียบร้อยดี
+        </div>
+      )}
 
       <select className="form-input" style={{maxWidth:'480px'}} value={sid} onChange={e => setSid(e.target.value)}>
         <option value="">— เลือกเพลงเรื่อง —</option>
@@ -127,6 +162,7 @@ export default function SuiteSplitter() {
         <div style={{display:'flex',gap:'8px',alignItems:'center',marginTop:'0.6rem',flexWrap:'wrap'}}>
           <button className="btn btn-outline btn-sm" disabled={busy} onClick={async () => {
             setBusy(true); setErr('');
+            suiteCheck(sid).then(r => setDups(r.error ? null : r.rows));
             const { rows: rr, error } = await suiteReport(sid);
             setBusy(false);
             if (error) { setErr('ตรวจไม่ได้: ' + partError(error.message)); setReport(null); return; }

@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import SongTypeSelect from '../../components/SongTypeSelect';
 import ProofBox from '../../components/ProofBox';
@@ -9,7 +9,7 @@ import { useLang } from '../../lib/i18n';
 import { trText } from '../../lib/translate';
 
 // รุ่นของหน้าฐานข้อมูลเพลง — ไว้ตรวจว่าไฟล์นี้ถูกอัพแล้ว
-export const SONGDB_VERSION = '28 ส.ค. 69 · r3 (สองภาษา)';
+export const SONGDB_VERSION = '28 ส.ค. 69 · r4 (แก้ค้นหา)';
 
 const PAGE_SIZE = 25;
 
@@ -28,6 +28,11 @@ export default function SongDatabasePage() {
   const [loading, setLoading] = useState(true);
   const [videoCounts, setVideoCounts] = useState({});
   const [isAdmin, setIsAdmin] = useState(false);
+  // ★ ลำดับคำขอ — กันคำตอบของคำขอเก่ามาทับคำตอบของคำขอใหม่
+  //   อาการที่ Pk เจอ: ค้นจากหน้าแรกแล้วเพลงขึ้นมาทั้งหมด
+  //   เพราะตอนเปิดหน้ายิงคำขอ "ไม่กรอง" ไปก่อนหนึ่งครั้ง แล้วค่อยอ่าน ?q= จาก URL แล้วยิงคำขอ "กรอง"
+  //   สองคำขอวิ่งพร้อมกัน ตัวไม่กรองตอบทีหลัง เลยทับผลที่กรองไว้ (Pk 28 ส.ค. 69)
+  const seq = useRef(0);
 
   // รับคำค้นจากช่องค้นหาด้านบน (/songs?q=…) — อ่านจาก URL ตรง ๆ
   // ไม่ใช้ useSearchParams เพราะ next build จะบังคับให้ห่อ Suspense ทั้งหน้า
@@ -58,6 +63,7 @@ export default function SongDatabasePage() {
   }
 
   async function load() {
+    const my = ++seq.current;
     setLoading(true);
     let query = supabase.from('songs').select('*', { count: 'exact' }).order('name_th');
     if (q) query = query.or(`name_th.ilike.%${q}%,id.ilike.%${q}%`);
@@ -67,6 +73,7 @@ export default function SongDatabasePage() {
       ? query.or('proof_status.is.null,proof_status.eq.none')   // แถวเก่าที่ยังไม่มีค่า = ยังไม่ตรวจ
       : query.eq('proof_status', fProof);
     const { data, count: c } = await query.range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+    if (my !== seq.current) return;            // มีคำขอใหม่กว่าแล้ว ทิ้งผลนี้ไป
     setSongs(data ?? []);
     setCount(c ?? 0);
     setLoading(false);
@@ -74,6 +81,7 @@ export default function SongDatabasePage() {
       const ids = data.map(s => s.id);
       const { data: vids } = await supabase.from('song_videos')
         .select('song_id').in('song_id', ids).eq('approved', true);
+      if (my !== seq.current) return;
       const vc = {};
       (vids ?? []).forEach(v => { vc[v.song_id] = (vc[v.song_id] ?? 0) + 1; });
       setVideoCounts(vc);

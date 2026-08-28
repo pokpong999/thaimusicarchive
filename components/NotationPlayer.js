@@ -18,7 +18,7 @@ const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
 import { buildVoices, SABAT_GAP_DEFAULT, kroSpans, kroStrikes, KRO_GAP_DEFAULT, DAMP_DUR_DEFAULT, CHAR_MARK,
-  HAND_BIT, DAMP_ALL, pairLead, sabatChain, sabatVel } from '../lib/notation-core';
+  HAND_BIT, DAMP_ALL, pairLead, sabatChain, sabatVel, startsLine } from '../lib/notation-core';
 import { tempoPlan, TEMPO_DEFAULTS, MODE_LABEL, halfCycleOfLevel, bpmAt, isContinuousSection, CONTINUOUS_WHY } from '../lib/tempo';
 import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
@@ -105,7 +105,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   const [sabatGap, setSabatGap] = useState(SABAT_DEFAULT);
   const [kroGap, setKroGap] = useState(KRO_GAP_DEFAULT);   // ความถี่การกรอ (วินาทีต่อไม้)
   const [bpm, setBpm] = useState(120);
-  const [hongsPerLine, setHongsPerLine] = useState(8);
+  // 0 = จัดบรรทัดตามต้นฉบับ (ตามที่บันทึกไว้ในกระดานแก้โน้ต) · ตัวเลขอื่น = บังคับกว้างเท่ากันทุกบรรทัด
+  //   ★ เดิมหน้านี้ "จัดเอง" เสมอ จึงไม่มีทางตรงกับหน้าแก้โน้ตที่จัดตามต้นฉบับ
+  //     คนแก้โน้ตเห็นบรรทัดละ 4 ห้อง แต่หน้าเพลงโชว์ 8 ห้อง — คนละภาพกันคนละหน้า (Pk 28 ส.ค. 69)
+  const [hongsPerLine, setHongsPerLine] = useState(0);
   const [nathab, setNathab] = useState('none');       // none | auto (ตามที่เพลงกำหนด) | ชื่อหน้าทับในคลัง
   const [libNames, setLibNames] = useState([]);       // ชื่อหน้าทับทั้งหมดในคลังกลาง (/nathab)
   const nathabTouchedRef = useRef(false);
@@ -755,19 +758,28 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   }, [tempoOn, totalSteps, blockOfStep, secBlocks, secModes, tempoOpts, bpm, parsed, level]);
 
   // ── จัดกลุ่มวรรคลงบรรทัด ตามจำนวนห้องต่อบรรทัดที่เลือก ──
+  // ต้นฉบับบอกการขึ้นบรรทัดไว้ไหม (line_break จาก sql/38 หรือ line_no ของเดิม)
+  const hasSrcLines = useMemo(
+    () => (verses ?? []).some(v => v.line_break != null || v.line_no != null), [verses]);
+
   const lineGroups = useMemo(() => {
     const groups = [];
+    const useSrc = hongsPerLine === 0 && hasSrcLines;
+    const width = hongsPerLine || 8;          // ไม่มีข้อมูลต้นฉบับ → กลับไปใช้ 8 ห้องเหมือนเดิม
     let cur = [], curHongs = 0;
     parsed.forEach((pv, vi) => {
       const h = pv.len / 4;
       // ขึ้นท่อนใหม่ = ขึ้นบรรทัดใหม่เสมอ ไม่งั้นหัวท่อนจะไปโผล่กลางบรรทัดไม่ได้ (Pk 27 ส.ค. 69)
       const newSec = vi > 0 && (pv.v.section ?? null) !== (parsed[vi - 1].v.section ?? null);
-      if (cur.length > 0 && (newSec || curHongs + h > hongsPerLine)) { groups.push(cur); cur = []; curHongs = 0; }
+      const brk = useSrc
+        ? (vi > 0 && startsLine(pv.v, parsed[vi - 1].v))     // ตามที่บันทึกไว้
+        : (curHongs + h > width);                            // บังคับกว้างเท่ากัน
+      if (cur.length > 0 && (newSec || brk)) { groups.push(cur); cur = []; curHongs = 0; }
       cur.push(vi); curHongs += h;
     });
     if (cur.length) groups.push(cur);
     return groups;
-  }, [parsed, hongsPerLine]);
+  }, [parsed, hongsPerLine, hasSrcLines]);
 
   if (!verses || verses.length === 0) {
     return <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ยังไม่มีข้อมูลโน้ตสำหรับเพลงนี้</div>;
@@ -891,7 +903,9 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           </label>
         )}
         {can('player_layout') && (
-          <select className="filter-select" value={hongsPerLine} onChange={e => setHongsPerLine(+e.target.value)}>
+          <select className="filter-select" value={hongsPerLine} onChange={e => setHongsPerLine(+e.target.value)}
+            title="จัดบรรทัดตามที่บันทึกไว้ในกระดานแก้โน้ต หรือบังคับให้ทุกบรรทัดกว้างเท่ากัน">
+            <option value="0">{hasSrcLines ? 'ตามต้นฉบับ' : 'ตามต้นฉบับ (ยังไม่มีข้อมูล)'}</option>
             <option value="2">2 ห้อง/บรรทัด</option>
             <option value="4">4 ห้อง/บรรทัด</option>
             <option value="8">8 ห้อง/บรรทัด</option>
