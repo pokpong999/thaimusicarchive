@@ -9,7 +9,7 @@ import NotificationBell from './NotificationBell';
 import { useLang } from '../lib/i18n';
 
 // รุ่นของแถบเมนู — ไว้ตรวจว่าไฟล์นี้ถูกอัพแล้ว (Pk 28 ส.ค. 69)
-export const TOPBAR_VERSION = '28 ส.ค. 69 · r2';
+export const TOPBAR_VERSION = '28 ส.ค. 69 · r3 (ค้นทั้งเว็บ)';
 
 // ช่องค้นหาบนแถบเมนู — Enter แล้วไปที่ฐานข้อมูลเพลงพร้อมคำค้น
 function NavSearch() {
@@ -17,7 +17,9 @@ function NavSearch() {
   const [q, setQ] = useState('');
   const go = () => {
     const v = q.trim();
-    window.location.href = v ? '/songs?q=' + encodeURIComponent(v) : '/songs';
+    // ★ ไปหน้าค้นทั้งเว็บ ไม่ใช่ฐานข้อมูลเพลงอย่างเดียว
+    //   "ค้นชื่อสมาชิก ค้นเหตุการณ์ ยังไม่มา" (Pk 28 ส.ค. 69)
+    window.location.href = v ? '/search?q=' + encodeURIComponent(v) : '/search';
   };
   return (
     <div className="nav-search" data-navsearch>

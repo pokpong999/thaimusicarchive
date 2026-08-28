@@ -16,7 +16,7 @@ import { EImage } from '../components/Editable';
 import { useLang } from '../lib/i18n';
 
 // รุ่นของหน้าแรก — ขึ้นเป็นข้อความเล็ก ๆ ใต้เนื้อหา ไว้ตรวจว่าไฟล์นี้ถูกอัพแล้ว
-export const HOME_VERSION = '28 ส.ค. 69 · r4 (แยกหน้า · สองภาษา)';
+export const HOME_VERSION = '28 ส.ค. 69 · r5 (ค้นทั้งเว็บ)';
 
 function HeroAuth() {
   const { t } = useLang();
@@ -39,7 +39,7 @@ function HomeSearch() {
   const [q, setQ] = useState('');
   const go = () => {
     const s = q.trim();
-    window.location.href = s ? '/songs?q=' + encodeURIComponent(s) : '/songs';
+    window.location.href = s ? '/search?q=' + encodeURIComponent(s) : '/search';
   };
   return (
     <div data-homesearch style={{display:'flex',gap:'8px',maxWidth:'620px',margin:'0 auto 1.6rem'}}>

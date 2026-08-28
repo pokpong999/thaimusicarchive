@@ -18,7 +18,7 @@ const BASE_FREQ = 261.63;
 const LOW_MARK = '\u0E3A';
 const HIGH_MARK = '\u0E4D';
 import { buildVoices, SABAT_GAP_DEFAULT, kroSpans, kroStrikes, KRO_GAP_DEFAULT, DAMP_DUR_DEFAULT, CHAR_MARK,
-  HAND_BIT, DAMP_ALL, pairLead, sabatChain, sabatVel, startsLine } from '../lib/notation-core';
+  HAND_BIT, DAMP_ALL, pairLead, sabatChain, sabatVel, lineFlags } from '../lib/notation-core';
 import { tempoPlan, TEMPO_DEFAULTS, MODE_LABEL, halfCycleOfLevel, bpmAt, isContinuousSection, CONTINUOUS_WHY } from '../lib/tempo';
 import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
@@ -761,6 +761,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
   // ต้นฉบับบอกการขึ้นบรรทัดไว้ไหม (line_break จาก sql/38 หรือ line_no ของเดิม)
   const hasSrcLines = useMemo(
     () => (verses ?? []).some(v => v.line_break != null || v.line_no != null), [verses]);
+  // ★ ตัวตัดสินการขึ้นบรรทัด — ตัวเดียวกับที่กระดานแก้โน้ตใช้ จึงตรงกันเสมอ
+  const srcNl = useMemo(() => lineFlags(verses ?? []), [verses]);
 
   const lineGroups = useMemo(() => {
     const groups = [];
@@ -772,14 +774,14 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       // ขึ้นท่อนใหม่ = ขึ้นบรรทัดใหม่เสมอ ไม่งั้นหัวท่อนจะไปโผล่กลางบรรทัดไม่ได้ (Pk 27 ส.ค. 69)
       const newSec = vi > 0 && (pv.v.section ?? null) !== (parsed[vi - 1].v.section ?? null);
       const brk = useSrc
-        ? (vi > 0 && startsLine(pv.v, parsed[vi - 1].v))     // ตามที่บันทึกไว้
+        ? (vi > 0 && !!srcNl[vi])                            // ตามที่บันทึกไว้ (ตัวเดียวกับกระดานแก้โน้ต)
         : (curHongs + h > width);                            // บังคับกว้างเท่ากัน
       if (cur.length > 0 && (newSec || brk)) { groups.push(cur); cur = []; curHongs = 0; }
       cur.push(vi); curHongs += h;
     });
     if (cur.length) groups.push(cur);
     return groups;
-  }, [parsed, hongsPerLine, hasSrcLines]);
+  }, [parsed, hongsPerLine, hasSrcLines, srcNl]);
 
   if (!verses || verses.length === 0) {
     return <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ยังไม่มีข้อมูลโน้ตสำหรับเพลงนี้</div>;
