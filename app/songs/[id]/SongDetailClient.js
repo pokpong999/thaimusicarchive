@@ -259,7 +259,7 @@ export default function SongDetailClient() {
 
   return (
     <main className="container">
-      <Link href="/"><span style={{color:'var(--muted)',fontSize:'0.8rem'}}>← กลับรายการ</span></Link>
+      <Link href="/songs"><span style={{color:'var(--muted)',fontSize:'0.8rem'}}>← กลับรายการ</span></Link>
       <div className="detail-hero" style={{marginTop:'1rem'}}>
         <div className="detail-id">{song.id}</div>
         <div className="detail-name">{song.name_th}</div>
