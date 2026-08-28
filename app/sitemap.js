@@ -1,6 +1,6 @@
 export default async function sitemap() {
   const base = 'https://thaimusicarchive.com';
-  const staticPages = ['', '/archive', '/leaderboard', '/krasuan', '/people', '/timeline',
+  const staticPages = ['', '/songs', '/archive', '/leaderboard', '/krasuan', '/people', '/timeline',
     '/compare', '/search', '/about', '/spec', '/data', '/glossary', '/learn']
     .map(p => ({ url: base + p, changeFrequency: 'weekly', priority: p === '' ? 1 : 0.7 }));
   let songs = [], records = [];

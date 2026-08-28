@@ -72,7 +72,7 @@ export default function LearnPage() {
         <div style={{fontWeight:600,marginBottom:'0.5rem'}}>๓. ไปต่อ · Next steps</div>
         <a href="/glossary" style={{color:'var(--gold2)'}}>📖 อภิธานศัพท์</a> ·{' '}
         <a href="/spec" style={{color:'var(--gold2)'}}>📐 มาตรฐาน Krasuan Code</a> ·{' '}
-        <a href="/" style={{color:'var(--gold2)'}}>🎼 เปิดโน้ตเพลงจริง 300 เพลง</a>
+        <a href="/songs" style={{color:'var(--gold2)'}}>🎼 เปิดโน้ตเพลงจริง 300 เพลง</a>
       </div>
     </main>
     </FeaturePage>

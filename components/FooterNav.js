@@ -1,24 +1,25 @@
 'use client';
 import { usePermissions, useMe } from './Gate';
-import { EText } from './Editable';
+import { useLang } from '../lib/i18n';
 
 export default function FooterNav() {
   const { can } = usePermissions();
   const { isAdmin } = useMe();
+  const { t } = useLang();
   const links = [
-    can('page_krasuan') && ['/krasuan', 'ค้นกระสวน'],
-    can('page_nathab') && ['/nathab', 'คลังหน้าทับ'],
-    isAdmin && ['/convert', '🔁 แปลงโน้ต'],   // เฉพาะแอดมินก่อน
-    can('page_people') && ['/people', 'ครูดนตรี'],
-    can('page_timeline') && ['/timeline', 'เส้นเวลา'],
-    can('page_compare') && ['/compare', 'เปรียบเทียบเพลง'],
-    can('page_search') && ['/search', 'ค้นหา'],
-    ['/about', 'เกี่ยวกับโครงการ'],
-    ['/premium', '💎 สมาชิกอุปถัมภ์'],
-    can('page_spec') && ['/spec', 'Krasuan Code'],
-    can('page_data') && ['/data', 'Open Data'],
-    can('page_glossary') && ['/glossary', 'อภิธานศัพท์'],
-    can('page_learn') && ['/learn', 'เรียนรู้'],
+    can('page_krasuan') && ['/krasuan', t('f_krasuan')],
+    can('page_nathab') && ['/nathab', t('f_nathab')],
+    isAdmin && ['/convert', t('f_convert')],   // เฉพาะแอดมินก่อน
+    can('page_people') && ['/people', t('f_people')],
+    can('page_timeline') && ['/timeline', t('f_timeline')],
+    can('page_compare') && ['/compare', t('f_compare')],
+    can('page_search') && ['/search', t('f_search')],
+    ['/about', t('f_about')],
+    ['/premium', t('f_premium')],
+    can('page_spec') && ['/spec', t('f_spec')],
+    can('page_data') && ['/data', t('f_data')],
+    can('page_glossary') && ['/glossary', t('f_glossary')],
+    can('page_learn') && ['/learn', t('f_learn')],
   ].filter(Boolean);
   return (
     <div style={{display:'flex',gap:'1.2rem',justifyContent:'center',flexWrap:'wrap',marginBottom:'0.6rem',fontSize:'0.8rem'}}>

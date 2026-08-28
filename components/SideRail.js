@@ -15,12 +15,14 @@ import { supabase } from '../lib/supabase';
 import { useNavMode } from '../lib/navpref';
 import Avatar from './Avatar';
 import NotificationBell from './NotificationBell';
+import { useLang } from '../lib/i18n';
 
 const isStaff = p => p?.role === 'admin' || p?.role === 'moderator';
 const isTeacher = p => !!p?.is_teacher || p?.role === 'teacher';
 const isSchool = p => isStaff(p) || isTeacher(p) || p?.role === 'student';
 
 export default function SideRail() {
+  const { t } = useLang();
   const { isRail, toggle } = useNavMode();
   const path = usePathname();
   const [user, setUser] = useState(null);
@@ -40,51 +42,54 @@ export default function SideRail() {
   if (!isRail) return null;
 
   const groups = [
-    { name: 'คลัง', items: [
-      { href: '/',            ico: '🎼', label: 'คลังเพลง' },
-      { href: '/archive',     ico: '📜', label: 'จดหมายเหตุ' },
-      { href: '/leaderboard', ico: '🏆', label: 'ทำเนียบ' },
-      { href: '/search',      ico: '🔍', label: 'ค้นหา' },
+    { name: t('rail_g_archive'), items: [
+      { href: '/songs',       ico: '🎼', label: t('rail_db') },
+      { href: '/archive',     ico: '📜', label: t('rail_archive') },
+      { href: '/leaderboard', ico: '🏆', label: t('rail_board') },
+      { href: '/search',      ico: '🔍', label: t('rail_search') },
     ] },
-    user && { name: 'สตูดิโอ', items: [
-      { href: '/songs/new', ico: '✍️', label: 'เขียนโน้ต' },
-      { href: '/nathab',    ico: '🥁', label: 'คลังหน้าทับ' },
-      { href: '/dashboard', ico: '📁', label: 'ผลงานของฉัน' },
-      { href: '/diary',     ico: '📔', label: 'ไดอารี่ · แฟ้มผลงาน' },
+    user && { name: t('rail_g_studio'), items: [
+      { href: '/songs/new', ico: '✍️', label: t('rail_write') },
+      { href: '/nathab',    ico: '🥁', label: t('rail_nathab') },
+      { href: '/dashboard', ico: '📁', label: t('rail_mine') },
+      { href: '/diary',     ico: '📔', label: t('rail_diary') },
     ] },
-    user && isSchool(profile) && { name: 'โรงเรียน', items: [
-      { href: '/classroom', ico: '🎓', label: 'ห้องเรียน' },
-      { href: '/homework',  ico: '📚', label: 'การบ้าน' },
+    user && isSchool(profile) && { name: t('rail_g_school'), items: [
+      { href: '/classroom', ico: '🎓', label: t('rail_class') },
+      { href: '/homework',  ico: '📚', label: t('rail_hw') },
     ] },
   ].filter(Boolean);
 
-  const active = href => (href === '/' ? path === '/' : path?.startsWith(href));
+  // /songs ต้องไม่ติดไฟตอนอยู่ /songs/new — เทียบให้ตรงกว่านั้นหน่อย
+  const active = href => (href === '/' ? path === '/'
+    : href === '/songs' ? (path === '/songs' || /^\/songs\/(?!new)/.test(path || ''))
+    : path?.startsWith(href));
 
   return (
     <>
       {/* แถบบางบนมือถือ — มีแค่ปุ่ม ☰ กับกระดิ่ง */}
       <div className="rail-mobbar">
-        <button type="button" className="rail-burger" aria-label="เปิดเมนู"
+        <button type="button" className="rail-burger" aria-label={t('rail_open')}
           aria-expanded={open} onClick={() => setOpen(v => !v)}>☰</button>
-        <Link href="/" className="rail-mobname">หอจดหมายเหตุดนตรีไทย</Link>
+        <Link href="/" className="rail-mobname">{t('brand')}</Link>
         <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:'8px'}}>
           {user && <NotificationBell userId={user.id} />}
           {user
             ? <Link href="/profile"><Avatar path={profile?.avatar_url} name={profile?.display_name} size={28} /></Link>
-            : <Link href="/login"><button className="btn btn-primary btn-sm">เข้าสู่ระบบ</button></Link>}
+            : <Link href="/login"><button className="btn btn-primary btn-sm">{t('cta_login')}</button></Link>}
         </div>
       </div>
 
       {open && <div className="rail-scrim" onClick={() => setOpen(false)} />}
 
-      <nav className={'siderail' + (open ? ' open' : '')} aria-label="เมนูหลัก">
+      <nav className={'siderail' + (open ? ' open' : '')} aria-label={t('rail_menu')}>
         <Link href="/" className="rail-brand">
           <svg width="26" height="26" viewBox="0 0 36 36" fill="none" aria-hidden="true">
             <circle cx="18" cy="18" r="16" stroke="#C9A84C" strokeWidth="1.5" />
             <circle cx="18" cy="18" r="9" stroke="#C9A84C" strokeWidth="1" strokeDasharray="2 3" />
             <circle cx="18" cy="18" r="3.5" fill="#C9A84C" opacity="0.85" />
           </svg>
-          <span className="rail-lbl rail-brandtxt">หอจดหมายเหตุดนตรีไทย</span>
+          <span className="rail-lbl rail-brandtxt">{t('brand')}</span>
         </Link>
 
         <div className="rail-scroll">
@@ -104,26 +109,26 @@ export default function SideRail() {
 
         <div className="rail-foot">
           {isStaff(profile) && (
-            <Link href="/admin" className={'rail-item' + (active('/admin') ? ' on' : '')} title="ผู้ดูแล">
-              <span className="rail-ico" aria-hidden="true">⚙️</span><span className="rail-lbl">ผู้ดูแล</span>
+            <Link href="/admin" className={'rail-item' + (active('/admin') ? ' on' : '')} title={t('nav_admin')}>
+              <span className="rail-ico" aria-hidden="true">⚙️</span><span className="rail-lbl">{t('nav_admin')}</span>
             </Link>
           )}
           {user ? (
-            <Link href="/profile" className="rail-item" title={profile?.display_name ?? 'โปรไฟล์'}>
+            <Link href="/profile" className="rail-item" title={profile?.display_name ?? t('nav_profile')}>
               <span className="rail-ico" aria-hidden="true">
                 <Avatar path={profile?.avatar_url} name={profile?.display_name} size={22} />
               </span>
-              <span className="rail-lbl">{profile?.display_name ?? 'โปรไฟล์'}</span>
+              <span className="rail-lbl">{profile?.display_name ?? t('nav_profile')}</span>
             </Link>
           ) : (
-            <Link href="/login" className="rail-item" title="เข้าสู่ระบบ">
-              <span className="rail-ico" aria-hidden="true">→</span><span className="rail-lbl">เข้าสู่ระบบ</span>
+            <Link href="/login" className="rail-item" title={t('cta_login')}>
+              <span className="rail-ico" aria-hidden="true">→</span><span className="rail-lbl">{t('cta_login')}</span>
             </Link>
           )}
           <button type="button" className="rail-item rail-switch" onClick={toggle}
-            title="กลับไปใช้แถบเมนูด้านบน">
+            title={t('nav_top_ttl')}>
             <span className="rail-ico" aria-hidden="true">⇧</span>
-            <span className="rail-lbl">ใช้แถบเมนูด้านบน</span>
+            <span className="rail-lbl">{t('nav_top')}</span>
           </button>
         </div>
       </nav>

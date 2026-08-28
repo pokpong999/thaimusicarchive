@@ -8,6 +8,28 @@ import Avatar from './Avatar';
 import NotificationBell from './NotificationBell';
 import { useLang } from '../lib/i18n';
 
+// รุ่นของแถบเมนู — ไว้ตรวจว่าไฟล์นี้ถูกอัพแล้ว (Pk 28 ส.ค. 69)
+export const TOPBAR_VERSION = '28 ส.ค. 69 · r2';
+
+// ช่องค้นหาบนแถบเมนู — Enter แล้วไปที่ฐานข้อมูลเพลงพร้อมคำค้น
+function NavSearch() {
+  const { t } = useLang();
+  const [q, setQ] = useState('');
+  const go = () => {
+    const v = q.trim();
+    window.location.href = v ? '/songs?q=' + encodeURIComponent(v) : '/songs';
+  };
+  return (
+    <div className="nav-search" data-navsearch>
+      <input type="search" className="nav-search-input" placeholder={t('search_ph')} value={q}
+        aria-label={t('search_go')}
+        onChange={e => setQ(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') go(); }} />
+      <button type="button" className="nav-search-go" onClick={go} title={t('search_go')}>🔍</button>
+    </div>
+  );
+}
+
 export default function Topbar() {
   const { lang, setLang, t } = useLang();
   const [user, setUser] = useState(null);
@@ -48,25 +70,25 @@ export default function Topbar() {
           <circle cx="18" cy="18" r="3.5" fill="#C9A84C" opacity="0.85"/>
         </svg>
         <div>
-          <div className="logo-th">หอจดหมายเหตุดนตรีไทย</div>
-          <div className="logo-en">Thai Music Archive · THMA</div>
+          <div className="logo-th">{t('brand')}</div>
+          <div className="logo-en">{t('brand_sub')}</div>
         </div>
       </div></Link>
       <nav className="nav">
-        <Link href="/">{t("nav_songs")}</Link>
-        <Link href="/archive">{t("nav_archive")}</Link>
-        <Link href="/leaderboard">{t("nav_board")}</Link>
-        {user && <Link href="/songs/new">{t("nav_add")}</Link>}
-        {user && <Link href="/dashboard">{t("nav_mine")}</Link>}
+        <Link href="/songs">{t('nav_db')}</Link>
+        <Link href="/archive">{t('nav_archive')}</Link>
+        <Link href="/leaderboard">{t('nav_board')}</Link>
+        {user && <Link href="/songs/new">{t('nav_add')}</Link>}
+        {user && <Link href="/dashboard">{t('nav_mine')}</Link>}
         {/* เมนูการบ้าน — เห็นเฉพาะนักเรียนกับครู (Pk 27 ส.ค. 69) */}
         {user && (profile?.role === 'student' || profile?.is_teacher || profile?.role === 'teacher'
                   || profile?.role === 'admin' || profile?.role === 'moderator')
-          && <Link href="/homework" title="ส่งการบ้าน / ตรวจการบ้าน">📚 การบ้าน</Link>}
+          && <Link href="/homework" title={t('nav_homework_ttl')}>{t('nav_homework')}</Link>}
         {user && (profile?.role === 'student' || profile?.is_teacher || profile?.role === 'teacher'
                   || profile?.role === 'admin' || profile?.role === 'moderator')
-          && <Link href="/classroom" title="ห้องเรียน">🎓 ห้องเรียน</Link>}
-        {user && <Link href="/diary" title="ไดอารี่ดนตรี → แฟ้มผลงาน">{t("nav_diary")}</Link>}
-        <Link href="/search" title="search">🔍</Link>
+          && <Link href="/classroom" title={t('rail_class')}>{t('nav_class')}</Link>}
+        {user && <Link href="/diary" title={t('nav_diary_ttl')}>{t('nav_diary')}</Link>}
+        <NavSearch />
         <button type="button" onClick={() => setLang(lang === 'th' ? 'en' : 'th')}
           title={lang === 'th' ? 'Switch to English' : 'เปลี่ยนเป็นภาษาไทย'}
           style={{cursor:'pointer',fontSize:'0.8rem',border:'1px solid var(--border)',background:'transparent',
@@ -74,8 +96,8 @@ export default function Topbar() {
           {lang === 'th' ? 'EN' : 'ไทย'}</button>
         {/* สลับไปใช้รางไอคอนซ้าย — ลองใช้แล้วไม่ชอบก็กดกลับได้ (Pk 27 ส.ค. 69) */}
         <button type="button" className="nav-switch" onClick={toggleNav}
-          title="ย้ายเมนูไปเป็นรางไอคอนด้านซ้าย">☰ เมนูข้าง</button>
-        {(profile?.role === 'admin' || profile?.role === 'moderator') && <Link href="/admin">Admin</Link>}
+          title={t('nav_side_ttl')}>{t('nav_side')}</button>
+        {(profile?.role === 'admin' || profile?.role === 'moderator') && <Link href="/admin">{t('nav_admin')}</Link>}
       </nav>
       <div className="topbar-right">
         {user ? (
@@ -87,10 +109,10 @@ export default function Topbar() {
               {profile?.display_name ?? user.email}</span></Link>
             {profile?.role === 'admin' && <span className="badge badge-fixed">Admin</span>}
             {profile?.role === 'moderator' && <span className="badge badge-fixed">Moderator</span>}
-            <button className="btn btn-outline btn-sm" onClick={logout}>ออกจากระบบ</button>
+            <button className="btn btn-outline btn-sm" onClick={logout}>{t('nav_logout')}</button>
           </>
         ) : (
-          <Link href="/login"><button className="btn btn-primary btn-sm">เข้าสู่ระบบ / สมัคร</button></Link>
+          <Link href="/login"><button className="btn btn-primary btn-sm">{t('nav_signup')}</button></Link>
         )}
       </div>
     </header>

@@ -4,9 +4,11 @@
 //   สี่สถานะ · กดวนทีละขั้น หรือกดค้าง/คลิกขวาเพื่อเลือกจากรายการ
 //   ใต้ปุ่มบอกชื่อคนตรวจกับวันที่เสมอ — ส่วนที่ทำให้ "ไม่ต้องตรวจซ้ำ" จริง ๆ
 import { useState } from 'react';
-import { PROOF, PROOF_ORDER, proofOf, setProof, proofWho, proofError } from '../lib/proof';
+import { PROOF, PROOF_ORDER, proofOf, setProof, proofWho, proofError, proofLabel } from '../lib/proof';
+import { useLang } from '../lib/i18n';
 
 export default function ProofBox({ song, names = {}, onChange, compact = false }) {
+  const { t, lang } = useLang();
   const [busy, setBusy] = useState(false);
   const [open, setOpen] = useState(false);
   const [err, setErr] = useState('');
@@ -30,18 +32,18 @@ export default function ProofBox({ song, names = {}, onChange, compact = false }
     setNoteOpen(v === 'bad');
   };
   const next = () => apply(PROOF_ORDER[(PROOF_ORDER.indexOf(cur.v) + 1) % PROOF_ORDER.length]);
-  const who = proofWho(song, names);
+  const who = proofWho(song, names, lang);
 
   return (
     <div data-proof={song.id} style={{position:'relative',minWidth: compact ? '0' : '132px'}}>
       <div style={{display:'flex',gap:'4px',alignItems:'center'}}>
         <button type="button" className="btn btn-outline btn-sm" disabled={busy}
           onClick={next} onContextMenu={e => { e.preventDefault(); setOpen(o => !o); }}
-          title={`${cur.label}${who ? ' — ' + who : ''}\nคลิก = เปลี่ยนสถานะถัดไป · คลิกขวา = เลือกเอง`}
+          title={`${proofLabel(cur, lang)}${who ? ' — ' + who : ''}\n${t('proof_hint')}`}
           style={{color:cur.color,borderColor:cur.color,padding:'4px 8px',minHeight:'30px',fontSize:'0.76rem',whiteSpace:'nowrap'}}>
-          {cur.icon} {compact ? '' : cur.label}
+          {cur.icon} {compact ? '' : proofLabel(cur, lang)}
         </button>
-        <button type="button" className="btn btn-outline btn-sm" title="เลือกสถานะ / ใส่หมายเหตุ"
+        <button type="button" className="btn btn-outline btn-sm" title={t('proof_pick')}
           onClick={() => setOpen(o => !o)}
           style={{padding:'4px 6px',minHeight:'30px',fontSize:'0.7rem'}}>▾</button>
       </div>
@@ -60,18 +62,18 @@ export default function ProofBox({ song, names = {}, onChange, compact = false }
               onClick={() => apply(p.v, note)}
               style={{display:'block',width:'100%',textAlign:'left',marginBottom:'3px',
                 color:p.color,borderColor:p.v === cur.v ? p.color : 'var(--border)',fontSize:'0.76rem'}}>
-              {p.icon} {p.label}{p.v === cur.v ? ' ✓' : ''}
+              {p.icon} {proofLabel(p, lang)}{p.v === cur.v ? ' ✓' : ''}
             </button>
           ))}
           <input className="form-input" style={{fontSize:'0.74rem',marginTop:'4px'}}
-            placeholder="หมายเหตุ เช่น ท่อน 2 ลูกตกผิด" value={note}
+            placeholder={t('proof_note_ph')} value={note}
             onChange={e => setNote(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') apply(cur.v === 'none' ? 'bad' : cur.v, note); }} />
-          <div style={{fontSize:'0.64rem',color:'var(--muted)',marginTop:'3px'}}>กด Enter เพื่อบันทึกหมายเหตุ</div>
+          <div style={{fontSize:'0.64rem',color:'var(--muted)',marginTop:'3px'}}>{t('proof_enter')}</div>
         </div>
       )}
       {noteOpen && !open && (
-        <div style={{fontSize:'0.64rem',color:'var(--gold2)'}}>กด ▾ เพื่อใส่ว่าผิดตรงไหน</div>
+        <div style={{fontSize:'0.64rem',color:'var(--gold2)'}}>{t('proof_where')}</div>
       )}
     </div>
   );

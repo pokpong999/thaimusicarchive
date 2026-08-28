@@ -361,3 +361,26 @@ html.nav-rail .siderail:focus-within .rail-lbl { opacity:1; }
 .np-root.np-paper .np-krocover, .np-root.np-hicon .np-krocover {
   background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='7'%3E%3Cpath d='M0 5 q 3.5 -4.5 7 0 t 7 0' fill='none' stroke='%236E5510' stroke-width='1.6'/%3E%3C/svg%3E");
 }
+
+
+/* ── ช่องค้นหาบนแถบเมนู (Pk 28 ส.ค. 69) ──
+   "เพิ่มช่องค้นหาไว้ด้านบน จะได้ค้นง่าย"
+   จอแคบ ช่องจะหดเหลือแค่ปุ่มแว่น เพื่อไม่ให้แถบเมนูล้น */
+.nav-search { display:flex; align-items:center; gap:0; margin:0 0.6rem; }
+.nav-search-input {
+  width:190px; max-width:24vw; height:32px; padding:0 10px;
+  background:var(--navy); color:var(--fg); font-family:inherit; font-size:0.8rem;
+  border:1px solid var(--border); border-right:none; border-radius:6px 0 0 6px; outline:none;
+}
+.nav-search-input:focus { border-color:var(--gold); }
+.nav-search-input::placeholder { color:var(--muted); }
+.nav-search-go {
+  height:32px; padding:0 10px; cursor:pointer; font-size:0.85rem; line-height:1;
+  background:transparent; color:var(--muted); font-family:inherit;
+  border:1px solid var(--border); border-radius:0 6px 6px 0;
+}
+.nav-search-go:hover { color:var(--gold); border-color:var(--gold); }
+@media (max-width: 900px) {
+  .nav-search-input { display:none; }
+  .nav-search-go { border-radius:6px; }
+}
