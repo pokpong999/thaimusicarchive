@@ -20,14 +20,74 @@ import { JOBS, SYSTEM_PROMPT, buildBatch, buildUserMessage, parseAnswer, applyAn
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SVC  = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const ANTH = process.env.ANTHROPIC_API_KEY;
-const GOOG = process.env.GOOGLE_TRANSLATE_API_KEY;
+// ★ ตัดช่องว่างและอัญประกาศที่ติดมาตอนคัดลอกวางเสมอ
+//   Vercel เก็บค่าตามที่วางเป๊ะ ๆ — ขึ้นบรรทัดใหม่ตัวเดียวที่ติดมากับการกด Copy
+//   ก็ทำให้ Supabase ตอบ "Invalid API key" แล้ว และมองด้วยตาไม่มีทางเห็น (Pk 28 ส.ค. 69)
+const clean = v => String(v ?? '').trim().replace(/^["']|["']$/g, '').replace(/\s+/g, '');
+
+const URL_ = clean(process.env.NEXT_PUBLIC_SUPABASE_URL).replace(/\/+$/, '');
+const SVC  = clean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+const ANON = clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+const ANTH = clean(process.env.ANTHROPIC_API_KEY);
+const GOOG = clean(process.env.GOOGLE_TRANSLATE_API_KEY);
 const MODEL = process.env.TRANSLATE_MODEL || 'claude-haiku-4-5-20251001';
 
 const MAX_ROWS = 40;     // ต่อการเรียกหนึ่งครั้ง — กันไม่ให้คำสั่งยาวเกินและกันบิลพุ่ง
-const TR_VER = '28 ส.ค. 69 · r1';
+const TR_VER = '28 ส.ค. 69 · r2 (ตรวจกุญแจ)';
+
+// ── ตรวจกุญแจโดยไม่เปิดเผยตัวกุญแจ ────────────────────────────────
+//   กุญแจแบบเดิมของ Supabase เป็น JWT — ส่วนกลางถอดได้ ไม่ใช่ความลับ
+//   ในนั้นบอก "role" กับ "ref" (รหัสโปรเจ็ค) ซึ่งพอจะชี้ได้เลยว่าวางผิดตัวหรือผิดโปรเจ็ค
+function keyInfo(k) {
+  if (!k) return { set: false };
+  const out = { set: true, len: k.length, head: k.slice(0, 6) };
+  if (/^sb_secret_/.test(k))      { out.kind = 'secret'; return out; }
+  if (/^sb_publishable_/.test(k)) { out.kind = 'publishable'; return out; }
+  const p = k.split('.');
+  if (p.length !== 3) { out.kind = 'unknown'; return out; }
+  out.kind = 'jwt';
+  try {
+    const b = p[1].replace(/-/g, '+').replace(/_/g, '/');
+    const j = JSON.parse(Buffer.from(b + '='.repeat((4 - b.length % 4) % 4), 'base64').toString('utf8'));
+    out.role = j.role ?? null;
+    out.ref = j.ref ?? null;
+    if (j.exp) out.expired = j.exp * 1000 < Date.now();
+  } catch (e) { out.kind = 'jwt-unreadable'; }
+  return out;
+}
+
+const refOfUrl = u => (String(u).match(/^https?:\/\/([a-z0-9-]+)\./) ?? [])[1] ?? null;
+
+// ยิงคำขอเบา ๆ ไปที่ฐานจริง เพื่อดูว่ากุญแจใช้ได้ไหม — ไม่อ่านข้อมูลอะไรเลย
+async function pingDb() {
+  if (!URL_ || !SVC) return { ok: false, why: 'missing' };
+  try {
+    const r = await fetch(`${URL_}/rest/v1/songs?select=id&limit=1`, {
+      headers: { apikey: SVC, authorization: `Bearer ${SVC}` }, cache: 'no-store' });
+    if (r.ok) return { ok: true, status: r.status };
+    const t = await r.text();
+    return { ok: false, status: r.status, why: t.slice(0, 200) };
+  } catch (e) { return { ok: false, why: String(e.message ?? e) }; }
+}
+
+// แปลผลให้เป็นภาษาคน พร้อมบอกว่าต้องไปแก้ตรงไหน
+function diagnose(ping, ki, urlRef) {
+  if (ping.ok) return null;
+  if (!URL_) return 'ยังไม่ได้ตั้ง NEXT_PUBLIC_SUPABASE_URL';
+  if (!ki.set) return 'ยังไม่ได้วาง SUPABASE_SERVICE_ROLE_KEY ที่ Vercel → Settings → Environment Variables';
+  if (ki.kind === 'publishable' || ki.role === 'anon')
+    return 'วางผิดตัว — นี่คือกุญแจสาธารณะ (anon/publishable) ต้องใช้ service_role ที่กด Reveal ถึงจะเห็น';
+  if (ki.expired) return 'กุญแจหมดอายุแล้ว — สร้างใหม่ที่ Supabase → Settings → API';
+  if (ki.ref && urlRef && ki.ref !== urlRef)
+    return `กุญแจเป็นของคนละโปรเจ็ค — กุญแจเป็นของ ${ki.ref} แต่เว็บชี้ไปที่ ${urlRef}`;
+  if (ki.kind === 'unknown' || ki.kind === 'jwt-unreadable')
+    return `ค่าที่วางไม่เหมือนกุญแจ Supabase (ยาว ${ki.len} ตัว ขึ้นต้นด้วย "${ki.head}") — คัดลอกไม่ครบหรือติดอะไรมาด้วยหรือเปล่า`;
+  if (ping.status === 401)
+    return 'ฐานปฏิเสธกุญแจนี้ — คัดลอก service_role ใหม่ทั้งก้อนจาก Supabase → Settings → API '
+         + 'แล้ววางทับที่ Vercel · ถ้าโปรเจ็คปิดกุญแจแบบเดิมไปแล้ว ให้ใช้ตัวที่ขึ้นต้นด้วย sb_secret_ แทน '
+         + '· วางเสร็จต้องกด Redeploy ทุกครั้ง';
+  return `ฐานตอบ ${ping.status ?? '-'}: ${ping.why ?? ''}`;
+}
 
 const json = (o, s = 200) => new Response(JSON.stringify(o), {
   status: s, headers: { 'content-type': 'application/json; charset=utf-8' } });
@@ -150,7 +210,15 @@ export async function POST(req) {
   const limit = Math.max(1, Math.min(MAX_ROWS, want));
 
   try { return json(await runJob(limit)); }
-  catch (e) { return json({ error: String(e.message ?? e), ver: TR_VER }, 500); }
+  catch (e) {
+    const m = String(e.message ?? e);
+    // ฐานปฏิเสธกุญแจ → บอกทางแก้ไปเลย ไม่ใช่โยน error ดิบ ๆ ให้คนอ่านเอง
+    if (/Supabase 40[13]|Invalid API key/i.test(m)) {
+      const d = diagnose({ ok: false, status: 401, why: m }, keyInfo(SVC), refOfUrl(URL_));
+      return json({ error: (d ?? m) + ' · (ฐานตอบ: ' + m.slice(0, 120) + ')', ver: TR_VER }, 500);
+    }
+    return json({ error: m, ver: TR_VER }, 500);
+  }
 }
 
 // GET = ดูว่าตั้งค่าครบหรือยัง (ไม่เปิดเผยกุญแจ · ไม่เสียเงิน)
@@ -162,11 +230,25 @@ export async function GET(req) {
     try { return json({ cron: true, ...(await runJob(MAX_ROWS)) }); }
     catch (e) { return json({ cron: true, error: String(e.message ?? e), ver: TR_VER }, 500); }
   }
+  // ★ เดิมบอกว่า "ต่อฐานข้อมูลได้" ทั้งที่ตรวจแค่ว่ามีตัวแปรอยู่ — ไม่เคยลองต่อจริง
+  //   Pk จึงเห็นเครื่องหมายถูกสีเขียว แล้วกดแปลไม่ได้ ไม่รู้ว่าผิดตรงไหน (Pk 28 ส.ค. 69)
+  const ki = keyInfo(SVC);
+  const urlRef = refOfUrl(URL_);
+  const ping = await pingDb();
   return json({
     ver: TR_VER,
-    supabase: !!URL_ && !!SVC,
+    supabase: ping.ok,                       // ต่อได้จริงเท่านั้นถึงเป็น true
     anthropic: !!ANTH, google: !!GOOG,
     model: ANTH ? MODEL : (GOOG ? 'google-v2' : null),
-    ready: !!URL_ && !!SVC && (!!ANTH || !!GOOG),
+    ready: ping.ok && (!!ANTH || !!GOOG),
+    // ข้อมูลวินิจฉัย — ไม่มีตัวกุญแจอยู่ในนี้เลย มีแต่รูปพรรณ
+    diag: {
+      url_ref: urlRef,
+      key_kind: ki.kind ?? null, key_role: ki.role ?? null, key_ref: ki.ref ?? null,
+      key_len: ki.len ?? 0, key_head: ki.head ?? null, key_expired: ki.expired ?? null,
+      anon_role: keyInfo(ANON).role ?? null,
+      db_status: ping.status ?? null,
+      problem: diagnose(ping, ki, urlRef),
+    },
   });
 }

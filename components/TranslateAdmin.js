@@ -70,11 +70,41 @@ export default function TranslateAdmin() {
         <div style={{fontSize:'0.8rem', color:'var(--muted)', marginBottom:'0.5rem'}}>การตั้งค่าที่ Vercel</div>
         {health == null ? <div style={{fontSize:'0.85rem'}}>กำลังตรวจ…</div> : (
           <div style={{display:'grid', gap:'4px', fontSize:'0.85rem'}} data-trhealth>
-            <Row ok={health.supabase} on="ต่อฐานข้อมูลได้ (SUPABASE_SERVICE_ROLE_KEY)"
-              off="ยังไม่ได้วาง SUPABASE_SERVICE_ROLE_KEY — Vercel → Settings → Environment Variables" />
+            {/* ★ เขียว = ต่อฐานได้จริง ไม่ใช่แค่ "มีตัวแปร" — เดิมบอกเขียวทั้งที่กุญแจใช้ไม่ได้ */}
+            <Row ok={health.supabase} on="ต่อฐานข้อมูลได้จริง (ทดสอบแล้ว)"
+              off="ต่อฐานข้อมูลไม่ได้ — ดูรายละเอียดด้านล่าง" />
             <Row ok={health.anthropic || health.google}
               on={`ตัวแปลพร้อม: ${health.anthropic ? 'Anthropic · ' + (health.model ?? '') : 'Google Translate'}`}
               off="ยังไม่ได้วางกุญแจตัวแปล — ใส่ ANTHROPIC_API_KEY หรือ GOOGLE_TRANSLATE_API_KEY" />
+
+            {/* ── ต่อฐานไม่ได้: บอกให้ชัดว่าผิดตรงไหน ต้องไปแก้ที่ไหน ── */}
+            {!health.supabase && health.diag && (
+              <div data-trdiag style={{marginTop:'0.5rem', padding:'0.7rem 0.9rem', borderRadius:'8px',
+                background:'rgba(200,60,40,0.10)', border:'1px solid var(--danger)'}}>
+                <div style={{color:'var(--danger)', fontWeight:600, marginBottom:'0.35rem'}}>
+                  {health.diag.problem ?? 'ต่อฐานข้อมูลไม่ได้'}
+                </div>
+                <div style={{fontSize:'0.76rem', color:'var(--muted)', lineHeight:1.8}}>
+                  กุญแจที่วางไว้: {health.diag.key_len
+                    ? <>ยาว {health.diag.key_len} ตัว · ขึ้นต้น <code>{health.diag.key_head}…</code>
+                        {health.diag.key_kind && <> · ชนิด {health.diag.key_kind}</>}
+                        {health.diag.key_role && <> · สิทธิ์ <b style={{color: health.diag.key_role === 'service_role' ? 'var(--jade)' : 'var(--danger)'}}>{health.diag.key_role}</b></>}
+                      </>
+                    : <b>ยังไม่ได้วาง</b>}
+                  <br />
+                  โปรเจ็คของกุญแจ: <code>{health.diag.key_ref ?? '—'}</code> ·
+                  โปรเจ็คที่เว็บชี้ไป: <code>{health.diag.url_ref ?? '—'}</code>
+                  {health.diag.key_ref && health.diag.url_ref && health.diag.key_ref !== health.diag.url_ref
+                    && <b style={{color:'var(--danger)'}}> ← ไม่ตรงกัน</b>}
+                  {health.diag.db_status ? <><br />ฐานตอบรหัส {health.diag.db_status}</> : null}
+                </div>
+                <div style={{fontSize:'0.76rem', color:'var(--gold2)', marginTop:'0.45rem', lineHeight:1.8}}>
+                  วิธีแก้: Supabase → Settings → API → หัวข้อ <b>service_role</b> → กด Reveal → คัดลอกทั้งก้อน<br />
+                  → Vercel → Settings → Environment Variables → <code>SUPABASE_SERVICE_ROLE_KEY</code> → วางทับ<br />
+                  → <b>Deployments → Redeploy</b> (ไม่ Redeploy ค่าใหม่จะยังไม่มีผล)
+                </div>
+              </div>
+            )}
             {health.ver && <div style={{fontSize:'0.68rem', color:'var(--muted)'}}>ตัวแปลรุ่น {health.ver}</div>}
           </div>
         )}
