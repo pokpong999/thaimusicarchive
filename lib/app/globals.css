@@ -1,0 +1,386 @@
+:root {
+  --navy: #0F1B2D; --navy2: #162336; --navy3: #1E3050;
+  --gold: #C9A84C; --gold2: #E8C96A;
+  --cream: #F5F0E8; --jade: #4C9A84; --jade2: #3A7A67;
+  --muted: #8A9BB5; --border: #2A3F5C; --danger: #D47A8F;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--navy); color:var(--cream); font-family:'Noto Sans Thai',sans-serif; min-height:100vh; }
+a { color:inherit; text-decoration:none; }
+
+.topbar { background:var(--navy2); border-bottom:1px solid var(--border); padding:0 2rem; display:flex; align-items:center; justify-content:space-between; height:60px; position:sticky; top:0; z-index:200; }
+.logo-wrap { display:flex; align-items:center; gap:12px; cursor:pointer; }
+.logo-th { font-family:'Noto Serif Thai',serif; font-size:1rem; font-weight:600; color:var(--gold); }
+.logo-en { font-size:0.6rem; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; }
+.nav { display:flex; align-items:center; }
+.nav a { color:var(--muted); font-size:0.85rem; padding:0 1rem; height:60px; display:inline-flex; align-items:center; border-bottom:2px solid transparent; transition:all 0.2s; }
+.nav a:hover, .nav a.active { color:var(--gold); border-bottom-color:var(--gold); }
+.topbar-right { display:flex; align-items:center; gap:10px; }
+
+.btn { padding:9px 18px; border-radius:6px; font-size:0.86rem; min-height:38px; cursor:pointer; font-family:inherit; border:none; transition:all 0.2s; display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+.btn-outline { background:transparent; border:1px solid var(--border); color:var(--muted); }
+.btn-outline:hover { border-color:var(--gold); color:var(--gold); }
+.btn-primary { background:var(--gold); color:var(--navy); font-weight:600; }
+.btn-primary:hover { background:var(--gold2); }
+.btn-jade { background:var(--jade); color:#fff; font-weight:600; }
+.btn-jade:hover { background:var(--jade2); }
+/* ปุ่มลบ: เดิมพื้นโปร่งใสล้วน ดูไม่ต่างจากปุ่มธรรมดาเลย (Pk 27 ส.ค. 69) */
+.btn-danger { background:rgba(212,122,143,0.14); border:1px solid var(--danger); color:var(--danger); font-weight:600; }
+.btn-danger:hover { background:rgba(212,122,143,0.28); }
+.btn-sm { padding:6px 12px; font-size:0.8rem; min-height:34px; }
+/* ปุ่มไอคอนล้วน (🗑 ✏️ ✕ 💾) ต้องเป็นสี่เหลี่ยมจัตุรัสพอให้นิ้วกดถูก */
+.btn-icon { min-width:38px; padding-left:10px; padding-right:10px; font-size:1rem; }
+.btn-sm.btn-icon { min-width:34px; }
+
+.container { max-width:1100px; margin:0 auto; padding:1.8rem; }
+.section-title { font-family:'Noto Serif Thai',serif; font-size:1.3rem; font-weight:600; }
+.section-subtitle { font-size:0.78rem; color:var(--muted); margin-top:2px; margin-bottom:1.2rem; }
+
+.search-bar { display:flex; gap:8px; margin-bottom:1rem; flex-wrap:wrap; }
+.search-input { flex:1; min-width:200px; background:var(--navy2); border:1px solid var(--border); color:var(--cream); padding:8px 12px; border-radius:5px; font-size:0.88rem; font-family:inherit; outline:none; }
+.search-input:focus { border-color:var(--gold); }
+.filter-select { background:var(--navy2); border:1px solid var(--border); color:var(--muted); padding:8px 10px; border-radius:5px; font-size:0.8rem; font-family:inherit; outline:none; cursor:pointer; }
+
+.table-wrap { background:var(--navy2); border:1px solid var(--border); border-radius:8px; overflow-x:auto; }
+table { width:100%; border-collapse:collapse; }
+thead tr { background:var(--navy3); border-bottom:1px solid var(--border); }
+th { text-align:left; padding:9px 12px; font-size:0.66rem; letter-spacing:0.06em; text-transform:uppercase; color:var(--muted); font-weight:500; white-space:nowrap; }
+td { padding:10px 12px; font-size:0.86rem; border-bottom:1px solid rgba(42,63,92,0.4); vertical-align:middle; }
+tr:last-child td { border-bottom:none; }
+tbody tr:hover td { background:rgba(255,255,255,0.02); }
+.song-id { font-family:monospace; font-size:0.74rem; color:var(--muted); }
+.song-name { color:var(--cream); font-weight:500; }
+.song-name:hover { color:var(--gold); }
+
+.badge { display:inline-block; padding:2px 7px; border-radius:3px; font-size:0.68rem; white-space:nowrap; }
+.badge-variable { background:rgba(76,154,132,0.15); color:var(--jade); border:1px solid rgba(76,154,132,0.3); }
+.badge-fixed { background:rgba(201,168,76,0.12); color:var(--gold); border:1px solid rgba(201,168,76,0.3); }
+.badge-mixed { background:rgba(138,155,181,0.1); color:var(--muted); border:1px solid var(--border); }
+.badge-pending { background:rgba(201,168,76,0.15); color:var(--gold); border:1px solid rgba(201,168,76,0.4); }
+
+.card { background:var(--navy2); border:1px solid var(--border); border-radius:8px; padding:1.4rem; margin-bottom:1rem; }
+.form-group { margin-bottom:1rem; }
+.form-label { font-size:0.75rem; color:var(--muted); margin-bottom:5px; display:block; }
+.form-input { width:100%; background:var(--navy3); border:1px solid var(--border); color:var(--cream); padding:9px 12px; border-radius:6px; font-size:0.88rem; font-family:inherit; outline:none; }
+.form-input:focus { border-color:var(--gold); }
+
+.video-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:1rem; margin-top:1rem; }
+.video-card { background:var(--navy2); border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+.video-embed { position:relative; padding-bottom:56.25%; }
+.video-embed iframe { position:absolute; inset:0; width:100%; height:100%; border:none; }
+.video-body { padding:10px 12px; }
+.video-title { font-size:0.85rem; }
+.video-meta { font-size:0.72rem; color:var(--muted); margin-top:3px; display:flex; justify-content:space-between; align-items:center; }
+
+.detail-hero { background:var(--navy2); border:1px solid var(--border); border-radius:10px; padding:1.5rem; margin-bottom:1.4rem; }
+.detail-id { font-family:monospace; font-size:0.7rem; color:var(--muted); letter-spacing:0.08em; }
+.detail-name { font-family:'Noto Serif Thai',serif; font-size:1.7rem; font-weight:700; margin:6px 0 10px; }
+.detail-meta { display:flex; gap:1.5rem; flex-wrap:wrap; margin-top:1rem; }
+.meta-pill { display:flex; flex-direction:column; }
+.meta-label { font-size:0.62rem; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; }
+.meta-value { font-size:0.85rem; margin-top:2px; }
+
+.pagination { display:flex; align-items:center; justify-content:space-between; margin-top:1rem; flex-wrap:wrap; gap:8px; }
+.page-btn { min-height:34px; background:var(--navy2); border:1px solid var(--border); color:var(--muted); padding:5px 11px; border-radius:4px; font-size:0.78rem; cursor:pointer; font-family:monospace; }
+.page-btn:hover, .page-btn.active { border-color:var(--gold); color:var(--gold); }
+.page-btn:disabled { opacity:0.45; cursor:default; }
+
+.toast { position:fixed; bottom:2rem; right:2rem; z-index:999; background:var(--navy3); border:1px solid var(--jade); border-radius:8px; padding:12px 18px; font-size:0.85rem; }
+.footer { background:var(--navy2); border-top:1px solid var(--border); padding:1.2rem 2rem; font-size:0.72rem; color:var(--muted); text-align:center; margin-top:3rem; }
+.lock-box { background:var(--navy2); border:1px solid var(--border); border-radius:8px; padding:2.5rem; text-align:center; }
+
+/* THMA map tooltip */
+.thma-tooltip {
+  border-radius: 8px !important;
+  border: 1px solid #C9A84C !important;
+  padding: 6px !important;
+}
+
+/* TH Notation — ฟอนต์โน้ตไทยโดย ปกป้อง ขำประเสริฐ */
+@font-face {
+  font-family: 'THNotation';
+  src: url('/fonts/THNotation.woff2') format('woff2'),
+       url('/fonts/THNotation.otf') format('opentype');
+  font-display: swap;
+}
+
+/* Tooltip บนแผนที่: ให้ตัดบรรทัดและกรอบขยายตามเนื้อหา */
+.thma-tooltip {
+  white-space: normal !important;
+  width: max-content;
+  max-width: 230px !important;
+  padding: 8px 10px !important;
+  border-radius: 10px !important;
+  box-shadow: 0 3px 12px rgba(0,0,0,0.35) !important;
+  line-height: 1.55 !important;
+}
+.thma-tooltip > div { max-width: 210px !important; }
+
+/* ── Hero สองหอ ── */
+.hero2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin:0.6rem 0 1.4rem; }
+@media (max-width: 820px) { .hero2 { grid-template-columns:1fr; gap:12px; } }
+.hero-card {
+  position:relative; display:block; min-height:340px; border-radius:16px; overflow:hidden;
+  border:1px solid rgba(201,168,76,0.45); text-decoration:none;
+  transition:transform .25s ease, box-shadow .25s ease, border-color .25s;
+}
+.hero-card:hover { transform:translateY(-4px); box-shadow:0 14px 40px rgba(0,0,0,0.45); border-color:var(--gold); }
+.hero-songs {
+  background:
+    radial-gradient(120% 90% at 15% 10%, rgba(76,154,132,0.25), transparent 55%),
+    radial-gradient(110% 100% at 90% 90%, rgba(201,168,76,0.22), transparent 60%),
+    linear-gradient(150deg, #16263D 0%, #0F1B2D 60%, #0B1524 100%);
+}
+.hero-history {
+  background:
+    radial-gradient(120% 90% at 85% 12%, rgba(180,70,50,0.22), transparent 55%),
+    radial-gradient(110% 100% at 10% 92%, rgba(201,168,76,0.24), transparent 60%),
+    linear-gradient(210deg, #1B2438 0%, #0F1B2D 60%, #0B1524 100%);
+}
+.hero-glyphs {
+  position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+  font-family:'Noto Serif Thai',serif; font-size:2.4rem; line-height:2.1; text-align:center;
+  color:rgba(201,168,76,0.10); letter-spacing:0.4em; user-select:none; pointer-events:none;
+  transform:rotate(-6deg) scale(1.15);
+}
+.hero-inner { position:relative; z-index:1; padding:2.2rem 2rem; display:flex; flex-direction:column; height:100%; }
+.hero-kicker { font-size:0.66rem; letter-spacing:0.35em; color:var(--jade); font-weight:600; }
+.hero-history .hero-kicker { color:#D08A6A; }
+.hero-title {
+  font-family:'Noto Serif Thai',serif; font-weight:700; color:var(--cream);
+  font-size:clamp(1.7rem, 3.2vw, 2.5rem); line-height:1.3; margin:0.7rem 0 0.9rem;
+  text-shadow:0 2px 14px rgba(0,0,0,0.5);
+}
+.hero-sub { font-size:0.82rem; color:var(--muted); line-height:1.8; max-width:34ch; }
+.hero-cta {
+  margin-top:auto; align-self:flex-start; padding:0.55rem 1.2rem; border-radius:999px;
+  border:1px solid var(--gold); color:var(--gold); font-size:0.82rem; font-weight:600;
+  background:rgba(201,168,76,0.08); transition:background .2s;
+}
+.hero-card:hover .hero-cta { background:var(--gold); color:#0F1B2D; }
+
+html { scroll-behavior: smooth; }
+
+/* ═══════ จอมือถือ / แท็บเล็ต ═══════ */
+html, body { max-width: 100%; overflow-x: hidden; }
+* { min-width: 0; }
+img, svg, video, canvas, iframe { max-width: 100%; }
+
+/* ตารางกว้างๆ ให้เลื่อนในกรอบตัวเอง ไม่ดันทั้งหน้า */
+table { max-width: 100%; }
+.table-scroll, .card > table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+@media (max-width: 820px) {
+  .topbar { padding: 0 0.7rem; height: auto; min-height: 56px; flex-wrap: wrap; gap: 6px; row-gap: 4px; }
+  .topbar-right { flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .topbar nav, .topbar-nav { display: flex; overflow-x: auto; gap: 10px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; max-width: 100%; }
+  .topbar nav::-webkit-scrollbar, .topbar-nav::-webkit-scrollbar { display: none; }
+  .topbar a, .topbar-nav a { white-space: nowrap; font-size: 0.86rem; }
+
+  .container { padding: 1rem 0.85rem 2rem; }
+  .card { padding: 0.9rem; }
+  .section-title { font-size: 1.05rem !important; }
+  .section-subtitle { font-size: 0.8rem !important; }
+  .detail-title { font-size: 1.15rem !important; line-height: 1.4 !important; }
+
+  /* แถวปุ่ม/แท็บยาวๆ เลื่อนแนวนอนได้ */
+  .tab-row, .btn-row, .filter-row { overflow-x: auto; flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  .tab-row::-webkit-scrollbar, .btn-row::-webkit-scrollbar { display: none; }
+
+  /* มือถือใช้นิ้วกด ปุ่มต้องไม่เล็กกว่าเดสก์ท็อป (เดิมย่อลงจนกดพลาด — Pk 27 ส.ค. 69) */
+  .btn { font-size: 0.86rem; padding: 0.6rem 0.9rem; min-height: 42px; }
+  .btn-sm { font-size: 0.82rem; padding: 0.5rem 0.8rem; min-height: 38px; }
+  .btn-icon, .btn-sm.btn-icon { min-width: 42px; }
+  /* ช่องกรอกทุกชนิดต้อง ≥16px ไม่งั้น iOS ซูมหน้าจอเองตอนแตะ
+     (เดิมคุมแค่ .form-input/.filter-select — ช่องค้นหาหอจดหมายเหตุ กล่องวางโน้ต ฯลฯ หลุดหมด
+      และหลายที่ตั้ง font-size ไว้ในโค้ดโดยตรง จึงต้องใช้ !important — Pk 27 ส.ค. 69) */
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=color]):not([type=file]),
+  select, textarea { font-size: 16px !important; }
+
+  /* ช่องติ๊กถูก/ปุ่มเลื่อน ค่าเริ่มต้นของเบราว์เซอร์ 13px — เล็กเกินกว่านิ้วจะกดโดน
+     (ติ๊ก "ถอน/ทอด" รายท่อน กับ ฉิ่ง–ฉับ ในเครื่องเล่น อยู่ในกลุ่มนี้) */
+  /* !important เพราะหลายจุดตั้งขนาดไว้ในโค้ดโดยตรง (เช่นติ๊กเปิดจังหวะถอน/ทอด 18px) */
+  input[type=checkbox], input[type=radio] {
+    width: 22px !important; height: 22px !important; flex: 0 0 auto; accent-color: var(--gold); }
+  input[type=range] { height: 28px !important; accent-color: var(--gold); }
+  label:has(> input[type=checkbox]), label:has(> input[type=radio]) { min-height: 34px; }
+
+  /* กริดสองช่องที่เขียนไว้ในโค้ดโดยตรง — มือถือให้เรียงลงมาแทนบีบข้างกัน */
+  .m1col { grid-template-columns: 1fr !important; }
+
+  .hero-title { font-size: 1.5rem !important; }
+  .hero-sub { font-size: 0.82rem !important; }
+  .stat-grid, .grid-2, .grid-3 { grid-template-columns: 1fr !important; }
+}
+
+@media (max-width: 480px) {
+  .container { padding: 0.8rem 0.7rem 2rem; }
+  .section-title { font-size: 0.98rem !important; }
+  .hero-title { font-size: 1.3rem !important; }
+}
+
+/* แถบเมนูบนสุด: มือถือให้เลื่อนแนวนอนแทนการตัดบรรทัด */
+@media (max-width: 820px) {
+  .topbar .nav { display: flex; align-items: center; gap: 12px; overflow-x: auto;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; max-width: 100%;
+    padding: 4px 0; order: 3; width: 100%; border-top: 1px solid var(--border); }
+  .topbar .nav::-webkit-scrollbar { display: none; }
+  .topbar .nav > * { white-space: nowrap; flex: 0 0 auto; }
+  .logo-th { font-size: 0.82rem; }
+  .logo-en { font-size: 0.58rem; }
+  .logo-wrap svg { width: 26px; height: 26px; }
+}
+@media (max-width: 480px) {
+  .logo-en { display: none; }
+  .logo-th { font-size: 0.76rem; max-width: 150px; }
+}
+
+/* ═══ รางไอคอนซ้าย (Pk 27 ส.ค. 69) ═══════════════════════════════
+   เปิด-ปิดได้จากปุ่มสลับ · lib/navpref.js ใส่คลาส .nav-rail ที่ <html>
+   รางกว้าง 56px และ "กางออกทับ" เนื้อหาเมื่อชี้เมาส์ จึงไม่กินความกว้าง
+   ของกระดานเขียนโน้ต ซึ่งต้องการราว 1,040px ที่ 8 ห้อง/บรรทัด        */
+
+.siderail { display:none; }
+.rail-mobbar, .rail-scrim { display:none; }
+
+html.nav-rail .topbar { display:none; }
+html.nav-rail body, html.nav-rail { --rail-w: 56px; }
+html.nav-rail body { padding-left: var(--rail-w); }
+
+html.nav-rail .siderail {
+  display:flex; flex-direction:column;
+  position:fixed; left:0; top:0; bottom:0; width:var(--rail-w); z-index:300;
+  background:var(--navy3); border-right:1px solid var(--border);
+  padding:8px 0; overflow:hidden;
+  transition:width .18s ease, box-shadow .18s ease;
+}
+html.nav-rail .siderail:hover,
+html.nav-rail .siderail:focus-within { width:232px; box-shadow:14px 0 34px rgba(4,9,18,.5); }
+
+.rail-brand { display:flex; align-items:center; gap:10px; padding:6px 15px 12px; flex:0 0 auto; }
+.rail-brandtxt { font-family:'Noto Serif Thai',serif; font-weight:700; font-size:0.78rem; color:var(--gold); }
+.rail-scroll { flex:1; overflow-y:auto; overflow-x:hidden; scrollbar-width:none; }
+.rail-scroll::-webkit-scrollbar { display:none; }
+.rail-group + .rail-group { margin-top:2px; }
+
+.rail-gname { padding:10px 15px 3px; }
+.rail-gname span {
+  font-size:0.6rem; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--muted); white-space:nowrap; opacity:.9;
+}
+/* ตอนหุบ: ชื่อกลุ่มกลายเป็นเส้นคั่นสั้น ๆ แทนตัวหนังสือที่อ่านไม่ทัน */
+html.nav-rail .siderail:not(:hover):not(:focus-within) .rail-gname { padding:9px 0 3px; }
+html.nav-rail .siderail:not(:hover):not(:focus-within) .rail-gname span { display:none; }
+html.nav-rail .siderail:not(:hover):not(:focus-within) .rail-gname::before {
+  content:''; display:block; width:22px; height:1px; background:var(--border); margin:5px auto 0;
+}
+
+.rail-item {
+  display:flex; align-items:center; gap:12px; height:42px; padding:0 0 0 17px;
+  color:var(--muted); white-space:nowrap; overflow:hidden; cursor:pointer;
+  border-left:2px solid transparent; border-right:0; border-top:0; border-bottom:0;
+  background:transparent; font:inherit; font-size:0.82rem; width:100%; text-align:left;
+}
+.rail-ico { font-size:1.05rem; flex:0 0 22px; display:flex; align-items:center; justify-content:center; }
+.rail-lbl { opacity:0; transition:opacity .14s ease; }
+html.nav-rail .siderail:hover .rail-lbl,
+html.nav-rail .siderail:focus-within .rail-lbl { opacity:1; }
+.rail-item:hover { background:rgba(201,168,76,.10); color:var(--cream); }
+.rail-item.on { background:rgba(201,168,76,.15); color:var(--gold); border-left-color:var(--gold); }
+.rail-item:focus-visible { outline:2px solid var(--gold); outline-offset:-2px; }
+.rail-foot { flex:0 0 auto; border-top:1px solid var(--border); padding-top:6px; }
+.rail-switch { color:var(--muted); }
+
+/* ── มือถือ: รางกลายเป็นลิ้นชัก ─────────────────────────────── */
+@media (max-width: 820px) {
+  html.nav-rail body { padding-left:0; padding-top:52px; }
+  html.nav-rail .rail-mobbar {
+    display:flex; align-items:center; gap:10px; position:fixed; top:0; left:0; right:0; height:52px;
+    padding:0 12px; background:var(--navy2); border-bottom:1px solid var(--border); z-index:320;
+  }
+  .rail-burger {
+    width:40px; height:40px; border-radius:8px; border:1px solid var(--border);
+    background:var(--navy3); color:var(--gold); font-size:1.1rem; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; flex:0 0 auto;
+  }
+  .rail-mobname { font-family:'Noto Serif Thai',serif; font-weight:600; font-size:0.84rem; color:var(--gold); }
+  html.nav-rail .siderail {
+    width:250px; transform:translateX(-100%); transition:transform .2s ease;
+    box-shadow:none; top:0; z-index:340;
+  }
+  html.nav-rail .siderail.open { transform:translateX(0); box-shadow:14px 0 34px rgba(4,9,18,.55); }
+  html.nav-rail .siderail:hover, html.nav-rail .siderail:focus-within { width:250px; box-shadow:none; }
+  html.nav-rail .siderail .rail-lbl { opacity:1 !important; }
+  html.nav-rail .siderail .rail-gname { padding:10px 15px 3px !important; }
+  html.nav-rail .siderail .rail-gname span { display:inline !important; }
+  html.nav-rail .siderail .rail-gname::before { display:none !important; }
+  html.nav-rail .rail-scrim {
+    display:block; position:fixed; inset:0; background:rgba(4,9,18,.55); z-index:330;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .siderail, .rail-lbl { transition:none !important; }
+}
+
+/* ปุ่มสลับที่อยู่บนแถบเมนูบน */
+.nav-switch {
+  cursor:pointer; font-size:0.8rem; border:1px solid var(--border); background:transparent;
+  border-radius:5px; padding:6px 10px; min-height:32px; color:var(--muted); font-family:inherit;
+}
+.nav-switch:hover { border-color:var(--gold); color:var(--gold); }
+
+/* ── สีกระดาษของโปรแกรมเล่นโน้ต (Pk 27 ส.ค. 69) ─────────────────────────
+   ทุกสีในโปรแกรมเล่นอ่านจากตัวแปรอยู่แล้ว จึงแค่ประกาศตัวแปรทับในกล่องนี้
+   ไม่ต้องไล่แก้ inline style ทีละจุด และไม่กระทบส่วนอื่นของเว็บ
+   --np-rest  = ขีด "-" ช่องที่ไม่มีเสียง · --np-bar = เส้นคั่นห้อง/วรรค
+   ทั้งสองอย่างเดิมใช้ --border ซึ่งจางจนกลืนพื้นไปหมด (Pk ทัก) */
+.np-root { --np-rest:#9FB3CE; --np-restw:600; --np-bar:#43597C; }
+
+.np-root.np-paper {
+  --navy:#FBFAF6; --navy2:#F3F1E9; --navy3:#FFFFFF;
+  --cream:#12161C; --muted:#5F6670; --border:#C6CBD3;
+  --gold:#8A6D14; --gold2:#6E5510; --jade:#1F6B57; --jade2:#17513F; --danger:#A3312B;
+  --np-rest:#5F6670; --np-restw:500; --np-bar:#8A9199;
+}
+.np-root.np-hicon {
+  --navy:#FFFFFF; --navy2:#FFFFFF; --navy3:#FFFFFF;
+  --cream:#000000; --muted:#2B2B2B; --border:#000000;
+  --gold:#5E4300; --gold2:#3D2C00; --jade:#00503B; --jade2:#003527; --danger:#8A0000;
+  --np-rest:#333333; --np-restw:700; --np-bar:#000000;
+}
+.np-root.np-paper, .np-root.np-hicon {
+  background:var(--navy); color:var(--cream);
+  border:1px solid var(--border); border-radius:10px; padding:0.9rem;
+}
+/* ห้องที่กำลังเล่น — บนพื้นขาวต้องเข้มขึ้น ไม่งั้นแทบไม่เห็นว่าวิ่งถึงไหน */
+.np-root.np-paper .np-cell.np-on { background:rgba(138,109,20,0.30); }
+.np-root.np-hicon .np-cell.np-on { background:#FFE08A; outline:1px solid #000; }
+/* เส้นหยักของ "กรอ" วาดด้วยสีทองอ่อน จางไปบนกระดาษขาว */
+.np-root.np-paper .np-krocover, .np-root.np-hicon .np-krocover {
+  background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='7'%3E%3Cpath d='M0 5 q 3.5 -4.5 7 0 t 7 0' fill='none' stroke='%236E5510' stroke-width='1.6'/%3E%3C/svg%3E");
+}
+
+
+/* ── ช่องค้นหาบนแถบเมนู (Pk 28 ส.ค. 69) ──
+   "เพิ่มช่องค้นหาไว้ด้านบน จะได้ค้นง่าย"
+   จอแคบ ช่องจะหดเหลือแค่ปุ่มแว่น เพื่อไม่ให้แถบเมนูล้น */
+.nav-search { display:flex; align-items:center; gap:0; margin:0 0.6rem; }
+.nav-search-input {
+  width:190px; max-width:24vw; height:32px; padding:0 10px;
+  background:var(--navy); color:var(--fg); font-family:inherit; font-size:0.8rem;
+  border:1px solid var(--border); border-right:none; border-radius:6px 0 0 6px; outline:none;
+}
+.nav-search-input:focus { border-color:var(--gold); }
+.nav-search-input::placeholder { color:var(--muted); }
+.nav-search-go {
+  height:32px; padding:0 10px; cursor:pointer; font-size:0.85rem; line-height:1;
+  background:transparent; color:var(--muted); font-family:inherit;
+  border:1px solid var(--border); border-radius:0 6px 6px 0;
+}
+.nav-search-go:hover { color:var(--gold); border-color:var(--gold); }
+@media (max-width: 900px) {
+  .nav-search-input { display:none; }
+  .nav-search-go { border-radius:6px; }
+}
