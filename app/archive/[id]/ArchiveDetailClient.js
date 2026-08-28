@@ -11,10 +11,18 @@ import ArchiveContributions from '../../../components/ArchiveContributions';
 import ShareBar from '../../../components/ShareBar';
 import { useMe } from '../../../components/Gate';
 import StatBadge from '../../../components/StatBadge';
+import { useLang } from '../../../lib/i18n';
+import { trText, kickTranslateSoon } from '../../../lib/translate';
+
+// รุ่นของหน้าเหตุการณ์ — ไว้ตรวจว่าไฟล์นี้ถูกวางแล้ว (Pk 28 ส.ค. 69)
+export const ARCDETAIL_VERSION = '28 ส.ค. 69 · r1 (สองภาษา)';
 
 const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future: 'อนาคต' };
 
 export default function ArchiveDetailClient() {
+  const { lang } = useLang();
+  // เนื้อหาที่สมาชิกเขียน — โชว์คำแปลถ้าแปลครบแล้ว
+  const T = f => trText(lang, rec, f);
   const { id } = useParams();
   const [rec, setRec] = useState(null);
   const [poster, setPoster] = useState(null);
@@ -82,6 +90,7 @@ export default function ArchiveDetailClient() {
     const { error } = await supabase.from('archive_media').update({ caption: next.trim() || null }).eq('id', m.id);
     await load(); setBusy(false);
     setMsg(error ? '⚠ ' + error.message : '✓ บันทึกคำบรรยายแล้ว'); setTimeout(() => setMsg(''), 3000);
+    if (!error) kickTranslateSoon(4);   // แปลคำบรรยายใหม่ให้เอง (sql/37 + /api/translate)
   }
 
   async function delImage(m) {
@@ -99,12 +108,12 @@ export default function ArchiveDetailClient() {
       <div className="detail-hero" style={{marginTop:'1rem'}}>
         <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
           <span className="badge badge-fixed">{ERAS[rec.era] ?? rec.era}</span>
-          <span style={{fontSize:'0.8rem',color:'var(--muted)'}}>{rec.when_text}</span>
+          <span style={{fontSize:'0.8rem',color:'var(--muted)'}}>{T('when_text')}</span>
         </div>
-        <div className="detail-name" style={{fontSize:'1.4rem'}}>{rec.what_text}</div>
+        <div className="detail-name" style={{fontSize:'1.4rem'}}>{T('what_text')}</div>
         <div className="detail-meta">
-          <div className="meta-pill"><span className="meta-label">ใคร</span><span className="meta-value">{rec.who_text}</span></div>
-          <div className="meta-pill"><span className="meta-label">ที่ไหน</span><span className="meta-value">{rec.where_text}</span></div>
+          <div className="meta-pill"><span className="meta-label">ใคร</span><span className="meta-value">{T('who_text')}</span></div>
+          <div className="meta-pill"><span className="meta-label">ที่ไหน</span><span className="meta-value">{T('where_text')}</span></div>
           {rec.when_date && <div className="meta-pill" title="วันที่ของเหตุการณ์ (ใช้เรียงลำดับและกำหนดสีหมุด)"><span className="meta-label">วันที่</span><span className="meta-value" style={{fontSize:'0.78rem'}}>{rec.when_date}</span></div>}
           {rec.created_at && <div className="meta-pill" title="วัน-เวลาที่โพสต์เข้าหอจดหมายเหตุ"><span className="meta-label">บันทึกเมื่อ</span><span className="meta-value" style={{fontSize:'0.78rem'}}>{fmtDT(rec.created_at)}</span></div>}
           {/* เดิมหน้านี้ไม่ให้เครดิตคนโพสต์เลย ทั้งที่หน้ารายการให้ (Pk 27 ส.ค. 69) */}
@@ -120,9 +129,10 @@ export default function ArchiveDetailClient() {
               🗑 ลบเหตุการณ์นี้</button>
           </div>
         )}
-        <div style={{marginTop:'0.8rem'}}><ShareBar statType="archive" statId={id} title={rec.what_text + ' — หอจดหมายเหตุดนตรีไทย'} /></div>
+        <div style={{marginTop:'0.8rem'}}><ShareBar statType="archive" statId={id} title={T('what_text') + ' — หอจดหมายเหตุดนตรีไทย'} /></div>
         {rec.description && (
-          <div style={{marginTop:'1.2rem',fontSize:'0.88rem',lineHeight:1.8,whiteSpace:'pre-wrap'}}>{rec.description}</div>
+          <div style={{marginTop:'1.2rem',fontSize:'0.88rem',lineHeight:1.8,whiteSpace:'pre-wrap'}}
+            data-desc>{T('description')}</div>
         )}
       </div>
 
@@ -135,7 +145,7 @@ export default function ArchiveDetailClient() {
             </a>
           </div>
           <LeafletMap height="300px"
-            markers={[{ lat: rec.lat, lng: rec.lng, popupHtml: `<b>${esc(rec.what_text)}</b><br/>${esc(rec.where_text)}` }]}
+            markers={[{ lat: rec.lat, lng: rec.lng, popupHtml: `<b>${esc(T('what_text'))}</b><br/>${esc(T('where_text'))}` }]}
             center={[rec.lat, rec.lng]} zoom={13} />
         </div>
       )}
@@ -160,7 +170,7 @@ export default function ArchiveDetailClient() {
                 return (
                   <div key={m.id} style={{position:'relative'}}>
                     <a href={url} target="_blank">
-                      <img src={url} alt={m.caption ?? ''}
+                      <img src={url} alt={trText(lang, m, 'caption') ?? ''}
                         style={{width:'100%',borderRadius:'8px',border:'1px solid var(--border)',display:'block'}} />
                     </a>
                     {canEditMedia && (
@@ -170,7 +180,7 @@ export default function ArchiveDetailClient() {
                     )}
                     {(m.caption || canEditMedia) && (
                       <div style={{fontSize:'0.75rem',color:'var(--muted)',marginTop:'4px',lineHeight:1.6}}>
-                        {m.caption || <span style={{opacity:.7}}>ยังไม่มีคำบรรยายภาพ</span>}
+                        {trText(lang, m, 'caption') || <span style={{opacity:.7}}>ยังไม่มีคำบรรยายภาพ</span>}
                         {canEditMedia && <button className="btn btn-outline btn-sm" style={{marginLeft:'6px'}}
                           disabled={busy} onClick={() => editCaption(m)}>✎ คำบรรยาย</button>}
                       </div>
