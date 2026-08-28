@@ -33,7 +33,10 @@ const ANON = clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 //   ยุคเดิม: SUPABASE_SERVICE_ROLE_KEY (JWT) · ยุคใหม่: SUPABASE_SECRET_KEY (sb_secret_…)
 //   ถ้าโปรเจ็คย้ายไปใช้กุญแจแบบใหม่แล้ว ตัว JWT เดิมจะถูกปฏิเสธเป็น "Invalid API key"
 //   จึงต้องลองให้ครบ ไม่ใช่ยึดตัวเดียวแล้วยอมแพ้ (Pk 28 ส.ค. 69)
-const KEY_NAMES = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_KEY'];
+//   THMA_SUPABASE_KEY ตั้งไว้หน้าสุดโดยตั้งใจ — เป็นชื่อของเราเอง
+//   ตัวเชื่อม Supabase↔Vercel จะไม่มาเขียนทับ (มันดูแลเฉพาะชื่อ SUPABASE_*)
+//   ใช้ตอนที่ตัวเชื่อมผูกไว้กับโปรเจ็ค Supabase ผิดตัว แล้วเราไม่อยากไปยุ่งกับมัน
+const KEY_NAMES = ['THMA_SUPABASE_KEY', 'SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_KEY'];
 const CANDIDATES = KEY_NAMES
   .map(n => ({ name: n, key: clean(process.env[n]) }))
   .filter(c => c.key);
@@ -46,7 +49,7 @@ const GOOG = clean(process.env.GOOGLE_TRANSLATE_API_KEY);
 const MODEL = process.env.TRANSLATE_MODEL || 'claude-haiku-4-5-20251001';
 
 const MAX_ROWS = 40;     // ต่อการเรียกหนึ่งครั้ง — กันไม่ให้คำสั่งยาวเกินและกันบิลพุ่ง
-const TR_VER = '28 ส.ค. 69 · r3 (ลองกุญแจหลายตัว)';
+const TR_VER = '28 ส.ค. 69 · r4 (ชื่อกุญแจของเราเอง)';
 
 // ── ตรวจกุญแจโดยไม่เปิดเผยตัวกุญแจ ────────────────────────────────
 //   กุญแจแบบเดิมของ Supabase เป็น JWT — ส่วนกลางถอดได้ ไม่ใช่ความลับ
@@ -112,8 +115,10 @@ function diagnose(ping, ki, urlRef) {
   // ★ มีหลายตัวแต่ฐานปฏิเสธหมด — บอกให้เห็นว่าลองอะไรไปแล้วบ้าง
   const badRef = CANDIDATES.map(c => keyInfo(c.key)).find(k => k.ref && urlRef && k.ref !== urlRef);
   if (badRef && ping.tried?.every(t => !t.ok))
-    return `กุญแจที่วางไว้เป็นของคนละโปรเจ็ค — กุญแจเป็นของ ${badRef.ref} แต่เว็บชี้ไปที่ ${urlRef} `
-         + '· ถ้าเชื่อมตัวเชื่อม Supabase↔Vercel ไว้ ให้ตรวจว่าเชื่อมกับโปรเจ็ค Supabase ตัวที่เว็บใช้อยู่จริง';
+    return `กุญแจเป็นของโปรเจ็ค Supabase คนละตัวกับที่เว็บใช้ — กุญแจเป็นของ ${badRef.ref} `
+         + `แต่เว็บใช้ ${urlRef} · ตัวเชื่อม Supabase↔Vercel ผูกไว้ผิดโปรเจ็ค `
+         + `· ทางแก้ที่ตัวเชื่อมมาทับไม่ได้: เอา service_role ของโปรเจ็ค ${urlRef} `
+         + 'มาวางที่ Vercel ในชื่อใหม่ THMA_SUPABASE_KEY';
   if (!ki.set) return 'ยังไม่ได้วาง SUPABASE_SERVICE_ROLE_KEY ที่ Vercel → Environment Variables';
   if (ki.kind === 'publishable' || ki.role === 'anon')
     return 'วางผิดตัว — นี่คือกุญแจสาธารณะ (anon/publishable) ต้องใช้ service_role ที่กด Reveal ถึงจะเห็น';
@@ -297,6 +302,7 @@ export async function GET(req) {
       key_kind: ki.kind ?? null, key_role: ki.role ?? null, key_ref: ki.ref ?? null,
       key_len: ki.len ?? 0, key_head: ki.head ?? null, key_expired: ki.expired ?? null,
       anon_role: keyInfo(ANON).role ?? null,
+      anon_ref: keyInfo(ANON).ref ?? null,
       db_status: ping.status ?? null,
       used_key: ping.used ?? null,
       keys,

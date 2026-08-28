@@ -128,11 +128,36 @@ export default function TranslateAdmin() {
                     </table>
                   </div>
                 )}
-                <div style={{fontSize:'0.76rem', color:'var(--gold2)', marginTop:'0.45rem', lineHeight:1.8}}>
-                  วิธีแก้: Supabase → Settings → API → หัวข้อ <b>service_role</b> → กด Reveal → คัดลอกทั้งก้อน<br />
-                  → Vercel → Settings → Environment Variables → <code>SUPABASE_SERVICE_ROLE_KEY</code> → วางทับ<br />
-                  → <b>Deployments → Redeploy</b> (ไม่ Redeploy ค่าใหม่จะยังไม่มีผล)
-                </div>
+                {/* ★ กุญแจสาธารณะที่เว็บใช้อยู่ = หลักฐานว่าโปรเจ็คไหนคือตัวจริง */}
+                {health.diag.anon_ref && (
+                  <div style={{fontSize:'0.76rem', color:'var(--muted)', marginTop:'0.4rem'}}>
+                    กุญแจสาธารณะที่เว็บใช้อยู่ (และใช้ได้ปกติ) เป็นของโปรเจ็ค{' '}
+                    <code style={{color:'var(--jade)'}}>{health.diag.anon_ref}</code>
+                    {health.diag.anon_ref === health.diag.url_ref && <b style={{color:'var(--jade)'}}> ← นี่คือโปรเจ็คที่ถูก</b>}
+                  </div>
+                )}
+                {/* วิธีแก้ — แยกตามอาการ ไม่ใช่บอกกลาง ๆ เหมือนกันหมด */}
+                {/คนละตัว|คนละโปรเจ็ค/.test(health.diag.problem ?? '') ? (
+                  <div style={{fontSize:'0.76rem', color:'var(--gold2)', marginTop:'0.45rem', lineHeight:1.9}}>
+                    <b>ทางแก้ที่ตัวเชื่อมมาทับไม่ได้</b> (แนะนำ — ไม่ต้องไปยุ่งกับตัวเชื่อม)<br />
+                    1. Supabase → เลือกโปรเจ็ค <code style={{color:'var(--jade)'}}>{health.diag.url_ref}</code>{' '}
+                       (ตัวที่เว็บใช้อยู่ ไม่ใช่ตัวที่ตัวเชื่อมผูกไว้)<br />
+                    2. Settings → API → หัวข้อ <b>service_role</b> → Reveal → กดปุ่มคัดลอก<br />
+                    3. Vercel → Environment Variables → <b>Add Environment Variable</b><br />
+                    &nbsp;&nbsp;&nbsp;ชื่อ <code>THMA_SUPABASE_KEY</code> · ค่า = กุญแจที่คัดลอกมา · เลือก All Environments<br />
+                    4. Deployments → <b>Redeploy</b><br />
+                    <span style={{color:'var(--muted)'}}>
+                      ใช้ชื่อใหม่เพราะตัวเชื่อม Supabase↔Vercel ดูแลชื่อที่ขึ้นต้นด้วย SUPABASE_ อยู่
+                      ถ้าไปวางทับชื่อเดิม มันจะเขียนกลับเป็นของโปรเจ็คผิดอีก
+                    </span>
+                  </div>
+                ) : (
+                  <div style={{fontSize:'0.76rem', color:'var(--gold2)', marginTop:'0.45rem', lineHeight:1.8}}>
+                    วิธีแก้: Supabase → Settings → API → หัวข้อ <b>service_role</b> → กด Reveal → คัดลอกทั้งก้อน<br />
+                    → Vercel → Environment Variables → <code>SUPABASE_SERVICE_ROLE_KEY</code> → วางทับ<br />
+                    → <b>Deployments → Redeploy</b> (ไม่ Redeploy ค่าใหม่จะยังไม่มีผล)
+                  </div>
+                )}
               </div>
             )}
             {health.ver && <div style={{fontSize:'0.68rem', color:'var(--muted)'}}>ตัวแปลรุ่น {health.ver}</div>}
