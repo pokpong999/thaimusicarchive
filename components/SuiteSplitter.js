@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { suggestParts, partIdFor, makePart, unmakePart, listParts, partError,
-         suiteReport, reportSummary, fetchMelody, suiteCheck, fixSuiteVerses } from '../lib/songparts';
+         suiteReport, reportSummary, fetchMelody, suiteCheck, fixSuiteVerses, checkError } from '../lib/songparts';
 
 const MAIN = 'ทำนองหลัก';
 
@@ -30,7 +30,8 @@ export default function SuiteSplitter() {
   const [instUsed, setInstUsed] = useState(null);
   const [gap, setGap] = useState(null);        // โน้ตในฐานไม่ครบตามที่บันทึกไว้
   const [verify, setVerify] = useState(null);  // อ่านโน้ตของเพลงย่อยได้จริงไหม
-  const [dups, setDups] = useState(null);      // ลำดับวรรคพังไหม (sql/38)
+  const [dups, setDups] = useState(null);      // ผลตรวจลำดับวรรค (sql/39)
+  const [dupErr, setDupErr] = useState('');    // ★ ตรวจไม่ได้ก็ต้องบอก ไม่ใช่เงียบ
 
   // เพลงที่น่าจะเป็นเพลงเรื่อง — ดูจากประเภท หรือชื่อที่มีคำว่า เรื่อง/ตับ
   useEffect(() => {
@@ -61,6 +62,20 @@ export default function SuiteSplitter() {
   }, [suites]);
 
   useEffect(() => { loadSuite(sid); }, [sid, loadSuite]);
+
+  // ★ ตรวจลำดับวรรคทันทีที่เลือกเพลงเรื่อง — ไม่ต้องรอให้กดปุ่มอื่นก่อน
+  //   รอบก่อนพลาดตรงนี้: โค้ดตรวจไปอยู่ในปุ่ม "ตรวจข้อมูลในฐาน" แผงเลยไม่เคยขึ้นให้เห็นเลย
+  //   Pk เลือกเพลงแล้วไม่เจอปุ่มซ่อม จึงซ่อมไม่ได้สักที (Pk 28 ส.ค. 69)
+  useEffect(() => {
+    if (!sid) { setDups(null); setDupErr(''); return; }
+    let alive = true;
+    suiteCheck(sid).then(x => {
+      if (!alive) return;
+      if (x.error) { setDups(null); setDupErr(checkError(x.error.message)); }
+      else { setDups(x.rows); setDupErr(''); }
+    });
+    return () => { alive = false; };
+  }, [sid]);
 
   const upd = (i, patch) => setParts(ps => ps.map((p, j) => (j === i ? { ...p, ...patch } : p)));
 
@@ -116,8 +131,13 @@ export default function SuiteSplitter() {
     setBusy(false);
     if (error) { setErr(partError(error.message)); return; }
     const n = (r ?? []).reduce((a, x) => a + Number(x.fixed ?? 0), 0);
-    setMsg(`✓ ซ่อมลำดับวรรคแล้ว ${n} วรรค — เปิดหน้าเพลงเรื่องดูได้เลย`);
-    suiteCheck(sid).then(x => setDups(x.error ? null : x.rows));
+    setMsg(n > 0
+      ? `✓ เรียงลำดับวรรคใหม่แล้ว ${n} วรรค — เปิดหน้าเพลงเรื่องดูได้เลย`
+      : '✓ ตรวจแล้ว ลำดับถูกต้องอยู่แล้ว ไม่มีอะไรต้องแก้');
+    suiteCheck(sid).then(x => {
+              if (x.error) { setDups(null); setDupErr(checkError(x.error.message)); }
+              else { setDups(x.rows); setDupErr(''); }
+            });
   }
 
   return (
@@ -129,27 +149,61 @@ export default function SuiteSplitter() {
         แก้ที่เพลงย่อยหรือที่เพลงเรื่องก็คือแถวเดียวกัน ไม่มีทางไม่ตรงกัน
       </div>
 
-      {/* ── ลำดับวรรคพัง: บันทึกจากหน้าเพลงย่อยรุ่นเก่าแล้วเลขวรรคไปทับของเพลงเรื่อง (Pk 28 ส.ค. 69) ── */}
-      {dups?.length > 0 && (
-        <div data-dupwarn style={{border:'1px solid var(--danger)',borderRadius:'8px',
+      {/* ★ ตรวจไม่ได้ = ต้องบอก ไม่ใช่ไม่แสดงอะไรเลย
+          รอบก่อนพลาดตรงนี้: ยังไม่ได้รัน sql แล้วแผงหายไปทั้งแผง Pk เลยไม่มีปุ่มให้กด */}
+      {sid && dupErr && (
+        <div data-duperr style={{border:'1px solid var(--gold)',borderRadius:'8px',
           padding:'0.8rem 1rem',marginBottom:'0.9rem',fontSize:'0.82rem',lineHeight:1.8}}>
-          <div style={{color:'var(--danger)',fontWeight:600}}>⚠ ลำดับวรรคของเพลงเรื่องนี้พัง</div>
-          {dups.map(d => (
-            <div key={d.instrument} style={{color:'var(--muted)'}}>
-              {d.instrument}: {d.rows_n} วรรค แต่เลขวรรคซ้ำกัน {d.dups} วรรค
-            </div>
-          ))}
-          <div style={{color:'var(--muted)'}}>
-            เกิดจากการบันทึกที่หน้าเพลงย่อยรุ่นก่อน แล้วเลขวรรคของเพลงย่อยไปทับเลขของเพลงเรื่อง
-            เปิดหน้าเพลงเรื่องจะเห็นท่อนสลับกันมั่ว — <b>ตัวโน้ตไม่ได้หายไปไหน แค่เรียงผิด</b>
-          </div>
-          <button className="btn btn-primary btn-sm" disabled={busy} onClick={repair}
-            style={{marginTop:'0.5rem'}}>🔧 ซ่อมลำดับวรรคให้ถูกต้อง</button>
+          <div style={{color:'var(--gold2)',fontWeight:600}}>ตรวจลำดับวรรคไม่ได้</div>
+          <div style={{color:'var(--muted)'}}>{dupErr}</div>
         </div>
       )}
-      {dups?.length === 0 && sid && (
-        <div data-dupok style={{fontSize:'0.76rem',color:'var(--jade)',marginBottom:'0.7rem'}}>
-          ✓ ลำดับวรรคของเพลงเรื่องนี้เรียบร้อยดี
+
+      {/* ── ลำดับวรรคของเพลงเรื่อง (sql/39) ── */}
+      {sid && dups && (
+        <div data-suiteorder style={{border:'1px solid ' + (dups.some(d => +d.misordered > 0) ? 'var(--danger)' : 'var(--border)'),
+          borderRadius:'8px',padding:'0.8rem 1rem',marginBottom:'0.9rem',fontSize:'0.82rem',lineHeight:1.8}}>
+          {dups.some(d => +d.misordered > 0) ? (
+            <>
+              <div style={{color:'var(--danger)',fontWeight:600}}>⚠ ลำดับวรรคของเพลงเรื่องนี้ผิด</div>
+              <div style={{color:'var(--muted)'}}>
+                เกิดจากการบันทึกที่หน้าเพลงย่อยรุ่นก่อน แล้วเลขวรรคของเพลงย่อยไปทับเลขของเพลงเรื่อง
+                เปิดหน้าเพลงเรื่องจะเห็นท่อนละวรรคเดียวสลับกันไปมา — <b>ตัวโน้ตไม่ได้หายไปไหน แค่เรียงผิด</b>
+              </div>
+            </>
+          ) : (
+            <div style={{color:'var(--jade)',fontWeight:600}}>✓ ลำดับวรรคของเพลงเรื่องนี้เรียบร้อยดี</div>
+          )}
+          <div style={{marginTop:'0.5rem',overflowX:'auto'}}>
+            <table style={{fontSize:'0.76rem',borderCollapse:'collapse',minWidth:'380px'}}>
+              <thead><tr style={{color:'var(--muted)'}}>
+                <th style={{textAlign:'left',padding:'2px 12px 2px 0'}}>ทาง</th>
+                <th style={{textAlign:'right',padding:'2px 12px 2px 0'}}>วรรคทั้งหมด</th>
+                <th style={{textAlign:'right',padding:'2px 12px 2px 0'}}>อยู่ผิดที่</th>
+                <th style={{textAlign:'right',padding:'2px 12px 2px 0'}}>เลขซ้ำ</th>
+                <th style={{textAlign:'right',padding:'2px 12px 2px 0'}}>เพลงย่อย</th>
+                <th style={{textAlign:'right',padding:'2px 0'}}>ไม่อยู่ในเพลงย่อย</th>
+              </tr></thead>
+              <tbody>
+                {dups.map(d => (
+                  <tr key={d.instrument}>
+                    <td style={{padding:'2px 12px 2px 0'}}>{d.instrument}</td>
+                    <td style={{textAlign:'right',padding:'2px 12px 2px 0',fontFamily:'monospace'}}>{d.rows_n}</td>
+                    <td style={{textAlign:'right',padding:'2px 12px 2px 0',fontFamily:'monospace',
+                      color:+d.misordered > 0 ? 'var(--danger)' : 'var(--jade)'}}>{d.misordered}</td>
+                    <td style={{textAlign:'right',padding:'2px 12px 2px 0',fontFamily:'monospace'}}>{d.dups}</td>
+                    <td style={{textAlign:'right',padding:'2px 12px 2px 0',fontFamily:'monospace'}}>{d.parts_n}</td>
+                    <td style={{textAlign:'right',padding:'2px 0',fontFamily:'monospace'}}>{d.unclaimed}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {/* ★ ปุ่มอยู่ตลอด ไม่ใช่โผล่เฉพาะตอนตรวจเจอ — ซ่อมซ้ำไม่ทำอะไรเสียหาย */}
+          <button className={'btn btn-sm ' + (dups.some(d => +d.misordered > 0) ? 'btn-primary' : 'btn-outline')}
+            disabled={busy} onClick={repair} style={{marginTop:'0.5rem'}}>
+            🔧 เรียงลำดับวรรคใหม่ให้ถูกต้อง
+          </button>
         </div>
       )}
 
@@ -162,7 +216,10 @@ export default function SuiteSplitter() {
         <div style={{display:'flex',gap:'8px',alignItems:'center',marginTop:'0.6rem',flexWrap:'wrap'}}>
           <button className="btn btn-outline btn-sm" disabled={busy} onClick={async () => {
             setBusy(true); setErr('');
-            suiteCheck(sid).then(r => setDups(r.error ? null : r.rows));
+            suiteCheck(sid).then(x => {
+              if (x.error) { setDups(null); setDupErr(checkError(x.error.message)); }
+              else { setDups(x.rows); setDupErr(''); }
+            });
             const { rows: rr, error } = await suiteReport(sid);
             setBusy(false);
             if (error) { setErr('ตรวจไม่ได้: ' + partError(error.message)); setReport(null); return; }
