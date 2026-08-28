@@ -49,7 +49,7 @@ const GOOG = clean(process.env.GOOGLE_TRANSLATE_API_KEY);
 const MODEL = process.env.TRANSLATE_MODEL || 'claude-haiku-4-5-20251001';
 
 const MAX_ROWS = 40;     // ต่อการเรียกหนึ่งครั้ง — กันไม่ให้คำสั่งยาวเกินและกันบิลพุ่ง
-const TR_VER = '28 ส.ค. 69 · r4 (ชื่อกุญแจของเราเอง)';
+const TR_VER = '28 ส.ค. 69 · r5 (รองรับกุญแจแบบใหม่)';
 
 // ── ตรวจกุญแจโดยไม่เปิดเผยตัวกุญแจ ────────────────────────────────
 //   กุญแจแบบเดิมของ Supabase เป็น JWT — ส่วนกลางถอดได้ ไม่ใช่ความลับ
@@ -74,11 +74,20 @@ function keyInfo(k) {
 
 const refOfUrl = u => (String(u).match(/^https?:\/\/([a-z0-9-]+)\./) ?? [])[1] ?? null;
 
+// ★ หัวคำขอที่ถูกต้องของกุญแจแต่ละชนิด
+//   กุญแจแบบเดิมเป็น JWT → ส่งได้ทั้ง apikey และ Authorization: Bearer
+//   กุญแจแบบใหม่ (sb_secret_ / sb_publishable_) ไม่ใช่ JWT
+//     → ส่งใน Bearer ไม่ได้ ฐานจะปฏิเสธเพราะแกะเป็น JWT ไม่ออก
+//     ส่งเฉพาะ apikey เท่านั้น
+//   เดิมส่งทั้งสองหัวเสมอ กุญแจแบบใหม่จึงใช้ไม่ได้เลย (Pk 28 ส.ค. 69)
+const isJwt = k => String(k).split('.').length === 3;
+const authHeaders = k => (isJwt(k) ? { apikey: k, authorization: `Bearer ${k}` } : { apikey: k });
+
 // ลองกุญแจหนึ่งตัวกับฐานจริง — ไม่อ่านข้อมูลอะไรเลย
 async function tryKey(key) {
   try {
     const r = await fetch(`${URL_}/rest/v1/songs?select=id&limit=1`, {
-      headers: { apikey: key, authorization: `Bearer ${key}` }, cache: 'no-store' });
+      headers: authHeaders(key), cache: 'no-store' });
     if (r.ok) return { ok: true, status: r.status };
     return { ok: false, status: r.status, why: (await r.text()).slice(0, 200) };
   } catch (e) { return { ok: false, why: String(e.message ?? e) }; }
@@ -143,7 +152,7 @@ async function rest(path, init = {}) {
   const key = rk?.key || SVC;
   const r = await fetch(`${URL_}/rest/v1/${path}`, {
     ...init,
-    headers: { apikey: key, authorization: `Bearer ${key}`,
+    headers: { ...authHeaders(key),
       'content-type': 'application/json', ...(init.headers ?? {}) },
     cache: 'no-store',
   });
