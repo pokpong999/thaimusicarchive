@@ -116,13 +116,25 @@ export default function EditMelodyPage() {
     const existing = new Map(rows.map(r => [r.verse_no, r]));
     const errs = [];
     for (const nr of newRows) {
-      const payload = { ...base, verse_no: nr.verse_no, section: nr.section, line_no: nr.line_no,
+      const old0 = existing.get(nr.verse_no);
+      // ★★ เพลงย่อยใช้ "แถวเดียวกัน" กับเพลงเรื่อง
+      //    เลขวรรคกับชื่อท่อนที่เห็นในเพลงย่อยเป็นของเพลงย่อย (นับใหม่จาก 1 · 'ท่อน 1')
+      //    ถ้าเขียนค่าพวกนี้กลับลงฐาน = ไปทับเลขวรรคกับชื่อท่อนของเพลงเรื่อง
+      //    ผลคือเพลงเรื่องมีวรรคเลขซ้ำกันเต็มไปหมด ท่อนสลับมั่ว (Pk 28 ส.ค. 69)
+      //    → เพลงย่อยแก้ได้แต่ "ตัวโน้ต" ส่วนเลขวรรค/ชื่อท่อนคงค่าเดิมของเพลงเรื่องไว้
+      const keep = isPart && old0
+        ? { verse_no: old0._srcVerse ?? old0.verse_no, section: old0._srcSection ?? old0.section }
+        : { verse_no: nr.verse_no, section: nr.section };
+      // line_no เป็นเลขที่นับต่อกันทั้งเพลง เพลงย่อยเขียนกลับแล้วชนกันแน่
+      //   จึงเขียนเฉพาะ line_break (ค่าประจำแถว) — sql/38
+      const payload = { ...base, ...keep, line_break: nr.line_break,
+        ...(isPart ? {} : { line_no: nr.line_no }),
         combined: nr.combined, right_hand: nr.right_hand, left_hand: nr.left_hand, third_hand: nr.third_hand ?? null,
         notation_system: nr.notation_system ?? null, krasuan: nr.krasuan, luktok: nr.luktok, level: nr.level ?? null, ching: nr.ching ?? null,
         marks: nr.marks ?? null,
         // ทาง/วง/ระบบเสียงที่ผู้ถอดโน้ตตั้งไว้ — เดิมไม่ถูกเก็บ เครื่องเล่นเลยต้องเดาเอง (sql/21)
         tang: st.tangHome ?? null, ensemble: st.notEns ?? st.ensemble ?? null, tuning: st.tuning ?? null };
-      const old = existing.get(nr.verse_no);
+      const old = old0;
       if (old) {
         // อัปเดตด้วยกุญแจหลักของแถว — เพลงย่อยจึงเขียนลงแถวเดียวกับเพลงเรื่องเป๊ะ
         const { error } = await supabase.from('song_melody').update(payload).eq('id', old._rowId ?? old.id);
@@ -132,7 +144,7 @@ export default function EditMelodyPage() {
         if (error) errs.push('ว.' + nr.verse_no + ': ' + error.message);
       }
     }
-    const extra = rows.filter(r => r.verse_no > newRows.length).map(r => r.id);
+    const extra = rows.filter(r => r.verse_no > newRows.length).map(r => r._rowId ?? r.id);
     if (extra.length) {
       const { error } = await supabase.from('song_melody').delete().in('id', extra);
       if (error) errs.push('ลบวรรคเกิน: ' + error.message);
