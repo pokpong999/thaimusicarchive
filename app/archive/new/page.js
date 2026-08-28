@@ -11,6 +11,7 @@ import { shrinkImage } from '../../../lib/imgresize';
 import PinColorHint from '../../../components/PinColorHint';
 import DraftBar from '../../../components/DraftBar';
 import { listDrafts, getDraft, saveDraft, deleteDraft, makeAutoSaver } from '../../../lib/drafts';
+import { kickTranslateSoon } from '../../../lib/translate';
 
 export default function NewArchiveRecord() {
   const [user, setUser] = useState(null);
@@ -191,6 +192,7 @@ export default function NewArchiveRecord() {
     draftIdRef.current = null; setDraftId(null); setSavedAt(null);
     try { const u = new URL(window.location.href); u.searchParams.delete('draft'); window.history.replaceState(null, '', u.toString()); } catch (e) {}
 
+    kickTranslateSoon(6);   // แปลเป็นอังกฤษให้เอง (sql/37 + /api/translate)
     setMsg('✓ บันทึกแล้ว — รอ Admin อนุมัติก่อนแสดงสาธารณะ' + (skipped.length ? ` (อัปโหลดรูปไม่สำเร็จ ${skipped.length} ไฟล์: ${skipped.join(', ')})` : ''));
     setBusy(false);
     setWho(''); setWhat(''); setWhenText(''); setWhenDate(''); setWhere(''); setDesc(''); setYtUrl(''); setFiles([]); setPos(null); setUploaded([]);

@@ -1,0 +1,134 @@
+'use client';
+// components/TranslateAdmin.js — แผงคำแปลอังกฤษในหน้าผู้ดูแล  (Pk 28 ส.ค. 69)
+//
+//   ใช้ไล่แปลของเก่าที่ค้างอยู่ (เหตุการณ์ 270 กว่ารายการ · เพลง 300 เพลง)
+//   ของใหม่ไม่ต้องมากด — เว็บสั่งแปลเองตอนสมาชิกส่งและตอนผู้ดูแลกดอนุมัติ
+//
+//   ★ บอกสถานะการตั้งค่าให้ชัด ก่อนที่จะกดแล้วงงว่าทำไมไม่ขยับ
+//     ไม่มีกุญแจ = ขึ้นบอกตรง ๆ ว่าต้องไปวางที่ไหน
+import { useEffect, useState } from 'react';
+import { trStats, trHealth, kickTranslate, trReset } from '../lib/translate';
+
+const SRC_NAME = {
+  archive_records: 'เหตุการณ์ในหอจดหมายเหตุ',
+  archive_media:   'คำบรรยายภาพ',
+  songs:           'ชื่อเพลง · ประวัติเพลง · บทร้อง',
+};
+
+export default function TranslateAdmin() {
+  const [health, setHealth] = useState(null);
+  const [stats, setStats] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [log, setLog] = useState([]);
+  const [err, setErr] = useState('');
+  const [stop, setStop] = useState(false);
+
+  const refresh = async () => {
+    const s = await trStats();
+    if (s.error) setErr(sqlHint(s.error.message));
+    else { setStats(s); setErr(''); }
+  };
+  useEffect(() => { trHealth().then(setHealth); refresh(); }, []);
+
+  const sqlHint = m => (/thma_tr_stats|schema cache|does not exist|tr_src/i.test(m ?? '')
+    ? 'ยังไม่ได้รัน sql/37_translate.sql · ' + m : m);
+
+  // ไล่แปลเป็นรอบ ๆ รอบละ 20 แถว จนกว่าจะหมดหรือกดหยุด
+  async function run(all) {
+    setBusy(true); setStop(false); setLog([]); setErr('');
+    let guard = 0;
+    while (guard++ < 200) {
+      const r = await kickTranslate(20);
+      if (r.error) { setErr(sqlHint(r.error)); break; }
+      setLog(l => [`แปลแล้ว ${r.done ?? 0} รายการ (${r.fields ?? 0} ช่อง) · ${r.by ?? ''}`, ...l].slice(0, 12));
+      await refresh();
+      if (!all) break;
+      if (!r.rows) break;                 // ไม่มีงานค้างแล้ว
+      if (stop) break;
+      await new Promise(z => setTimeout(z, 400));
+    }
+    setBusy(false);
+  }
+
+  async function reset() {
+    if (!confirm('ล้างคำแปลอังกฤษทั้งหมด แล้วสั่งแปลใหม่?\nใช้ตอนแก้บัญชีศัพท์หรือเปลี่ยนเจ้าที่แปล')) return;
+    const { n, error } = await trReset(null);
+    if (error) { setErr(sqlHint(error.message)); return; }
+    setLog(l => [`ล้างคำแปล ${n} รายการ — กด "แปลที่ค้างอยู่" เพื่อแปลใหม่`, ...l]);
+    refresh();
+  }
+
+  const pending = stats?.pending ?? 0;
+  const box = { border: '1px solid var(--border)', borderRadius: 10, padding: '0.9rem 1.1rem', marginBottom: '0.9rem' };
+
+  return (
+    <div data-tradmin>
+      <div style={{fontWeight:600, marginBottom:'0.7rem'}}>🌐 คำแปลภาษาอังกฤษของเนื้อหาที่สมาชิกเขียน</div>
+
+      {/* ── สถานะการตั้งค่า ── */}
+      <div style={box}>
+        <div style={{fontSize:'0.8rem', color:'var(--muted)', marginBottom:'0.5rem'}}>การตั้งค่าที่ Vercel</div>
+        {health == null ? <div style={{fontSize:'0.85rem'}}>กำลังตรวจ…</div> : (
+          <div style={{display:'grid', gap:'4px', fontSize:'0.85rem'}} data-trhealth>
+            <Row ok={health.supabase} on="ต่อฐานข้อมูลได้ (SUPABASE_SERVICE_ROLE_KEY)"
+              off="ยังไม่ได้วาง SUPABASE_SERVICE_ROLE_KEY — Vercel → Settings → Environment Variables" />
+            <Row ok={health.anthropic || health.google}
+              on={`ตัวแปลพร้อม: ${health.anthropic ? 'Anthropic · ' + (health.model ?? '') : 'Google Translate'}`}
+              off="ยังไม่ได้วางกุญแจตัวแปล — ใส่ ANTHROPIC_API_KEY หรือ GOOGLE_TRANSLATE_API_KEY" />
+            {health.ver && <div style={{fontSize:'0.68rem', color:'var(--muted)'}}>ตัวแปลรุ่น {health.ver}</div>}
+          </div>
+        )}
+      </div>
+
+      {/* ── งานค้าง ── */}
+      <div style={box}>
+        <div style={{display:'flex', alignItems:'baseline', gap:'10px', flexWrap:'wrap'}}>
+          <div style={{fontSize:'1.05rem', fontWeight:700, color: pending ? 'var(--gold)' : 'var(--jade)'}}>
+            {stats == null ? '—' : pending ? `ค้างอยู่ ${pending} รายการ` : 'แปลครบแล้ว'}
+          </div>
+          <button className="btn btn-outline btn-sm" onClick={refresh} disabled={busy}>↻ นับใหม่</button>
+        </div>
+        {stats?.rows && (
+          <div style={{marginTop:'0.6rem', fontSize:'0.82rem', display:'grid', gap:'3px'}}>
+            {stats.rows.map(r => (
+              <div key={r.src} style={{display:'flex', gap:'8px'}}>
+                <span style={{minWidth:'210px'}}>{SRC_NAME[r.src] ?? r.src}</span>
+                <span style={{color:'var(--gold)'}}>ค้าง {r.pending}</span>
+                <span style={{color:'var(--jade)'}}>แปลแล้ว {r.done}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div style={{display:'flex', gap:'8px', flexWrap:'wrap', marginTop:'0.8rem'}}>
+          <button className="btn btn-primary btn-sm" disabled={busy || !pending || !health?.ready}
+            onClick={() => run(true)}>
+            {busy ? '⏳ กำลังแปล…' : `▶ แปลที่ค้างอยู่ทั้งหมด (${pending})`}
+          </button>
+          <button className="btn btn-outline btn-sm" disabled={busy || !pending || !health?.ready}
+            onClick={() => run(false)}>แปลทีละ 20 รายการ</button>
+          {busy && <button className="btn btn-outline btn-sm" onClick={() => setStop(true)}>■ หยุด</button>}
+          <span style={{flex:1}} />
+          <button className="btn btn-danger btn-sm" disabled={busy} onClick={reset}>ล้างคำแปล แล้วแปลใหม่</button>
+        </div>
+      </div>
+
+      {err && <div style={{color:'var(--danger)', fontSize:'0.82rem', marginBottom:'0.7rem'}}>⚠ {err}</div>}
+
+      {log.length > 0 && (
+        <div style={{fontSize:'0.78rem', color:'var(--muted)', display:'grid', gap:'2px'}} data-trlog>
+          {log.map((l, i) => <div key={i}>· {l}</div>)}
+        </div>
+      )}
+
+      <div style={{fontSize:'0.76rem', color:'var(--muted)', marginTop:'1rem', lineHeight:1.8}}>
+        ของใหม่ไม่ต้องมากดที่นี่ — เว็บสั่งแปลให้เองตอนสมาชิกกดส่ง และตอนผู้ดูแลกดอนุมัติ<br/>
+        ปุ่มนี้มีไว้ไล่แปล<b>ของเก่า</b> กับตอนที่มีอะไรหลุด<br/>
+        สมาชิกกลับมาแก้ข้อความไทย → ระบบรู้เองว่าคำแปลเก่าใช้ไม่ได้ แล้วเข้าคิวแปลใหม่
+      </div>
+    </div>
+  );
+}
+
+const Row = ({ ok, on, off }) => (
+  <div style={{color: ok ? 'var(--jade)' : 'var(--danger)'}}>{ok ? '✓' : '✗'} {ok ? on : off}</div>
+);

@@ -10,6 +10,8 @@ import { refreshSongStats } from '../../lib/songstats';
 import { pointsFor, awardLabel } from '../../lib/points';
 import { LENSES as PERM_LENSES, PERM_BY_KEY } from '../../lib/perms';
 import SongTypeAdmin from '../../components/SongTypeAdmin';
+import TranslateAdmin from '../../components/TranslateAdmin';
+import { kickTranslateSoon } from '../../lib/translate';
 import SuiteSplitter from '../../components/SuiteSplitter';
 import ProofBox from '../../components/ProofBox';
 import MelodyLog from '../../components/MelodyLog';
@@ -281,6 +283,7 @@ export default function AdminPage() {
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
     }).eq('id', id);
     await award(row?.submitted_by, 'archive', { hasImage: recordHasImage(row) });
+    kickTranslateSoon(6);   // อนุมัติแล้วขึ้นสาธารณะ → แปลเป็นอังกฤษเลย (sql/37)
     loadAll();
   }
   async function rejectRecord(id) {
@@ -604,7 +607,7 @@ export default function AdminPage() {
 
       {/* แท็บ: เดิมเป็น <div onClick> กดด้วยคีย์บอร์ดไม่ได้ และเป้ากดเตี้ย (Pk 27 ส.ค. 69) */}
       <div className="tab-row" style={{display:'flex',gap:'0',borderBottom:'1px solid var(--border)',marginBottom:'1.2rem',flexWrap:'wrap'}}>
-        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['members','สมาชิก ('+members.length+')'],['nathab','🥁 หน้าทับ'+(nathabRows.filter(r=>r.status==='pending').length?' ('+nathabRows.filter(r=>r.status==='pending').length+')':'')],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์'],['content','🖼 เนื้อหาเว็บ'],['stats','📈 สถิติ']].map(([k,label]) => (
+        {[['archive','หอจดหมายเหตุ ('+pendingRecords.length+')'],['videos','วิดีโอเพลง ('+pendingVideos.length+')'],['tang','ทางเครื่อง ('+pendingTang.length+')'],['files','PDF ('+pendingFiles.length+')'],['newsongs','เพลงใหม่ ('+pendingSongs.length+')'],['audio','เสียง ('+pendingAudio.length+')'],['manage','จัดการข้อมูล'],['translate','🌐 คำแปล EN'],['members','สมาชิก ('+members.length+')'],['nathab','🥁 หน้าทับ'+(nathabRows.filter(r=>r.status==='pending').length?' ('+nathabRows.filter(r=>r.status==='pending').length+')':'')],['samples','🎵 เสียง'],['add','➕วิดีโอ'],['backup','💾 สำรอง'],['perm','🔐 สิทธิ์'],['content','🖼 เนื้อหาเว็บ'],['stats','📈 สถิติ']].map(([k,label]) => (
           <button key={k} type="button" onClick={() => setTab(k)} aria-pressed={tab === k}
             style={{padding:'10px 16px',minHeight:'40px',fontSize:'0.86rem',cursor:'pointer',
               background:'transparent',border:'none',fontFamily:'inherit',whiteSpace:'nowrap',
@@ -928,6 +931,8 @@ export default function AdminPage() {
           </div>
         </>
       )}
+
+      {tab === 'translate' && <TranslateAdmin />}
 
       {tab === 'stats' && (
         <div className="card">

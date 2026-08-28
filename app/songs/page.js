@@ -6,9 +6,10 @@ import SongTypeSelect from '../../components/SongTypeSelect';
 import ProofBox from '../../components/ProofBox';
 import { PROOF, proofProgress, proofLabel } from '../../lib/proof';
 import { useLang } from '../../lib/i18n';
+import { trText } from '../../lib/translate';
 
 // รุ่นของหน้าฐานข้อมูลเพลง — ไว้ตรวจว่าไฟล์นี้ถูกอัพแล้ว
-export const SONGDB_VERSION = '28 ส.ค. 69 · r2';
+export const SONGDB_VERSION = '28 ส.ค. 69 · r3 (สองภาษา)';
 
 const PAGE_SIZE = 25;
 
@@ -142,7 +143,7 @@ export default function SongDatabasePage() {
                 <tr key={s.id}>
                   <td className="song-id">{s.id}</td>
                   <td>
-                    <Link href={`/songs/${s.id}`}><span className="song-name">{s.name_th}</span></Link>
+                    <Link href={`/songs/${s.id}`}><span className="song-name">{trText(lang, s, 'name_th')}</span></Link>
                     {/* เพลงย่อยที่แยกจากเพลงเรื่อง — บอกที่มาไว้ จะได้ไม่งงว่ามาจากไหน (Pk 27 ส.ค. 69) */}
                     {s.parent_song_id && <span style={{fontSize:'0.68rem',color:'var(--muted)',marginLeft:'6px'}}
                       title={t('part_of') + ' ' + s.parent_song_id}>🧩 {s.parent_song_id}</span>}

@@ -8,11 +8,19 @@ import { supabase } from '../../lib/supabase';
 import LeafletMap from '../../components/LeafletMap';
 import { esc } from '../../lib/htmlesc';
 import { pinColor, pinLabel, yearOf, legendHtml } from '../../lib/eracolor';
+import { useLang } from '../../lib/i18n';
+import { trText } from '../../lib/translate';
+
+// รุ่นของหน้าหอจดหมายเหตุ — ไว้ตรวจว่าไฟล์นี้ถูกอัพแล้ว (Pk 28 ส.ค. 69)
+export const ARCHIVE_VERSION = '28 ส.ค. 69 · r1 (สองภาษา)';
 
 const ERAS = { past: 'อดีต', present: 'ปัจจุบัน', future: 'อนาคต' };
 
 export default function ArchivePage() {
   const { can } = usePermissions();
+  const { lang } = useLang();
+  // ข้อความที่สมาชิกเขียน — โชว์คำแปลถ้าแปลครบแล้ว ไม่ครบก็คงไทยไว้
+  const T = (r, f) => trText(lang, r, f);
   const [records, setRecords] = useState([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [myId, setMyId] = useState(null);
@@ -84,14 +92,14 @@ export default function ArchivePage() {
     tooltipHtml: `
       <div style="font-family:'Noto Sans Thai',sans-serif;max-width:200px;text-align:center">
         ${thumb ? `<img src="${esc(thumb)}" style="width:180px;height:110px;object-fit:cover;border-radius:6px;display:block;margin-bottom:5px"/>` : ''}
-        <div style="font-size:0.75rem;font-weight:600">${esc(r.what_text)}</div>
-        <div style="font-size:0.65rem;color:#666">${esc(r.when_text)}</div>
+        <div style="font-size:0.75rem;font-weight:600">${esc(T(r,'what_text'))}</div>
+        <div style="font-size:0.65rem;color:#666">${esc(T(r,'when_text'))}</div>
       </div>`,
     popupHtml: `
       <div style="font-family:'Noto Sans Thai',sans-serif;min-width:200px">
-        <div style="font-size:0.7rem;color:#8A6D1F;display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:${color};display:inline-block;border:1px solid #0F1B2D"></span>${ERAS[r.era] ?? r.era} · ${esc(r.when_text)}${yr ? '' : ' <span style="color:#999">(ไม่ระบุปี)</span>'}</div>
-        <div style="font-weight:600;margin:4px 0 2px">${esc(r.what_text)}</div>
-        <div style="font-size:0.78rem;color:#555">${esc(r.who_text)}<br/>${esc(r.where_text)}</div>
+        <div style="font-size:0.7rem;color:#8A6D1F;display:flex;align-items:center;gap:5px"><span style="width:9px;height:9px;border-radius:50%;background:${color};display:inline-block;border:1px solid #0F1B2D"></span>${ERAS[r.era] ?? r.era} · ${esc(T(r,'when_text'))}${yr ? '' : ' <span style="color:#999">(ไม่ระบุปี)</span>'}</div>
+        <div style="font-weight:600;margin:4px 0 2px">${esc(T(r,'what_text'))}</div>
+        <div style="font-size:0.78rem;color:#555">${esc(T(r,'who_text'))}<br/>${esc(T(r,'where_text'))}</div>
         <div style="margin-top:8px;display:flex;gap:10px">
           <a href="/archive/${r.id}" style="font-size:0.78rem;color:#3A7A67;font-weight:600">ดูรายละเอียด →</a>
           <a href="https://www.google.com/maps?q=${r.lat},${r.lng}" target="_blank" style="font-size:0.78rem;color:#4285F4">Google Maps ↗</a>
@@ -157,10 +165,10 @@ export default function ArchivePage() {
                   <div style={{minWidth:0}}>
                     <div style={{display:'flex',gap:'8px',alignItems:'center',flexWrap:'wrap'}}>
                       <span className="badge badge-fixed">{ERAS[r.era] ?? r.era}</span>
-                      <span style={{fontSize:'0.75rem',color:'var(--muted)'}}>{r.when_text}</span>
+                      <span style={{fontSize:'0.75rem',color:'var(--muted)'}}>{T(r,'when_text')}</span>
                     </div>
-                    <div style={{fontWeight:600,fontSize:'1rem',margin:'6px 0 2px'}}>{r.what_text}</div>
-                    <div style={{fontSize:'0.82rem',color:'var(--muted)'}}>{r.who_text} · {r.where_text}</div>
+                    <div style={{fontWeight:600,fontSize:'1rem',margin:'6px 0 2px'}}>{T(r,'what_text')}</div>
+                    <div style={{fontSize:'0.82rem',color:'var(--muted)'}}>{T(r,'who_text')} · {T(r,'where_text')}</div>
                     {(r.submitted_by || r.created_at) && <div style={{fontSize:'0.66rem',color:'var(--muted)',opacity:.85,marginTop:'3px'}}>
                       {r.submitted_by && <>✍️ โพสต์โดย <span style={{color:'var(--jade)'}}>{posters[r.submitted_by] ?? 'สมาชิก'}</span></>}
                       {r.submitted_by && r.created_at && ' · '}
