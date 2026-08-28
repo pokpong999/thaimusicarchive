@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { suggestParts, partIdFor, makePart, unmakePart, listParts, partError,
-         suiteReport, reportSummary, fetchMelody, suiteCheck, fixSuiteVerses, checkError } from '../lib/songparts';
+         suiteReport, reportSummary, fetchMelody, suiteCheck, fixSuiteVerses, checkError, suitePeek } from '../lib/songparts';
 
 const MAIN = 'ทำนองหลัก';
 
@@ -32,6 +32,7 @@ export default function SuiteSplitter() {
   const [verify, setVerify] = useState(null);  // อ่านโน้ตของเพลงย่อยได้จริงไหม
   const [dups, setDups] = useState(null);      // ผลตรวจลำดับวรรค (sql/39)
   const [dupErr, setDupErr] = useState('');    // ★ ตรวจไม่ได้ก็ต้องบอก ไม่ใช่เงียบ
+  const [peek, setPeek] = useState(null);      // ลำดับจริงในฐาน 14 แถวแรก
 
   // เพลงที่น่าจะเป็นเพลงเรื่อง — ดูจากประเภท หรือชื่อที่มีคำว่า เรื่อง/ตับ
   useEffect(() => {
@@ -74,6 +75,7 @@ export default function SuiteSplitter() {
       if (x.error) { setDups(null); setDupErr(checkError(x.error.message)); }
       else { setDups(x.rows); setDupErr(''); }
     });
+    suitePeek(sid, 14).then(x => { if (alive) setPeek(x.error ? null : x.rows); });
     return () => { alive = false; };
   }, [sid]);
 
@@ -134,6 +136,7 @@ export default function SuiteSplitter() {
     setMsg(n > 0
       ? `✓ เรียงลำดับวรรคใหม่แล้ว ${n} วรรค — เปิดหน้าเพลงเรื่องดูได้เลย`
       : '✓ ตรวจแล้ว ลำดับถูกต้องอยู่แล้ว ไม่มีอะไรต้องแก้');
+    suitePeek(sid, 14).then(x => setPeek(x.error ? null : x.rows));
     suiteCheck(sid).then(x => {
               if (x.error) { setDups(null); setDupErr(checkError(x.error.message)); }
               else { setDups(x.rows); setDupErr(''); }
@@ -199,6 +202,48 @@ export default function SuiteSplitter() {
               </tbody>
             </table>
           </div>
+          {/* ★★ ของจริงในฐาน 14 วรรคแรก — ไม่ต้องเดากันอีก
+              "ควรเป็น" ต่างจาก "ตอนนี้" เมื่อไหร่ = ลำดับผิดตรงนั้น */}
+          {peek?.length > 0 && (
+            <div data-suitepeek style={{marginTop:'0.7rem'}}>
+              <div style={{fontSize:'0.76rem',color:'var(--muted)',marginBottom:'0.25rem'}}>
+                ลำดับจริงในฐาน (14 วรรคแรก ทางทำนองหลัก)
+              </div>
+              <div style={{overflowX:'auto'}}>
+                <table style={{fontSize:'0.72rem',borderCollapse:'collapse',minWidth:'520px'}}>
+                  <thead><tr style={{color:'var(--muted)'}}>
+                    <th style={{textAlign:'right',padding:'2px 8px 2px 0'}}>ที่</th>
+                    <th style={{textAlign:'right',padding:'2px 8px 2px 0'}}>เลขวรรค</th>
+                    <th style={{textAlign:'right',padding:'2px 8px 2px 0'}}>ควรเป็น</th>
+                    <th style={{textAlign:'left',padding:'2px 8px 2px 0'}}>ชื่อท่อน</th>
+                    <th style={{textAlign:'left',padding:'2px 8px 2px 0'}}>เพลงย่อย</th>
+                    <th style={{textAlign:'right',padding:'2px 0'}}>ลำดับเพลงย่อย</th>
+                  </tr></thead>
+                  <tbody>
+                    {peek.map(r => {
+                      const bad = String(r.verse_no) !== String(r.want_no);
+                      return (
+                        <tr key={r.row_id} style={{color: bad ? 'var(--danger)' : 'inherit'}}>
+                          <td style={{textAlign:'right',padding:'2px 8px 2px 0',fontFamily:'monospace'}}>{r.pos}</td>
+                          <td style={{textAlign:'right',padding:'2px 8px 2px 0',fontFamily:'monospace'}}>{r.verse_no}</td>
+                          <td style={{textAlign:'right',padding:'2px 8px 2px 0',fontFamily:'monospace'}}>{r.want_no}</td>
+                          <td style={{padding:'2px 8px 2px 0'}}>{r.section}</td>
+                          <td style={{padding:'2px 8px 2px 0',fontFamily:'monospace'}}>{r.part_song_id ?? '—'}</td>
+                          <td style={{textAlign:'right',padding:'2px 0',fontFamily:'monospace',
+                            color: r.part_song_id && r.part_no == null ? 'var(--danger)' : 'inherit'}}>
+                            {r.part_no ?? '—'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{fontSize:'0.72rem',color:'var(--muted)',marginTop:'0.25rem'}}>
+                แถวสีแดง = วรรคนั้นอยู่ผิดที่ · ช่อง "ลำดับเพลงย่อย" เป็น — ทั้งที่มีเพลงย่อย = ต้องแยกเพลงใหม่
+              </div>
+            </div>
+          )}
+
           {/* ★ ปุ่มอยู่ตลอด ไม่ใช่โผล่เฉพาะตอนตรวจเจอ — ซ่อมซ้ำไม่ทำอะไรเสียหาย */}
           <button className={'btn btn-sm ' + (dups.some(d => +d.misordered > 0) ? 'btn-primary' : 'btn-outline')}
             disabled={busy} onClick={repair} style={{marginTop:'0.5rem'}}>
