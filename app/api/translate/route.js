@@ -26,14 +26,27 @@ export const dynamic = 'force-dynamic';
 const clean = v => String(v ?? '').trim().replace(/^["']|["']$/g, '').replace(/\s+/g, '');
 
 const URL_ = clean(process.env.NEXT_PUBLIC_SUPABASE_URL).replace(/\/+$/, '');
-const SVC  = clean(process.env.SUPABASE_SERVICE_ROLE_KEY);
 const ANON = clean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+
+// ★ กุญแจฝั่งเซิร์ฟเวอร์ที่ยอมรับได้ — เรียงตามลำดับที่จะลอง
+//   ตัวเชื่อม Supabase↔Vercel ใส่ไว้ให้หลายตัว และชื่อไม่เหมือนกันในแต่ละยุค
+//   ยุคเดิม: SUPABASE_SERVICE_ROLE_KEY (JWT) · ยุคใหม่: SUPABASE_SECRET_KEY (sb_secret_…)
+//   ถ้าโปรเจ็คย้ายไปใช้กุญแจแบบใหม่แล้ว ตัว JWT เดิมจะถูกปฏิเสธเป็น "Invalid API key"
+//   จึงต้องลองให้ครบ ไม่ใช่ยึดตัวเดียวแล้วยอมแพ้ (Pk 28 ส.ค. 69)
+const KEY_NAMES = ['SUPABASE_SERVICE_ROLE_KEY', 'SUPABASE_SECRET_KEY', 'SUPABASE_SERVICE_KEY'];
+const CANDIDATES = KEY_NAMES
+  .map(n => ({ name: n, key: clean(process.env[n]) }))
+  .filter(c => c.key);
+
+// ตัวที่ใช้ได้จริง — หาเจอครั้งเดียวแล้วจำไว้
+let RESOLVED = null;
+const SVC = CANDIDATES[0]?.key ?? '';
 const ANTH = clean(process.env.ANTHROPIC_API_KEY);
 const GOOG = clean(process.env.GOOGLE_TRANSLATE_API_KEY);
 const MODEL = process.env.TRANSLATE_MODEL || 'claude-haiku-4-5-20251001';
 
 const MAX_ROWS = 40;     // ต่อการเรียกหนึ่งครั้ง — กันไม่ให้คำสั่งยาวเกินและกันบิลพุ่ง
-const TR_VER = '28 ส.ค. 69 · r2 (ตรวจกุญแจ)';
+const TR_VER = '28 ส.ค. 69 · r3 (ลองกุญแจหลายตัว)';
 
 // ── ตรวจกุญแจโดยไม่เปิดเผยตัวกุญแจ ────────────────────────────────
 //   กุญแจแบบเดิมของ Supabase เป็น JWT — ส่วนกลางถอดได้ ไม่ใช่ความลับ
@@ -58,23 +71,50 @@ function keyInfo(k) {
 
 const refOfUrl = u => (String(u).match(/^https?:\/\/([a-z0-9-]+)\./) ?? [])[1] ?? null;
 
-// ยิงคำขอเบา ๆ ไปที่ฐานจริง เพื่อดูว่ากุญแจใช้ได้ไหม — ไม่อ่านข้อมูลอะไรเลย
-async function pingDb() {
-  if (!URL_ || !SVC) return { ok: false, why: 'missing' };
+// ลองกุญแจหนึ่งตัวกับฐานจริง — ไม่อ่านข้อมูลอะไรเลย
+async function tryKey(key) {
   try {
     const r = await fetch(`${URL_}/rest/v1/songs?select=id&limit=1`, {
-      headers: { apikey: SVC, authorization: `Bearer ${SVC}` }, cache: 'no-store' });
+      headers: { apikey: key, authorization: `Bearer ${key}` }, cache: 'no-store' });
     if (r.ok) return { ok: true, status: r.status };
-    const t = await r.text();
-    return { ok: false, status: r.status, why: t.slice(0, 200) };
+    return { ok: false, status: r.status, why: (await r.text()).slice(0, 200) };
   } catch (e) { return { ok: false, why: String(e.message ?? e) }; }
+}
+
+// ไล่ลองกุญแจที่มีจนกว่าจะเจอตัวที่ฐานรับ แล้วจำไว้ใช้ต่อ
+async function resolveKey() {
+  if (RESOLVED) return RESOLVED;
+  if (!URL_ || CANDIDATES.length === 0) return null;
+  const tried = [];
+  for (const c of CANDIDATES) {
+    const r = await tryKey(c.key);
+    tried.push({ name: c.name, ok: r.ok, status: r.status ?? null });
+    if (r.ok) { RESOLVED = { ...c, tried }; return RESOLVED; }
+  }
+  return { name: null, key: null, tried };
+}
+
+async function pingDb() {
+  if (!URL_) return { ok: false, why: 'missing-url', tried: [] };
+  if (CANDIDATES.length === 0) return { ok: false, why: 'missing-key', tried: [] };
+  const r = await resolveKey();
+  if (r?.key) return { ok: true, status: 200, used: r.name, tried: r.tried };
+  const last = r?.tried?.[r.tried.length - 1];
+  return { ok: false, status: last?.status ?? null, why: 'all-rejected', tried: r?.tried ?? [] };
 }
 
 // แปลผลให้เป็นภาษาคน พร้อมบอกว่าต้องไปแก้ตรงไหน
 function diagnose(ping, ki, urlRef) {
   if (ping.ok) return null;
   if (!URL_) return 'ยังไม่ได้ตั้ง NEXT_PUBLIC_SUPABASE_URL';
-  if (!ki.set) return 'ยังไม่ได้วาง SUPABASE_SERVICE_ROLE_KEY ที่ Vercel → Settings → Environment Variables';
+  if (CANDIDATES.length === 0)
+    return 'ยังไม่มีกุญแจฝั่งเซิร์ฟเวอร์เลย — ต้องมีตัวใดตัวหนึ่งใน ' + KEY_NAMES.join(' / ');
+  // ★ มีหลายตัวแต่ฐานปฏิเสธหมด — บอกให้เห็นว่าลองอะไรไปแล้วบ้าง
+  const badRef = CANDIDATES.map(c => keyInfo(c.key)).find(k => k.ref && urlRef && k.ref !== urlRef);
+  if (badRef && ping.tried?.every(t => !t.ok))
+    return `กุญแจที่วางไว้เป็นของคนละโปรเจ็ค — กุญแจเป็นของ ${badRef.ref} แต่เว็บชี้ไปที่ ${urlRef} `
+         + '· ถ้าเชื่อมตัวเชื่อม Supabase↔Vercel ไว้ ให้ตรวจว่าเชื่อมกับโปรเจ็ค Supabase ตัวที่เว็บใช้อยู่จริง';
+  if (!ki.set) return 'ยังไม่ได้วาง SUPABASE_SERVICE_ROLE_KEY ที่ Vercel → Environment Variables';
   if (ki.kind === 'publishable' || ki.role === 'anon')
     return 'วางผิดตัว — นี่คือกุญแจสาธารณะ (anon/publishable) ต้องใช้ service_role ที่กด Reveal ถึงจะเห็น';
   if (ki.expired) return 'กุญแจหมดอายุแล้ว — สร้างใหม่ที่ Supabase → Settings → API';
@@ -94,9 +134,11 @@ const json = (o, s = 200) => new Response(JSON.stringify(o), {
 
 // ── คุยกับ Supabase ด้วย service_role (ข้าม RLS ได้ · จึงต้องอยู่ฝั่งเซิร์ฟเวอร์เท่านั้น) ──
 async function rest(path, init = {}) {
+  const rk = await resolveKey();
+  const key = rk?.key || SVC;
   const r = await fetch(`${URL_}/rest/v1/${path}`, {
     ...init,
-    headers: { apikey: SVC, authorization: `Bearer ${SVC}`,
+    headers: { apikey: key, authorization: `Bearer ${key}`,
       'content-type': 'application/json', ...(init.headers ?? {}) },
     cache: 'no-store',
   });
@@ -235,6 +277,14 @@ export async function GET(req) {
   const ki = keyInfo(SVC);
   const urlRef = refOfUrl(URL_);
   const ping = await pingDb();
+  // รูปพรรณของกุญแจทุกตัวที่มี — ไม่มีตัวกุญแจจริงอยู่ในนี้
+  const keys = CANDIDATES.map(c => {
+    const k = keyInfo(c.key);
+    const t = ping.tried?.find(x => x.name === c.name);
+    return { name: c.name, kind: k.kind ?? null, role: k.role ?? null, ref: k.ref ?? null,
+             len: k.len ?? 0, head: k.head ?? null, expired: k.expired ?? null,
+             ok: t ? t.ok : null, status: t?.status ?? null };
+  });
   return json({
     ver: TR_VER,
     supabase: ping.ok,                       // ต่อได้จริงเท่านั้นถึงเป็น true
@@ -248,6 +298,8 @@ export async function GET(req) {
       key_len: ki.len ?? 0, key_head: ki.head ?? null, key_expired: ki.expired ?? null,
       anon_role: keyInfo(ANON).role ?? null,
       db_status: ping.status ?? null,
+      used_key: ping.used ?? null,
+      keys,
       problem: diagnose(ping, ki, urlRef),
     },
   });

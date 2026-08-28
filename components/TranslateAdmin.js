@@ -71,7 +71,8 @@ export default function TranslateAdmin() {
         {health == null ? <div style={{fontSize:'0.85rem'}}>กำลังตรวจ…</div> : (
           <div style={{display:'grid', gap:'4px', fontSize:'0.85rem'}} data-trhealth>
             {/* ★ เขียว = ต่อฐานได้จริง ไม่ใช่แค่ "มีตัวแปร" — เดิมบอกเขียวทั้งที่กุญแจใช้ไม่ได้ */}
-            <Row ok={health.supabase} on="ต่อฐานข้อมูลได้จริง (ทดสอบแล้ว)"
+            <Row ok={health.supabase}
+              on={'ต่อฐานข้อมูลได้จริง (ทดสอบแล้ว)' + (health.diag?.used_key ? ' · ใช้ ' + health.diag.used_key : '')}
               off="ต่อฐานข้อมูลไม่ได้ — ดูรายละเอียดด้านล่าง" />
             <Row ok={health.anthropic || health.google}
               on={`ตัวแปลพร้อม: ${health.anthropic ? 'Anthropic · ' + (health.model ?? '') : 'Google Translate'}`}
@@ -98,6 +99,35 @@ export default function TranslateAdmin() {
                     && <b style={{color:'var(--danger)'}}> ← ไม่ตรงกัน</b>}
                   {health.diag.db_status ? <><br />ฐานตอบรหัส {health.diag.db_status}</> : null}
                 </div>
+                {/* ตารางกุญแจทุกตัวที่มี — ดูด้วยตาได้เลยว่าตัวไหนใช้ได้ ตัวไหนของคนละโปรเจ็ค */}
+                {health.diag.keys?.length > 0 && (
+                  <div style={{marginTop:'0.5rem', overflowX:'auto'}}>
+                    <table style={{fontSize:'0.72rem', borderCollapse:'collapse', minWidth:'420px'}}>
+                      <thead><tr style={{color:'var(--muted)'}}>
+                        <th style={{textAlign:'left', padding:'2px 10px 2px 0'}}>ตัวแปร</th>
+                        <th style={{textAlign:'left', padding:'2px 10px 2px 0'}}>ชนิด</th>
+                        <th style={{textAlign:'left', padding:'2px 10px 2px 0'}}>สิทธิ์</th>
+                        <th style={{textAlign:'left', padding:'2px 10px 2px 0'}}>โปรเจ็ค</th>
+                        <th style={{textAlign:'left', padding:'2px 0'}}>ผลลอง</th>
+                      </tr></thead>
+                      <tbody>
+                        {health.diag.keys.map(k => (
+                          <tr key={k.name}>
+                            <td style={{padding:'2px 10px 2px 0'}}><code>{k.name}</code></td>
+                            <td style={{padding:'2px 10px 2px 0'}}>{k.kind ?? '—'}</td>
+                            <td style={{padding:'2px 10px 2px 0',
+                              color: k.role && k.role !== 'service_role' ? 'var(--danger)' : 'inherit'}}>{k.role ?? '—'}</td>
+                            <td style={{padding:'2px 10px 2px 0',
+                              color: k.ref && health.diag.url_ref && k.ref !== health.diag.url_ref ? 'var(--danger)' : 'inherit'}}>
+                              {k.ref ?? '—'}</td>
+                            <td style={{padding:'2px 0', color: k.ok ? 'var(--jade)' : 'var(--danger)'}}>
+                              {k.ok === null ? 'ไม่ได้ลอง' : k.ok ? '✓ ใช้ได้' : '✗ ' + (k.status ?? 'ไม่ผ่าน')}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
                 <div style={{fontSize:'0.76rem', color:'var(--gold2)', marginTop:'0.45rem', lineHeight:1.8}}>
                   วิธีแก้: Supabase → Settings → API → หัวข้อ <b>service_role</b> → กด Reveal → คัดลอกทั้งก้อน<br />
                   → Vercel → Settings → Environment Variables → <code>SUPABASE_SERVICE_ROLE_KEY</code> → วางทับ<br />
