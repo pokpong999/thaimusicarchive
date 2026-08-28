@@ -14,9 +14,11 @@ import SongNathab from '../../../components/SongNathab';
 import { fmtDT } from '../../../lib/fmtdate';
 import { fetchMelody, listParts } from '../../../lib/songparts';
 import SongPartsBar from '../../../components/SongPartsBar';
+import { useLang } from '../../../lib/i18n';
+import { trText, kickTranslateSoon } from '../../../lib/translate';
 
 // รุ่นของหน้าเพลง — ขึ้นเป็นข้อความเล็ก ๆ ใต้ชื่อเพลง ไว้ตรวจว่าไฟล์นี้ถูกวางทับแล้ว
-export const SONGPAGE_VERSION = '27 ส.ค. 69 · r2 (รองรับเพลงย่อย)';
+export const SONGPAGE_VERSION = '28 ส.ค. 69 · r3 (สองภาษา)';
 
 export default function SongDetailClient() {
   const { can } = usePermissions();
@@ -79,6 +81,9 @@ export default function SongDetailClient() {
   const [msg, setMsg] = useState('');
   // admin edit
   const [editHistory, setEditHistory] = useState(false);
+  const { lang } = useLang();
+  // ประวัติเพลง/บทร้อง/ชื่อเพลง — โชว์คำแปลถ้าแปลครบแล้ว (sql/37)
+  const T = f => trText(lang, song, f);
   const [historyDraft, setHistoryDraft] = useState('');
   const [lyricsDraft, setLyricsDraft] = useState('');
 
@@ -190,6 +195,7 @@ export default function SongDetailClient() {
   async function saveHistory() {
     const { error } = await supabase.from('songs')
       .update({ history: historyDraft || null, lyrics: lyricsDraft || null }).eq('id', id);
+    if (!error) kickTranslateSoon(4);   // แปลประวัติที่เพิ่งแก้ให้เอง (sql/37 + /api/translate)
     if (error) { setMsg('⚠ ' + error.message); return; }
     setMsg('✓ บันทึกแล้ว');
     setEditHistory(false);
@@ -262,7 +268,7 @@ export default function SongDetailClient() {
       <Link href="/songs"><span style={{color:'var(--muted)',fontSize:'0.8rem'}}>← กลับรายการ</span></Link>
       <div className="detail-hero" style={{marginTop:'1rem'}}>
         <div className="detail-id">{song.id}</div>
-        <div className="detail-name">{song.name_th}</div>
+        <div className="detail-name">{T('name_th')}</div>
         <div style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
           {song.style && <span className="badge badge-variable">{song.style}</span>}
           {song.type && <span className="badge badge-mixed">{song.type}</span>}
@@ -334,14 +340,14 @@ export default function SongDetailClient() {
           ) : (song.history || song.lyrics) ? (
             <>
               {song.history
-                ? <div style={{fontSize:'0.9rem',lineHeight:1.9,whiteSpace:'pre-wrap'}}>{song.history}</div>
+                ? <div style={{fontSize:'0.9rem',lineHeight:1.9,whiteSpace:'pre-wrap'}} data-history>{T('history')}</div>
                 : <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ยังไม่มีประวัติเพลงนี้</div>}
               {song.lyrics && (
                 <div style={{marginTop:'1.6rem',paddingTop:'1.2rem',borderTop:'1px solid var(--border)'}}>
                   <div style={{fontWeight:600,color:'var(--gold)',marginBottom:'0.7rem',
                     fontFamily:"'Noto Serif Thai',serif"}}>✒️ บทร้อง</div>
                   <div style={{fontSize:'0.9rem',lineHeight:2.05,whiteSpace:'pre-wrap',
-                    fontFamily:"'Noto Serif Thai',serif"}}>{song.lyrics}</div>
+                    fontFamily:"'Noto Serif Thai',serif"}}>{T('lyrics')}</div>
                 </div>
               )}
             </>
