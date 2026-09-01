@@ -2,7 +2,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { parseVerse } from './NotationPlayer';
 import { usePermissions } from './Gate';
-import { toMeasures, checkBars, pickupFor, UNITS_PER_HONG } from '../lib/staff';
+import { toMeasures, checkBars, leadFor, padStream, UNITS_PER_HONG } from '../lib/staff';
+
+export const STAFF_VERSION = '1 ก.ย. 69 · r3 (ห้องเต็ม 2/4 · สีตามธีม · ตกต้นห้องเป็นค่าเริ่มต้น)';
 
 // ด ร ม ฟ ซ ล ท → C D E F G A B (การปริวรรตโดยอนุโลม)
 const THAI_TO_WESTERN = { 'ด':'c', 'ร':'d', 'ม':'e', 'ฟ':'f', 'ซ':'g', 'ล':'a', 'ท':'b' };
@@ -45,18 +47,37 @@ function sliceWeight(size) {
   return size >= 4 ? 1 : size === 3 ? 0.8 : size === 2 ? 0.6 : 0.42;
 }
 
-export default function StaffNotation({ verses, cursor = null }) {
+// สีทุกเส้นทุกหัวโน้ตใน SVG ที่ VexFlow วาด — ให้ตามธีม (พื้นขาว = หมึกดำ · พื้นเข้ม = ครีม)
+//   ของเดิมตั้งครีมตายตัว บนกระดาษขาวจึงมองไม่เห็น และเส้นน้อย (ledger) ยังดำอยู่คนละสี (Pk 1 ก.ย. 69 ข้อ 1)
+export function recolorSvg(svg, ink) {
+  if (!svg) return 0;
+  let n = 0;
+  svg.querySelectorAll('*').forEach(el => {
+    const f = el.getAttribute('fill'); if (f && f !== 'none') { el.setAttribute('fill', ink); n++; }
+    const st = el.getAttribute('stroke'); if (st && st !== 'none') { el.setAttribute('stroke', ink); n++; }
+  });
+  return n;
+}
+export function inkOf(el) {
+  try { const v = getComputedStyle(el).getPropertyValue('--cream').trim(); if (v) return v; } catch (e) {}
+  return '#F5F0E8';
+}
+
+// onRows(rows) — ส่งเรขาคณิตของทุกบรรทัดออกไปให้ตัวอัดวิดีโอ (rowEl · svg · rects · verses)
+// theme = ชื่อธีมเครื่องเล่น (ส่งมาเพื่อให้วาดใหม่เมื่อเปลี่ยนสีกระดาษ — สีอ่านจาก CSS จริงตอนวาด)
+export default function StaffNotation({ verses, cursor = null, onRows = null, theme = 'dark' }) {
   const ref = useRef(null);
   const geomRef = useRef([]);   // [{verseIdx, rowEl, rects:[{x,w,start,size}], len}]
   const hasHands = verses.some(v => (v.right_hand ?? '').trim() || (v.left_hand ?? '').trim() || (v.third_hand ?? '').trim());
-  const { can } = usePermissions();
+  const { can, isAdmin } = usePermissions();
   const [source, setSource] = useState('combined');
-  const [beat, setBeat] = useState('thai'); // 'thai' ตกท้ายห้อง | 'western' ตกต้นห้อง
+  // จังหวะตก: 'western' ตกต้นห้อง (ค่าเริ่มต้นสำหรับทุกคน) · 'thai' ตกท้ายห้อง (ผู้ดูแลเท่านั้น — Pk 1 ก.ย. 69 ข้อ 4)
+  const [beat, setBeat] = useState('western');
   const [fitTick, setFitTick] = useState(0);
   useEffect(() => {
     if (!can('staff_chord') && source === 'hands') setSource('combined');
-    if (!can('staff_beat') && beat === 'western') setBeat('thai');
-  }, [can, source, beat]);
+    if (!isAdmin && beat === 'thai') setBeat('western');
+  }, [can, isAdmin, source, beat]);
 
   useEffect(() => {
     let t;
@@ -77,6 +98,7 @@ export default function StaffNotation({ verses, cursor = null }) {
       geomRef.current = [];
       // ความกว้างที่ใช้วางห้องได้จริง = กล่อง − padding 1rem สองข้าง − กุญแจ − ขอบ
       const boxW = (ref.current.clientWidth || 1100) - 34;
+      const ink = inkOf(ref.current);   // สีหมึกตามธีมเครื่องเล่น
       const avail = boxW - CLEF_PAD - ROW_PAD;
       // จำนวนห้องเต็มต่อบรรทัดที่พอดีจอ: ปกติ 8 · จอแคบลดลงตามจริง (อย่างน้อยเท่ากับ 1 วรรค)
       const fitMeasures = Math.max(1, Math.min(PER_ROW, Math.floor(avail / MW_MIN)));
@@ -112,14 +134,19 @@ export default function StaffNotation({ verses, cursor = null }) {
       rows.forEach(rowVerses => {
         // ต่อวรรคในบรรทัดเป็นสายเดียว แล้วค่อยแบ่งห้อง — แบบสากล ห้องยกท้ายวรรคจะรวมกับห้องต้นวรรคถัดไป
         // (เดิมแบ่งทีละวรรค เกิดห้องเศษ 1 ตำแหน่ง + ห้องยก 3 ตำแหน่งติดกันกลางบรรทัด และกว้างเท่าห้องเต็ม)
-        const stream = [], handStream = [], verseMap = [];
+        // ★ ทุกห้องเต็ม 2/4 (Pk 1 ก.ย. 69 ข้อ 2): แบบสากลเติมตัวหยุด 1 ตำแหน่งหน้าสาย ให้ลูกตกไปอยู่ต้นห้อง
+        //   ท้ายสายเติมจนครบห้อง (ลูกตกตัวสุดท้ายลากเสียงจนจบห้อง) — ไม่มีห้องยก 3 ตำแหน่ง / ห้องเศษ 1 ตำแหน่งอีก
+        const lead = leadFor(beat);
+        const raw = [], handRaw = [], verseMap = [];
         rowVerses.forEach(pv => {
-          verseMap.push({ verseIdx: pv.vi, offset: stream.length, len: pv.positions.length });
-          stream.push(...pv.positions);
-          pv.positions.forEach((_, i) => handStream.push(pv.handPos ? pv.handPos[i] : null));
+          verseMap.push({ verseIdx: pv.vi, offset: lead + raw.length, len: pv.positions.length });
+          raw.push(...pv.positions);
+          pv.positions.forEach((_, i) => handRaw.push(pv.handPos ? pv.handPos[i] : null));
         });
+        const stream = padStream(raw, { lead });
+        const handStream = stream.map((_, i) => (i >= lead && i - lead < handRaw.length) ? handRaw[i - lead] : null);
         // ★ แปลงด้วย lib/staff.js — รับประกันว่าทุกห้องครบจังหวะ (ทดสอบไว้ 63 ข้อ)
-        const measures = toMeasures(stream, { pickup: pickupFor(beat, stream.length) });
+        const measures = toMeasures(stream);
         const wrong = checkBars(measures);
         if (wrong.length) console.warn('StaffNotation: ห้องไม่ครบจังหวะ', wrong);
         const slices = measures.map(m => ({ start: m.start, size: m.size, events: m.events }));
@@ -132,7 +159,7 @@ export default function StaffNotation({ verses, cursor = null }) {
         const label = document.createElement('div');
         label.textContent = 'วรรค ' + rowVerses.map(pv =>
           `${pv.v.verse_no}${pv.v.section ? ' (' + pv.v.section + ')' : ''}`).join(' · ');
-        label.style.cssText = 'font-size:0.62rem;color:#8A9BB5;margin:10px 0 2px';
+        label.style.cssText = 'font-size:0.62rem;color:var(--muted);margin:10px 0 2px';
         ref.current.appendChild(label);
 
         const rowEl = document.createElement('div');
@@ -144,7 +171,7 @@ export default function StaffNotation({ verses, cursor = null }) {
         const renderer = new VF.Renderer(div, VF.Renderer.Backends.SVG);
         renderer.resize(rowWidth, ROW_H);
         const ctx = renderer.getContext();
-        ctx.setFillStyle('#F5F0E8'); ctx.setStrokeStyle('#F5F0E8');
+        ctx.setFillStyle(ink); ctx.setStrokeStyle(ink);
 
         const rects = [];
         const rowNotes = [];    // โน้ตทุกตัวในบรรทัดนี้ เรียงตามเวลา
@@ -219,8 +246,11 @@ export default function StaffNotation({ verses, cursor = null }) {
               first_indices: [0], last_indices: [0] }).setContext(ctx).draw();
           } catch (e) { /* ปลายทางอยู่คนละบรรทัด ข้ามไป */ }
         });
-        geomRef.current.push({ rowEl, rects, verses: verseMap });
+        // ทาสีทุกชิ้นให้ตรงธีม (รวมเส้นน้อยที่ VexFlow วาดเป็นสีดำเสมอ)
+        recolorSvg(rowEl.querySelector('svg'), ink);
+        geomRef.current.push({ rowEl, rects, verses: verseMap, label: label.textContent, width: rowWidth, height: ROW_H });
       });
+      if (onRows) onRows(geomRef.current.map(g => ({ ...g, svg: g.rowEl.querySelector('svg') })));
       }
     })().catch(err => {
       console.error('StaffNotation:', err);
@@ -229,7 +259,7 @@ export default function StaffNotation({ verses, cursor = null }) {
         'แสดงโน้ตสากลไม่สำเร็จ: ' + (err?.message ?? err) + '</div>';
     });
     return () => { cancelled = true; };
-  }, [verses, source, beat, fitTick]);
+  }, [verses, source, beat, fitTick, theme]);
 
   // ── แถบไฮไลต์ + เส้นตำแหน่งที่กำลังเล่น ──
   useEffect(() => {
@@ -250,7 +280,8 @@ export default function StaffNotation({ verses, cursor = null }) {
     // แถบไฮไลต์ทั้งห้อง
     const band = document.createElement('div');
     band.className = 'staff-cursor-band';
-    band.style.cssText = `position:absolute;top:${STAVE_Y - 14}px;height:86px;left:${rect.x}px;width:${rect.w}px;`
+    // เส้นบรรทัดจริงเริ่มที่ STAVE_Y+40 (VexFlow เว้นที่ด้านบนไว้ 4 ช่อง) — แถบต้องคร่อมเส้นทั้ง 5 ไม่ใช่ลอยอยู่เหนือ
+    band.style.cssText = `position:absolute;top:${STAVE_Y + 24}px;height:72px;left:${rect.x}px;width:${rect.w}px;`
       + 'background:rgba(201,168,76,0.13);border-radius:4px;pointer-events:none';
     g.rowEl.appendChild(band);
 
@@ -259,7 +290,7 @@ export default function StaffNotation({ verses, cursor = null }) {
     const lx = rect.x + 6 + frac * (rect.w - 22);
     const line = document.createElement('div');
     line.className = 'staff-cursor-line';
-    line.style.cssText = `position:absolute;top:${STAVE_Y - 14}px;height:86px;left:${lx}px;width:2px;`
+    line.style.cssText = `position:absolute;top:${STAVE_Y + 24}px;height:72px;left:${lx}px;width:2px;`
       + 'background:#C9A84C;box-shadow:0 0 6px rgba(201,168,76,0.8);pointer-events:none';
     g.rowEl.appendChild(line);
 
@@ -276,16 +307,17 @@ export default function StaffNotation({ verses, cursor = null }) {
           {hasHands && can('staff_chord') && <option value="hands">สองบรรทัด — รวมมือ R+L (บันทึกคู่เสียง)</option>}
         </select>
         <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>จังหวะตก:</span>
-        <select className="form-input" style={{width:'auto',fontSize:'0.78rem',padding:'4px 8px'}}
+        <select className="form-input" data-staffbeat style={{width:'auto',fontSize:'0.78rem',padding:'4px 8px'}}
           value={beat} onChange={e => setBeat(e.target.value)}>
-          <option value="thai">แบบไทย — ตกท้ายห้อง</option>
-          {can('staff_beat') && <option value="western">แบบสากล — ตกต้นห้อง (ยกเข้าห้องถัดไป)</option>}
+          <option value="western">แบบสากล — ลูกตกอยู่หลังเส้นกั้นห้อง</option>
+          {isAdmin && <option value="thai">แบบไทย — ลูกตกอยู่หน้าเส้นกั้นห้อง (ผู้ดูแล)</option>}
         </select>
+        <span data-staffver style={{fontSize:'0.62rem',color:'var(--muted)'}}>รุ่น {STAFF_VERSION}</span>
       </div>
       <div style={{fontSize:'0.68rem',color:'var(--muted)',marginBottom:'6px'}}>
         * การปริวรรตเป็นโน้ตสากลใช้การเทียบโดยอนุโลม (ด→C) — ระดับเสียงจริงเป็นระบบ 7 เท่าไทย
         {source === 'hands' && ' · ตำแหน่งที่สองมือพร้อมกันบันทึกเป็นคู่เสียง (คู่ 4 · 5 · 6 · 8 ตามจริง)'}
-        {beat === 'western' && ' · จังหวะตก (ลูกตก) อยู่ต้นห้อง โน้ตช่วงแรกของวรรคเป็นห้องยก (anacrusis)'}
+        {beat === 'western' && ' · ลูกตกอยู่หลังเส้นกั้นห้อง (ต้นห้องแบบสากล) ทุกห้องเต็ม 2/4 — ห้องแรกขึ้นด้วยตัวหยุดเขบ็ดหนึ่งชั้น'}
       </div>
       <div ref={ref} style={{background:'var(--navy3)',border:'1px solid var(--border)',
         borderRadius:'8px',padding:'1rem',overflowX:'auto'}} />

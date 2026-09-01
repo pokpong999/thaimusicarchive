@@ -100,6 +100,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
   const exportAbort = useRef(null);                  // AbortController ของงานอัดที่กำลังทำ
   const pctRef = useRef(0);                          // เดินหน้าอย่างเดียว ไม่ถอยหลัง
   const videoCanvasRef = useRef(null);
+  const staffRowsRef = useRef([]);
+  const rootRef = useRef(null);                      // กล่องนอกสุด (ถือคลาสธีม) — ไว้อ่านสีจริง                   // เรขาคณิตโน้ตสากลบรรทัดล่าสุด (ไว้อัดวิดีโอโหมดโน้ตสากล)
   const [introOn, setIntroOn] = useState(true);    // ใส่เสียงพูดนำหน้าไหม
   const introCache = useRef(new Map());
   const { theme, set: setTheme, cls: themeCls } = usePlayerTheme();   // สีกระดาษ (Pk 27 ส.ค. 69)
@@ -714,10 +716,19 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
 
       // ภาพ: โน้ตชุดเดียวกับที่วาดบนจอ + สีจากธีมที่เลือกอยู่
       setProgress(12, 'กำลังจัดหน้าโน้ต...');
-      const sheet = buildSheet();
-      const L = VX.layoutSheet(sheet);
+      const pal = VX.themePalette(rootRef.current, theme);
+      // โหมดโน้ตสากล: ใช้ภาพบรรทัดที่ VexFlow วาดบนจออยู่แล้ว (Pk 1 ก.ย. 69 ข้อ 3) · โหมดอื่น: วาดโน้ตไทยเอง
+      const useStaff = mode === 'staff' && staffRowsRef.current?.length > 0;
+      let sheet = null, L;
+      if (useStaff) {
+        const rows = await VX.prepareStaffImages(staffRowsRef.current, pal.ink);
+        L = VX.layoutStaffSheet(rows);
+      } else {
+        if (mode === 'staff') setExportErr('โน้ตสากลยังวาดไม่เสร็จ — อัดเป็นโน้ตไทยให้แทน');
+        sheet = buildSheet();
+        L = VX.layoutSheet(sheet);
+      }
       await VX.ensureVideoFonts(L.fontNote);
-      const pal = VX.themePalette(gridRef.current?.parentElement || null, theme);
       const canvas = videoCanvasRef.current || document.createElement('canvas');
       canvas.width = L.W; canvas.height = L.H;
       const instNow = insts.find(i => i.slug === sound) || (sound !== 'synth' ? insts[0] : null);
@@ -1058,7 +1069,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
   togglePauseRef.current = togglePause;
 
   return (
-    <div className={themeCls}>
+    <div className={themeCls} ref={rootRef}>
       <div style={{display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center',marginBottom:'1rem'}}>
         {playState === 'stopped' && (
           <button className="btn btn-jade" onClick={() => startFrom(0)} disabled={loadingSamples}>
@@ -1289,7 +1300,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
         .np-krocover{background-image:url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='7'%3E%3Cpath d='M0 5 q 3.5 -4.5 7 0 t 7 0' fill='none' stroke='%23e8c96a' stroke-width='1.4'/%3E%3C/svg%3E");
           background-repeat:repeat-x;background-position:left top;padding-top:7px !important}
         .np-kro{color:var(--gold2)}`}</style>
-      {mode === 'staff' ? <StaffNotation verses={verses} cursor={cursor} /> :
+      {mode === 'staff' ? <StaffNotation verses={verses} cursor={cursor} theme={theme} onRows={r => { staffRowsRef.current = r; }} /> :
       <div ref={gridRef} style={{background:'var(--navy3)',border:'1px solid var(--border)',borderRadius:'8px',
         padding:'1rem',overflowX:'auto',display:'flex',flexDirection:'column',gap:'0.7rem'}}>
         {lineGroups.map((group, gi) => {
