@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { parseVerse } from './NotationPlayer';
 import { usePermissions } from './Gate';
+import { toMeasures, checkBars, pickupFor, UNITS_PER_HONG } from '../lib/staff';
 
 // ด ร ม ฟ ซ ล ท → C D E F G A B (การปริวรรตโดยอนุโลม)
 const THAI_TO_WESTERN = { 'ด':'c', 'ร':'d', 'ม':'e', 'ฟ':'f', 'ซ':'g', 'ล':'a', 'ท':'b' };
@@ -29,45 +30,7 @@ function mergeHands(rhNotes, lhNotes) {
   return keys;
 }
 
-// แบ่งตำแหน่งของวรรคเป็นห้อง ตามตำแหน่งจังหวะตก
-// thai: ตกท้ายห้อง → [4,4,4,4] | western: ตกต้นห้อง → [3,4,4,4,1] (ยกเว้นวรรคสั้นปรับตาม)
-function makeSlices(len, beat) {
-  const slices = [];
-  if (beat === 'western') {
-    let start = 0;
-    const first = Math.min(3, len);
-    if (first > 0) { slices.push({ start: 0, size: first }); start = first; }
-    while (start < len) {
-      const size = Math.min(4, len - start);
-      slices.push({ start, size });
-      start += size;
-    }
-  } else {
-    for (let start = 0; start < len; start += 4) {
-      slices.push({ start, size: Math.min(4, len - start) });
-    }
-  }
-  return slices;
-}
-
-// สร้าง events ของห้องหนึ่ง (รองรับขนาดห้องไม่เท่ากัน)
-function sliceEvents(positions, slice) {
-  const events = [];
-  let p = 0;
-  const S = slice.size;
-  const at = i => positions[slice.start + i] ?? [];
-  while (p < S) {
-    const notes = at(p);
-    let span = 1;
-    while (p + span < S && at(p + span).length === 0) span++;
-    if (notes.length === 0) events.push({ rest: true, units: span, pos: slice.start + p });
-    else events.push({ notes, units: span, pos: slice.start + p });
-    p += span;
-  }
-  return events;
-}
-
-const UNIT_DUR = { 1: '8', 2: 'q', 3: 'qd', 4: 'h' };
+// ★ ตรรกะการแปลงย้ายไปอยู่ lib/staff.js แล้ว เพื่อให้ทดสอบด้วยเครื่องได้
 
 const MW_MIN = 64;       // ความกว้างห้องเต็ม (4 ตำแหน่ง) แคบสุด — ต่ำกว่านี้ยอมให้เลื่อนแนวนอน
 const MW_MAX = 150;      // ความกว้างห้องกว้างสุด
@@ -155,7 +118,11 @@ export default function StaffNotation({ verses, cursor = null }) {
           stream.push(...pv.positions);
           pv.positions.forEach((_, i) => handStream.push(pv.handPos ? pv.handPos[i] : null));
         });
-        const slices = makeSlices(stream.length, beat);
+        // ★ แปลงด้วย lib/staff.js — รับประกันว่าทุกห้องครบจังหวะ (ทดสอบไว้ 63 ข้อ)
+        const measures = toMeasures(stream, { pickup: pickupFor(beat, stream.length) });
+        const wrong = checkBars(measures);
+        if (wrong.length) console.warn('StaffNotation: ห้องไม่ครบจังหวะ', wrong);
+        const slices = measures.map(m => ({ start: m.start, size: m.size, events: m.events }));
         const totalWeight = slices.reduce((s, sl) => s + sliceWeight(sl.size), 0);
         // บีบ/ขยายให้พอดีความกว้างกล่อง — ล้นได้เฉพาะเมื่อแม้แต่วรรคเดียวก็ยังแคบกว่า MW_MIN (แล้วค่อยเลื่อนแนวนอน)
         const unit = Math.max(MW_MIN, Math.min(MW_MAX, Math.floor(avail / totalWeight)));
@@ -180,6 +147,8 @@ export default function StaffNotation({ verses, cursor = null }) {
         ctx.setFillStyle('#F5F0E8'); ctx.setStrokeStyle('#F5F0E8');
 
         const rects = [];
+        const rowNotes = [];    // โน้ตทุกตัวในบรรทัดนี้ เรียงตามเวลา
+        const rowTies = [];     // {from} = ดัชนีในบรรทัด · โยงไปตัวถัดไปเสมอ
         let x = 10;
         slices.forEach((slice, si) => {
           const first = si === 0;
@@ -188,50 +157,67 @@ export default function StaffNotation({ verses, cursor = null }) {
           if (first) stave.addClef('treble').addTimeSignature('2/4');
           stave.setContext(ctx).draw();
 
-          const events = sliceEvents(stream, slice);
           const vexNotes = [];
-          events.forEach(ev => {
-            let dur = UNIT_DUR[ev.units] ?? '8';
-            const dotted = dur.endsWith('d');
-            if (dotted) dur = dur[0];
+          slice.events.forEach(ev => {
             const hp = handStream[ev.pos];
-            if (ev.rest) {
-              const n = new VF.StaveNote({ keys: ['b/4'], duration: dur + 'r' });
-              if (dotted) VF.Dot.buildAndAttach([n], { all: true });
-              vexNotes.push(n);
-            } else if (hp && hp.rh.length <= 1 && hp.lh.length <= 1) {
-              const keys = mergeHands(hp.rh, hp.lh);
-              const n = new VF.StaveNote({ keys, duration: dur });
-              if (dotted) VF.Dot.buildAndAttach([n], { all: true });
-              vexNotes.push(n);
-            } else if (ev.notes.length === 1) {
-              const n = new VF.StaveNote({ keys: [noteKey(ev.notes[0])], duration: dur });
-              if (dotted) VF.Dot.buildAndAttach([n], { all: true });
-              vexNotes.push(n);
-            } else {
-              const subNotes = ev.notes.slice(0, 2).map(n =>
-                new VF.StaveNote({ keys: [noteKey(n)], duration: '16' }));
-              vexNotes.push(...subNotes);
-              if (ev.units >= 2) {
-                vexNotes.push(new VF.StaveNote({
-                  keys: [noteKey(ev.notes[ev.notes.length - 1])],
-                  duration: ev.units === 2 ? '8' : 'q',
-                }));
-              }
+            // ★ จุดต้องอยู่ใน "ชื่อค่าโน้ต" (qd) ไม่ใช่ไปติดทีหลัง
+            //   Dot.buildAndAttach วาดจุดให้แต่ไม่นับความยาว ห้องจึงขาดไป 1 ตำแหน่ง
+            const mk = (keys, duration) => new VF.StaveNote({ keys, duration });
+            if (ev.kind === 'rest') {
+              vexNotes.push(mk(['b/4'], ev.duration + 'r'));
+              return;
             }
+            if (ev.kind === 'sabat') {
+              // สะบัด: เขบ็ดสองชั้นสองตัวใน 1 ตำแหน่ง
+              const pair = ev.notes.slice(0, 2).map(n =>
+                new VF.StaveNote({ keys: [noteKey(n)], duration: '16' }));
+              vexNotes.push(...pair);
+              rowNotes.push(...pair);
+              if (ev.tieTo) rowTies.push({ from: rowNotes.length - 1 });
+              return;
+            }
+            const keys = (hp && hp.rh.length <= 1 && hp.lh.length <= 1)
+              ? mergeHands(hp.rh, hp.lh)
+              : ev.notes.map(noteKey);
+            const n = mk(keys.length ? keys : ['c/4'], ev.duration);
+            vexNotes.push(n); rowNotes.push(n);
+            if (ev.tieTo) rowTies.push({ from: rowNotes.length - 1 });
           });
 
           try {
-            const voice = new VF.Voice({ num_beats: 2, beat_value: 4 }).setStrict(false);
+            /* ★ setStrict(true) — ห้องที่ไม่ครบจังหวะจะโยน error ทันที
+               ของเดิมปิดการตรวจไว้ ห้องที่ผิดจึงวาดออกมาเฉย ๆ โดยไม่มีอะไรเตือน
+               (นี่คือต้นเหตุที่ Pk เห็น "โน้ตไม่ครบห้อง" — Pk 1 ก.ย. 69) */
+            const voice = new VF.Voice({ num_beats: slice.size, beat_value: 8 }).setStrict(true);
             voice.addTickables(vexNotes);
             new VF.Formatter().joinVoices([voice]).format([voice], Math.max(20, widths[si] - 26));
-            const beams = VF.Beam.generateBeams(vexNotes.filter(n => !n.isRest()));
+            // คานเชื่อมเขบ็ดตามจังหวะ (กลุ่มละ 1 จังหวะ = 2 เขบ็ด) — ไม่ให้เขบ็ดโดดเดี่ยวมีธงเดี่ยว
+            const beams = VF.Beam.generateBeams(vexNotes, {
+              groups: [new VF.Fraction(1, 4)],
+              beam_rests: false, maintain_stem_directions: false,
+            });
             voice.draw(ctx, stave);
             beams.forEach(b => b.setContext(ctx).draw());
-          } catch (e) { /* ห้องที่ format ไม่ได้ ข้าม */ }
+          } catch (e) {
+            console.warn('StaffNotation ห้องที่วาดไม่ได้:', e?.message ?? e);
+          }
 
           rects.push({ x: x + (first ? CLEF_PAD : 0), w: widths[si], start: slice.start, size: slice.size });
           x += w;
+        });
+
+        /* ★ เส้นโยงเสียงลาก — วาดหลังจากวาดห้องครบทั้งบรรทัดแล้ว
+           เดิมวาดทีละห้อง เส้นที่ต้องข้ามไปห้องถัดไปจึงไม่มีปลายทาง วาดไม่ได้เลย
+           ผลคือ "ด ค้างสี่ห้อง" ออกมาเป็นตัวขาวสี่ตัวติดกัน = อ่านว่าตีสี่ครั้ง ไม่ใช่ลากเสียง
+           (Pk 1 ก.ย. 69)                                                            */
+        rowTies.forEach(tp => {
+          const a = rowNotes[tp.from], b2 = rowNotes[tp.from + 1];
+          if (!a || !b2) return;
+          if (a.isRest?.() || b2.isRest?.()) return;
+          try {
+            new VF.StaveTie({ first_note: a, last_note: b2,
+              first_indices: [0], last_indices: [0] }).setContext(ctx).draw();
+          } catch (e) { /* ปลายทางอยู่คนละบรรทัด ข้ามไป */ }
         });
         geomRef.current.push({ rowEl, rects, verses: verseMap });
       });
