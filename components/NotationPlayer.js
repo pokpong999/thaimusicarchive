@@ -1,5 +1,7 @@
 'use client';
 import { usePermissions } from './Gate';
+import * as AX from '../lib/audioexport';
+import { supabase } from '../lib/supabase';
 import { usePlayerTheme, PLAYER_THEMES } from '../lib/playertheme';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
@@ -85,8 +87,12 @@ function synthNote(ctx, freq, time, dur, gain = 0.45) {
 const REG_LABEL = { '-1': 'ต่ำ', '0': 'กลาง', '1': 'สูง' };
 
 // nathabRules = แถว song_nathab ของเพลงนี้ (หน้าทับหลัก + ข้อยกเว้นต่อท่อน) — ถ้ามี เครื่องเล่นเลือกโหมด "ตามที่เพลงกำหนด" ให้เอง
-export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
-  const { can } = usePermissions();
+export default function NotationPlayer({ verses, lyrics, nathabRules = [], songName = '', songId = '' }) {
+  const { can, isAdmin } = usePermissions();
+  const [exporting, setExporting] = useState('');   // ข้อความความคืบหน้าตอนอัดไฟล์
+  const [exportErr, setExportErr] = useState('');
+  const [introOn, setIntroOn] = useState(true);    // ใส่เสียงพูดนำหน้าไหม
+  const introCache = useRef(new Map());
   const { theme, set: setTheme, cls: themeCls } = usePlayerTheme();   // สีกระดาษ (Pk 27 ส.ค. 69)
   const [mode, setMode] = useState('combined');
   const [hand, setHand] = useState('both');
@@ -318,36 +324,16 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
     if (ctxRef.current) ctxRef.current.close().catch(() => {});
   }, []);
 
-  async function startFrom(startStep) {
-    const tuneNow = tuningBySlug(tunes, tuning);
-    playIdRef.current++;
-    if (rafRef.current) cancelAnimationFrame(rafRef.current);
-    if (ctxRef.current) { ctxRef.current.close().catch(() => {}); }
-    ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
-    const ctx = ctxRef.current;
-    await ctx.resume();
-
-    const instNow = insts.find(i => i.slug === sound) || (sound !== 'synth' ? insts[0] : null);
-    // ไฟล์เสียงของเครื่องนี้ตั้งไว้ตามระบบไหน + ความถี่จริงรายตำแหน่งที่ผู้ดูแลกรอกไว้
-    const tuneOpts = { tuning: tuneNow,
-      srcTuning: instNow?.tuning ? tuningBySlug(tunes, instNow.tuning) : null,
-      hzMap: instNow ? notesToHzMap(await loadInstrumentNotes(instNow.slug)) : null };
-    let buffers = buffersRef.current;
-    if (instNow && !buffers) {
-      setLoadingSamples(true);
-      buffers = await loadMelodyBank(ctx, instNow);
-      buffersRef.current = buffers;
-      setSampleCount(buffers?.count ?? 0);
-      setLoadingSamples(false);
-    }
-    const useReal = !!instNow && !!buffers?.count;
-
-    const myId = ++playIdRef.current;
-    setPlayState('playing');
-
+  /* ── ตัวจัดคิวเสียง ─────────────────────────────────────────────
+     ★ แยกออกมาเพื่อให้ "เล่นสด" กับ "อัดเป็นไฟล์" ใช้ตรรกะชุดเดียวกันเป๊ะ
+       เล่นสด  → ส่ง AudioContext ปกติเข้ามา
+       อัดไฟล์ → ส่ง OfflineAudioContext เข้ามา เรนเดอร์เร็วกว่าเวลาจริงราว 25 เท่า
+     ไม่มีตรรกะโน้ตซ้ำสองชุด ไฟล์ที่อัดได้จึงเหมือนที่ได้ยินตอนกดเล่นทุกประการ
+     (Pk 1 ก.ย. 69) */
+  async function buildSchedule(ctx, { t0: t0In, startStep = 0, buffers, instNow, useReal, tuneNow, tuneOpts }) {
     const stepDur = 60 / bpm / 2;
     // เผื่อเวลาเปิดเพลง 0.25 วิ — ตัวนำของสะบัดในตำแหน่งแรกต้องนัดก่อน t0 ได้ (เพลงยาวใช้เวลานัดหลายสิบ ms)
-    const t0 = ctx.currentTime + 0.25;
+    const t0 = t0In;
     const cursorTimeline = [];
     // คิวเสียง: ทยอยนัดล่วงหน้าเป็นช่วงๆ แทนการนัดทั้งเพลงทีเดียว (เพลงยาวหมื่นโน้ตจะพัง)
     const soundEvents = [];
@@ -556,8 +542,142 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       });
     };
     scheduleSteps(seq);
+    return {
+      soundEvents, cursorTimeline, totalSteps,
+      endTime: tCur,
+      // เล่นวนรอบ: ต่อท้ายอีกหนึ่งเที่ยว คืนเวลาจบใหม่
+      extendOnce() { scheduleSteps(wholeOnce()); return tCur; },
+    };
+  }
 
-    let endTime = tCur;
+  /* เสียงพูดนำหน้า — ขอจาก /api/tts ซึ่งเก็บไฟล์ไว้ใน Supabase Storage
+     เพลงหนึ่งทำครั้งเดียวตลอดกาล ครั้งต่อไปดึงไฟล์เดิม ไม่เสียเงินซ้ำ */
+  async function fetchIntro(name) {
+    const key = String(name || '');
+    if (introCache.current.has(key)) return introCache.current.get(key);
+    const { data: { session } = {} } = await supabase.auth.getSession();
+    const r = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json',
+        ...(session?.access_token ? { authorization: 'Bearer ' + session.access_token } : {}) },
+      body: JSON.stringify({ songName: key, songId }),
+    });
+    if (!r.ok) {
+      let msg = 'เซิร์ฟเวอร์ตอบ ' + r.status;
+      try { msg = (await r.json()).error || msg; } catch (e) {}
+      throw new Error(msg);
+    }
+    const ab = await r.arrayBuffer();
+    const dctx = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = await dctx.decodeAudioData(ab);
+    dctx.close().catch(() => {});
+    introCache.current.set(key, buf);
+    return buf;
+  }
+
+  /* ── อัดโน้ตเป็นไฟล์เสียง (Pk 1 ก.ย. 69) ────────────────────────
+     ใช้ buildSchedule ตัวเดียวกับตอนกดเล่น ต่างกันแค่ส่ง OfflineAudioContext เข้าไป
+     ไฟล์ที่ได้จึงเหมือนที่ได้ยินบนเว็บทุกประการ ไม่มีตรรกะโน้ตชุดที่สอง
+     ★ ทำงานในเครื่องของคนกด ไม่แตะเซิร์ฟเวอร์ ไม่มีค่าใช้จ่าย                */
+  async function exportAudio(fmt) {
+    if (exporting) return;
+    setExportErr('');
+    try {
+      setExporting('กำลังเตรียม...');
+      const tuneNow = tuningBySlug(tunes, tuning);
+      const instNow = insts.find(i => i.slug === sound) || (sound !== 'synth' ? insts[0] : null);
+
+      // ๑. เสียงพูดนำหน้า (ถ้ามี) — ขอจากเซิร์ฟเวอร์ครั้งเดียวต่อเพลง แล้วถูกแคชไว้
+      let introBuf = null;
+      if (introOn) {
+        setExporting('กำลังทำเสียงพูดนำ...');
+        try { introBuf = await fetchIntro(songName); }
+        catch (e) { setExportErr('ทำเสียงพูดนำไม่สำเร็จ — อัดเฉพาะเสียงเพลงให้แทน (' + (e.message ?? e) + ')'); }
+      }
+
+      // ๒. หาความยาวเพลงก่อน ด้วยการนัดคิวบนกระดานทดลอง (เรนเดอร์สั้น ๆ ไม่กินเวลา)
+      setExporting('กำลังคำนวณความยาวเพลง...');
+      const probeCtx = new OfflineAudioContext(2, 2048, 44100);
+      const probeBuf = instNow ? await loadMelodyBank(probeCtx, instNow).catch(() => null) : null;
+      const probeTune = { tuning: tuneNow,
+        srcTuning: instNow?.tuning ? tuningBySlug(tunes, instNow.tuning) : null,
+        hzMap: instNow ? notesToHzMap(await loadInstrumentNotes(instNow.slug).catch(() => [])) : null };
+      const probe = await buildSchedule(probeCtx, { t0: 0.25, startStep: 0,
+        buffers: probeBuf, instNow, useReal: !!instNow && !!probeBuf?.count, tuneNow, tuneOpts: probeTune });
+      const tail = 2.5;                       // เผื่อหางเสียงตัวสุดท้าย
+      const songSec = AX.guardSeconds(probe.endTime + tail);
+
+      // ๓. เรนเดอร์จริง
+      setExporting('กำลังอัดเสียง...');
+      const ctx = new OfflineAudioContext(2, Math.ceil(44100 * songSec), 44100);
+      const buffers = instNow ? await loadMelodyBank(ctx, instNow).catch(() => null) : null;
+      const tuneOpts = { tuning: tuneNow,
+        srcTuning: instNow?.tuning ? tuningBySlug(tunes, instNow.tuning) : null,
+        hzMap: instNow ? notesToHzMap(await loadInstrumentNotes(instNow.slug).catch(() => [])) : null };
+      const sch = await buildSchedule(ctx, { t0: 0.25, startStep: 0,
+        buffers, instNow, useReal: !!instNow && !!buffers?.count, tuneNow, tuneOpts });
+      // นัดทุกเสียงทีเดียว — ไม่มี "เวลาจริง" ให้ต้องทยอยนัดเหมือนตอนเล่น
+      sch.soundEvents.sort((a, b) => a.t - b.t);
+      for (const e of sch.soundEvents) { try { e.fn(); } catch (err) {} }
+      let songBuf = await ctx.startRendering();
+
+      // ๔. ต่อเสียงพูด + ปรับความดัง
+      setExporting('กำลังรวมเสียง...');
+      const joinCtx = new OfflineAudioContext(2, 2048, 44100);
+      let finalBuf = introBuf ? AX.joinBuffers(joinCtx, [introBuf, songBuf]) : songBuf;
+      AX.normalize(finalBuf);
+
+      // ๕. เข้ารหัสและดาวน์โหลด
+      const name = AX.safeName(songName || 'เพลงไทย', fmt);
+      if (fmt === AX.MP3) {
+        setExporting('กำลังแปลงเป็น MP3...');
+        const bytes = await AX.encodeMp3(finalBuf, { kbps: 192,
+          onProgress: r => setExporting(`กำลังแปลงเป็น MP3 ${Math.round(r * 100)}%`) });
+        AX.download(bytes, name, 'audio/mpeg');
+      } else {
+        AX.download(AX.encodeWav(finalBuf), name, 'audio/wav');
+      }
+      const mins = Math.floor(finalBuf.duration / 60), secs = Math.round(finalBuf.duration % 60);
+      setExporting(`✓ ได้ไฟล์ ${name} · ยาว ${mins}:${String(secs).padStart(2, '0')}`);
+      setTimeout(() => setExporting(''), 6000);
+    } catch (e) {
+      setExporting('');
+      setExportErr('อัดไฟล์ไม่สำเร็จ: ' + (e.message ?? e));
+    }
+  }
+
+  async function startFrom(startStep) {
+    const tuneNow = tuningBySlug(tunes, tuning);
+    playIdRef.current++;
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    if (ctxRef.current) { ctxRef.current.close().catch(() => {}); }
+    ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = ctxRef.current;
+    await ctx.resume();
+
+    const instNow = insts.find(i => i.slug === sound) || (sound !== 'synth' ? insts[0] : null);
+    // ไฟล์เสียงของเครื่องนี้ตั้งไว้ตามระบบไหน + ความถี่จริงรายตำแหน่งที่ผู้ดูแลกรอกไว้
+    const tuneOpts = { tuning: tuneNow,
+      srcTuning: instNow?.tuning ? tuningBySlug(tunes, instNow.tuning) : null,
+      hzMap: instNow ? notesToHzMap(await loadInstrumentNotes(instNow.slug)) : null };
+    let buffers = buffersRef.current;
+    if (instNow && !buffers) {
+      setLoadingSamples(true);
+      buffers = await loadMelodyBank(ctx, instNow);
+      buffersRef.current = buffers;
+      setSampleCount(buffers?.count ?? 0);
+      setLoadingSamples(false);
+    }
+    const useReal = !!instNow && !!buffers?.count;
+
+    const myId = ++playIdRef.current;
+    setPlayState('playing');
+
+    const sch = await buildSchedule(ctx, {
+      t0: ctx.currentTime + 0.25, startStep, buffers, instNow, useReal, tuneNow, tuneOpts });
+    const { soundEvents, cursorTimeline, totalSteps } = sch;
+
+    let endTime = sch.endTime;
     soundEvents.sort((a, b) => a.t - b.t);
     let evIdx = 0;
     const LOOKAHEAD = 5; // วินาที
@@ -591,8 +711,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
       const now = ctx.currentTime;
       // วนกลับต้นไปเรื่อย ๆ: พอใกล้จบ นัดเที่ยวถัดไปต่อท้าย (นัดล่วงหน้าอย่างน้อย 8 วิ)
       while (repeat === 'loop' && totalSteps > 0 && endTime - now < 8) {
-        scheduleSteps(wholeOnce());
-        endTime = tCur;
+        endTime = sch.extendOnce();
       }
       pump(now);
       if (now >= endTime + 0.1) {
@@ -1083,6 +1202,43 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [] }) {
           </div>
         )}
       </div>}
+
+      {/* ── อัดเป็นไฟล์เสียง — แอดมินเท่านั้น (Pk ตัดสิน 1 ก.ย. 69) ── */}
+      {isAdmin && (
+        <div data-export style={{marginTop:'0.7rem',padding:'0.8rem',background:'var(--navy2)',
+          borderRadius:'8px',border:'1px solid var(--border)'}}>
+          <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap',marginBottom:'6px'}}>
+            <div style={{fontWeight:600,fontSize:'0.9rem',flex:1,minWidth:'150px'}}>🎧 อัดเป็นไฟล์เสียง</div>
+            <label style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'0.78rem',
+              color:'var(--muted)',cursor:'pointer'}}>
+              <input type="checkbox" checked={introOn} data-introchk
+                onChange={e => setIntroOn(e.target.checked)} />
+              ใส่เสียงพูดนำ
+            </label>
+          </div>
+          <div style={{fontSize:'0.72rem',color:'var(--muted)',lineHeight:1.8,marginBottom:'8px'}}>
+            อัดตามที่ตั้งค่าไว้ข้างบนทุกอย่าง — เครื่องดนตรี ทาง ความเร็ว หน้าทับ ฉิ่ง การกลับต้น
+            <br/>ไฟล์ที่ได้จะเหมือนที่ได้ยินตอนกดเล่นทุกประการ · งานเกิดในเครื่องนี้ ไม่ได้ส่งขึ้นเซิร์ฟเวอร์
+          </div>
+          <div className="btn-row" style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
+            <button className="btn btn-outline btn-sm" type="button" data-expwav
+              disabled={!!exporting} onClick={() => exportAudio(AX.WAV)}>
+              ⬇ WAV (คุณภาพเต็ม)
+            </button>
+            <button className="btn btn-outline btn-sm" type="button" data-expmp3
+              disabled={!!exporting} onClick={() => exportAudio(AX.MP3)}>
+              ⬇ MP3 (ไฟล์เล็ก)
+            </button>
+          </div>
+          {exporting && (
+            <div data-expstat style={{marginTop:'7px',fontSize:'0.78rem',
+              color: exporting.startsWith('✓') ? 'var(--jade)' : 'var(--gold2)'}}>{exporting}</div>
+          )}
+          {exportErr && (
+            <div data-experr style={{marginTop:'7px',fontSize:'0.78rem',color:'var(--rose,#E58B8B)'}}>{exportErr}</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
