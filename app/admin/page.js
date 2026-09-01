@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, Fragment } from 'react';
+import { useEffect, useState, useRef, Fragment } from 'react';
 import Link from 'next/link';
 import { supabase, extractYouTubeId } from '../../lib/supabase';
 import { textToVerses, versesToRows, rowsToVerses } from '../../lib/notation-core';
@@ -8,7 +8,7 @@ import { NathabPreview } from '../../components/NathabEditor';
 import { invalidateNathabLibrary, saveSongDefaults } from '../../lib/nathab';
 import { refreshSongStats } from '../../lib/songstats';
 import { pointsFor, awardLabel } from '../../lib/points';
-import { LENSES as PERM_LENSES, PERM_BY_KEY } from '../../lib/perms';
+import { LENSES as PERM_LENSES, PERM_BY_KEY, GRANT_GROUPS, hasGrantGroup } from '../../lib/perms';
 import SongTypeAdmin from '../../components/SongTypeAdmin';
 import TranslateAdmin from '../../components/TranslateAdmin';
 import { kickTranslateSoon } from '../../lib/translate';
@@ -18,6 +18,8 @@ import MelodyLog from '../../components/MelodyLog';
 import SongTypeSelect from '../../components/SongTypeSelect';
 const PERM_HINTS = Object.fromEntries(Object.entries(PERM_BY_KEY).map(([k, v]) => [k, v.hint]).filter(([, h]) => h));
 import { fmtDT, ago } from '../../lib/fmtdate';
+// ป้ายรุ่น — ไว้ตรวจด้วยตาว่าไฟล์นี้ถูกวางขึ้นเว็บแล้ว
+export const ADMIN_VERSION = '1 ก.ย. 69 · r2 (แต้มครั้งเดียว + สิทธิ์รายคน)';
 
 // กระดานอ่านอย่างเดียวสำหรับดู/ฟังโน้ตที่ส่งมาก่อนอนุมัติ
 // แถบ "ส่งโดยใคร เมื่อไร" — ข้อมูลมีอยู่ในมือแล้ว (submitted_by + created_at) แต่เดิมไม่เคยพิมพ์ออกมา
@@ -178,23 +180,23 @@ export default function AdminPage() {
   async function loadAll() {
     const { data: v } = await supabase.from('song_videos')
       .select('*, songs(name_th)').eq('approved', false).order('created_at');
-    setPendingVideos(v ?? []);
+    setPendingVideos(prev => keepDone(prev, v ?? []));
     const { data: r } = await supabase.from('archive_records')
       .select('*, archive_media(*)').eq('approved', false).order('created_at');
-    setPendingRecords(r ?? []);
+    setPendingRecords(prev => keepDone(prev, r ?? []));
     const { data: s } = await supabase.from('songs').select('id, name_th').order('name_th');
     setSongs(s ?? []);
     const { data: t } = await supabase.from('melody_submissions')
       .select('*, songs(name_th)').eq('approved', false).order('created_at');
-    setPendingTang(t ?? []);
+    setPendingTang(prev => keepDone(prev, t ?? []));
     const { data: f } = await supabase.from('song_files')
       .select('*, songs(name_th)').eq('approved', false).order('created_at');
-    setPendingFiles(f ?? []);
+    setPendingFiles(prev => keepDone(prev, f ?? []));
     const { data: sl } = await supabase.storage.from('instrument-samples').list('gong');
     setSampleList((sl ?? []).map(x => x.name));
     const { data: ps } = await supabase.from('song_submissions')
       .select('*').eq('approved', false).order('created_at');
-    setPendingSongs(ps ?? []);
+    setPendingSongs(prev => keepDone(prev, ps ?? []));
     const { data: mb } = await supabase.from('profiles')
       .select('*').order('points', { ascending: false });
     setMembers(mb ?? []);
@@ -234,7 +236,7 @@ export default function AdminPage() {
     setMgTangs(tangList);
     const { data: pa } = await supabase.from('song_audio')
       .select('*, songs(name_th)').eq('approved', false).order('created_at');
-    setPendingAudio(pa ?? []);
+    setPendingAudio(prev => keepDone(prev, pa ?? []));
     const { data: mf } = await supabase.from('song_files')
       .select('id, song_id, title, storage_path, songs(name_th)').eq('approved', true)
       .order('created_at', { ascending: false }).limit(50);
@@ -244,11 +246,53 @@ export default function AdminPage() {
   // ให้ศักดินาผู้ส่ง — อัตราอยู่ที่ lib/points.js ที่เดียว (Pk เคาะ 27 ส.ค. 69)
   //   เดิมให้ +10 เท่ากันหมดทุกประเภท และบางเส้นทางลืมให้ → แต้มขาดบ้างเกินบ้าง
   //   ถ้าฐานยังไม่ได้รัน sql/24 ฟังก์ชัน add_points อาจไม่มี — เตือนให้เห็น ไม่กลืนเงียบเหมือนเดิม
-  async function award(uid, kind, opts) {
+  //   ★ ให้ครั้งเดียวต่อผลงาน (Pk 1 ก.ย. 69 "แต้มเกิน"): ฐานจดว่าชิ้นไหน (kind+ref) ให้ไปแล้ว — sql/45 award_points_once
+  //     กดอนุมัติซ้ำ / รายการเก่าค้างจอ / สองแท็บ → ไม่ได้แต้มเพิ่ม · ถ้ายังไม่รัน sql/45 ตกไปใช้ add_points แบบเดิม
+  //   แถวที่กดแล้ว "ค้างที่เดิม" พร้อมป้าย ✓ จนกว่ารายการจะโหลดใหม่ — ไม่ให้แถวถัดไปเลื่อนมาอยู่ใต้เมาส์แล้วโดนกดซ้ำ
+  const [busyIds, setBusyIds] = useState(() => new Set());   // แถวที่กำลังอนุมัติอยู่ — ล็อกปุ่มกันกดซ้ำ
+  const [doneIds, setDoneIds] = useState(() => new Set());   // แถวที่อนุมัติเสร็จแล้วแต่ยังค้างจอ (2 วินาที)
+  const doneRef = useRef(new Map());                          // id → ตัวตั้งค่ารายการนั้น (ไว้เอาแถวออกเมื่อหมดเวลา)
+  const lockRow = id => { if (busyIds.has(id) || doneIds.has(id)) return false; setBusyIds(b => new Set(b).add(id)); return true; };
+  const unlockRow = id => setBusyIds(b => { const n = new Set(b); n.delete(id); return n; });
+  const markDone = (id, setter) => {
+    doneRef.current.set(id, setter); setDoneIds(d => new Set(d).add(id));
+    setTimeout(() => {                                         // พ้น 2 วิ ค่อยเอาแถวออก (ให้เมาส์/นิ้วที่กดซ้ำไม่โดนแถวถัดไป)
+      doneRef.current.delete(id);
+      setDoneIds(d => { const n = new Set(d); n.delete(id); return n; });
+      if (setter) setter(rows => rows.filter(r => r.id !== id));
+    }, 2000);
+  };
+  // รายการโหลดใหม่: คงแถวที่เพิ่งอนุมัติไว้ที่ตำแหน่งเดิมจนกว่าจะหมดเวลา
+  const keepDone = (prev, fresh) => {
+    const keep = prev.filter(r => doneRef.current.has(r.id) && !fresh.some(f => f.id === r.id));
+    if (!keep.length) return fresh;
+    const out = []; const seen = new Set();
+    prev.forEach(r => { const f = fresh.find(x => x.id === r.id); if (f) { out.push(f); seen.add(f.id); } else if (doneRef.current.has(r.id)) out.push(r); });
+    fresh.forEach(f => { if (!seen.has(f.id)) out.push(f); });
+    return out;
+  };
+  const rowLocked = id => busyIds.has(id) || doneIds.has(id);
+  // ป้ายบนปุ่มอนุมัติ: กำลังทำ / ทำแล้ว / ปกติ
+  const approveText = (id, normal) => busyIds.has(id) ? '⏳ กำลังอนุมัติ...' : doneIds.has(id) ? '✓ อนุมัติแล้ว' : normal;
+  async function award(uid, kind, opts, ref = null) {
     const pts = pointsFor(kind, opts);
     if (!uid || !pts) return;
-    const { error } = await supabase.rpc('add_points', { uid, pts });
-    if (error) alert('อนุมัติแล้ว แต่ให้ศักดินาไม่สำเร็จ: ' + error.message + '\n(ยังไม่ได้รัน sql/24 หรือเปล่า?)');
+    let res = ref != null
+      ? await supabase.rpc('award_points_once', { p_kind: kind, p_ref: String(ref), p_uid: uid, p_pts: pts })
+      : { error: { message: 'no ref', code: 'NOREF' } };
+    if (res.error && (res.error.code === 'PGRST202' || res.error.code === 'NOREF' || /award_points_once/.test(res.error.message))) {
+      res = await supabase.rpc('add_points', { uid, pts });       // ยังไม่ได้รัน sql/45
+    }
+    if (res.error) alert('อนุมัติแล้ว แต่ให้ศักดินาไม่สำเร็จ: ' + res.error.message + '\n(ยังไม่ได้รัน sql/24 หรือเปล่า?)');
+    return res.data;
+  }
+  // อนุมัติแถวที่ยังไม่อนุมัติเท่านั้น — คืน true ถ้าเราเป็นคนอนุมัติจริง (ไม่ใช่แถวที่ถูกอนุมัติไปแล้วแต่ยังค้างจอ)
+  async function approveRow(table, id) {
+    const { data, error } = await supabase.from(table).update({
+      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
+    }).eq('id', id).eq('approved', false).select('id');
+    if (error) { alert('อนุมัติไม่สำเร็จ: ' + error.message); return false; }
+    return (data ?? []).length > 0;
   }
   // นับศักดินาใหม่ทั้งระบบ (เรียก sql/24) — ใช้เมื่อกติกาเปลี่ยน หรือสงสัยว่าแต้มใครเพี้ยน
   async function recountPoints() {
@@ -266,11 +310,13 @@ export default function AdminPage() {
   // บันทึกจดหมายเหตุที่แนบรูปได้แต้มเพิ่ม — เช็คจากสื่อที่แนบมากับแถว
   const recordHasImage = r => (r?.archive_media ?? []).some(m => m.media_type === 'image');
   async function approveVideo(id) {
-    const row = pendingVideos.find(v => v.id === id);
-    await supabase.from('song_videos').update({
-      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
-    }).eq('id', id);
-    await award(row?.submitted_by, 'video');
+    if (!lockRow(id)) return;
+    try {
+      const row = pendingVideos.find(v => v.id === id);
+      const fresh = await approveRow('song_videos', id);
+      markDone(id, setPendingVideos);
+      if (fresh) await award(row?.submitted_by, 'video', {}, 'song_videos:' + id);
+    } finally { unlockRow(id); }
     loadAll();
   }
   async function rejectVideo(id) {
@@ -278,12 +324,14 @@ export default function AdminPage() {
     loadAll();
   }
   async function approveRecord(id) {
-    const row = pendingRecords.find(r => r.id === id);
-    await supabase.from('archive_records').update({
-      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
-    }).eq('id', id);
-    await award(row?.submitted_by, 'archive', { hasImage: recordHasImage(row) });
-    kickTranslateSoon(6);   // อนุมัติแล้วขึ้นสาธารณะ → แปลเป็นอังกฤษเลย (sql/37)
+    if (!lockRow(id)) return;
+    try {
+      const row = pendingRecords.find(r => r.id === id);
+      const fresh = await approveRow('archive_records', id);
+      markDone(id, setPendingRecords);
+      if (fresh) await award(row?.submitted_by, 'archive', { hasImage: recordHasImage(row) }, 'archive_records:' + id);
+      kickTranslateSoon(6);   // อนุมัติแล้วขึ้นสาธารณะ → แปลเป็นอังกฤษเลย (sql/37)
+    } finally { unlockRow(id); }
     loadAll();
   }
   async function rejectRecord(id) {
@@ -295,6 +343,10 @@ export default function AdminPage() {
   async function approveTang(id) {
     const sub = pendingTang.find(t => t.id === id);
     if (!sub) return;
+    if (!lockRow(id)) return;
+    try { await approveTangInner(id, sub); } finally { unlockRow(id); }
+  }
+  async function approveTangInner(id, sub) {
     const parsed = submissionRows(sub);
     if (!parsed.length) { alert('อ่านโน้ตที่ส่งมาไม่ออก'); return; }
     const inst = sub.instrument || 'ทำนองหลัก';
@@ -315,16 +367,15 @@ export default function AdminPage() {
     }));
     const { error } = await supabase.from('song_melody').insert(rows);
     if (error) { alert('บันทึกโน้ตไม่สำเร็จ: ' + error.message); return; }
-    await supabase.from('melody_submissions').update({
-      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
-    }).eq('id', id);
+    const fresh = await approveRow('melody_submissions', id);
+    markDone(id, setPendingTang);
     // ฉิ่ง/กลอง/ความเร็วที่ผู้ส่งตั้งไว้บนกระดาน → ค่าเริ่มต้นของเพลง (เดิมทำเฉพาะตอนอนุมัติ "เพลงใหม่")
     try {
       const j = sub.notation_json || {};
       await saveSongDefaults(sub.song_id, { nathab: j.nathab, level: j.level, drum: j.drum, ching: j.ching, bpm: j.bpm });
     } catch (e) { /* ยังไม่ได้รัน sql/18 ก็ยังอนุมัติได้ */ }
     await refreshSongStats(sub.song_id, inst);
-    await award(sub.submitted_by, 'tang');
+    if (fresh) await award(sub.submitted_by, 'tang', {}, 'melody_submissions:' + id);
     loadAll();
   }
   async function rejectTang(id) {
@@ -333,11 +384,13 @@ export default function AdminPage() {
   }
 
   async function approveFile(id) {
-    const row = pendingFiles.find(f => f.id === id);
-    await supabase.from('song_files').update({
-      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
-    }).eq('id', id);
-    await award(row?.submitted_by, 'file');   // ไฟล์ PDF ไม่นับศักดินา (Pk 27 ส.ค. 69)
+    if (!lockRow(id)) return;
+    try {
+      const row = pendingFiles.find(f => f.id === id);
+      const fresh = await approveRow('song_files', id);
+      markDone(id, setPendingFiles);
+      if (fresh) await award(row?.submitted_by, 'file', {}, 'song_files:' + id);   // ไฟล์ PDF ไม่นับศักดินา (Pk 27 ส.ค. 69)
+    } finally { unlockRow(id); }
     loadAll();
   }
   async function rejectFile(id) {
@@ -378,6 +431,10 @@ export default function AdminPage() {
     setSongIdInput({ ...songIdInput, [sub.id]: sid });
   }
   async function approveSong(sub) {
+    if (!lockRow(sub.id)) return;
+    try { await approveSongInner(sub); } finally { unlockRow(sub.id); }
+  }
+  async function approveSongInner(sub) {
     const sid = (songIdInput[sub.id] ?? '').trim().toUpperCase();
     if (!sid) { alert('ใส่ Song ID ก่อน เช่น USR001 (หรือกด 💡 ให้ระบบหา ID ว่าง)'); return; }
     const parsed = submissionRows(sub);
@@ -425,11 +482,12 @@ export default function AdminPage() {
       const j = sub.notation_json || {};
       await saveSongDefaults(sid, { nathab: j.nathab, level: j.level, drum: j.drum, ching: j.ching, bpm: j.bpm });
     } catch (e) { /* ยังไม่ได้รัน sql/18 ก็ยังอนุมัติเพลงได้ตามปกติ */ }
-    await supabase.from('song_submissions').update({
+    const { data: upd } = await supabase.from('song_submissions').update({
       approved: true, approved_by: user.id, approved_at: new Date().toISOString(), assigned_song_id: sid,
-    }).eq('id', sub.id);
+    }).eq('id', sub.id).eq('approved', false).select('id');
+    markDone(sub.id, setPendingSongs);
     await refreshSongStats(sid, inst);
-    await award(sub.submitted_by, 'song');
+    if ((upd ?? []).length) await award(sub.submitted_by, 'song', {}, 'song_submissions:' + sub.id);
     alert(createSong ? `✓ สร้างเพลง ${sid} (${rows.length} วรรค) แล้ว` : `✓ เพิ่มทาง "${inst}" ให้เพลง ${sid} (${rows.length} วรรค) แล้ว`);
     loadAll();
   }
@@ -490,6 +548,19 @@ export default function AdminPage() {
     const { error } = await supabase.rpc('set_teacher', { target: uid, on_off: on });
     if (error) { alert('ตั้งสถานะครูไม่สำเร็จ: ' + error.message + '\n(ยังไม่ได้รัน sql/25 หรือเปล่า?)'); return; }
     setMembers(ms => ms.map(m => (m.id === uid ? { ...m, is_teacher: on } : m)));
+  }
+  // สิทธิ์พิเศษรายคน (profiles.grants · sql/45) — เช่น 🎼 เปลี่ยนทาง ที่ปิดจากทุกประเภทสมาชิกแล้วเปิดให้เป็นราย ๆ
+  async function setGrantGroup(uid, group, on) {
+    for (const key of group.keys) {
+      const { error } = await supabase.rpc('set_grant', { target: uid, key, on_off: on });
+      if (error) { alert('ตั้งสิทธิ์พิเศษไม่สำเร็จ: ' + error.message + '\n(ยังไม่ได้รัน sql/45 หรือเปล่า?)'); return; }
+    }
+    setMembers(ms => ms.map(m => {
+      if (m.id !== uid) return m;
+      const cur = new Set(Array.isArray(m.grants) ? m.grants : []);
+      group.keys.forEach(k => on ? cur.add(k) : cur.delete(k));
+      return { ...m, grants: [...cur] };
+    }));
   }
   async function setMemberRole(uid, newRole) {
     // ผ่านฟังก์ชันที่เช็คสิทธิ์ (คอลัมน์ role อัปเดตตรงไม่ได้แล้วหลังปิดช่องแอดมิน)
@@ -600,7 +671,7 @@ export default function AdminPage() {
 
   return (
     <main className="container">
-      <div className="section-title">Admin Panel</div>
+      <div className="section-title">Admin Panel <span data-adminver style={{fontSize:'0.62rem',fontWeight:400,color:'var(--muted)',marginLeft:'8px'}}>รุ่น {ADMIN_VERSION}</span></div>
       <div className="section-subtitle">
         หอจดหมายเหตุรอตรวจ {pendingRecords.length} · วิดีโอเพลงรอตรวจ {pendingVideos.length}
       </div>
@@ -638,7 +709,7 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
-                  <button className="btn btn-jade btn-sm" onClick={() => approveRecord(r.id)}>{awardLabel('archive', { hasImage: recordHasImage(r) })}</button>
+                  <button className="btn btn-jade btn-sm" disabled={rowLocked(r.id)} data-approve-record data-done={doneIds.has(r.id) ? '1' : undefined} onClick={() => approveRecord(r.id)}>{approveText(r.id, awardLabel('archive', { hasImage: recordHasImage(r) }))}</button>
                   <button className="btn btn-danger btn-sm" onClick={() => rejectRecord(r.id)}>✕ Reject</button>
                 </div>
               </div>
@@ -659,7 +730,7 @@ export default function AdminPage() {
                   <By id={v.submitted_by} at={v.created_at} members={members} />
                 </div>
                 <div style={{display:'flex',gap:'8px'}}>
-                  <button className="btn btn-jade btn-sm" onClick={() => approveVideo(v.id)}>{awardLabel('video')}</button>
+                  <button className="btn btn-jade btn-sm" disabled={rowLocked(v.id)} onClick={() => approveVideo(v.id)}>{approveText(v.id, awardLabel('video'))}</button>
                   <button className="btn btn-danger btn-sm" onClick={() => rejectVideo(v.id)}>✕ Reject</button>
                 </div>
               </div>
@@ -694,7 +765,7 @@ export default function AdminPage() {
                   </div>
                 </div>
                 <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
-                  <button className="btn btn-jade btn-sm" onClick={() => approveTang(t.id)}>{awardLabel('tang')}</button>
+                  <button className="btn btn-jade btn-sm" disabled={rowLocked(t.id)} onClick={() => approveTang(t.id)}>{approveText(t.id, awardLabel('tang'))}</button>
                   <button className="btn btn-danger btn-sm" onClick={() => rejectTang(t.id)}>✕ Reject</button>
                 </div>
               </div>
@@ -717,7 +788,7 @@ export default function AdminPage() {
                     <By id={f.submitted_by} at={f.created_at} members={members} />
                   </div>
                   <div style={{display:'flex',gap:'8px',alignItems:'flex-start'}}>
-                    <button className="btn btn-jade btn-sm" onClick={() => approveFile(f.id)}>{awardLabel('file')}</button>
+                    <button className="btn btn-jade btn-sm" disabled={rowLocked(f.id)} onClick={() => approveFile(f.id)}>{approveText(f.id, awardLabel('file'))}</button>
                     <button className="btn btn-danger btn-sm" onClick={() => rejectFile(f.id)}>✕ Reject</button>
                   </div>
                 </div>
@@ -788,7 +859,7 @@ export default function AdminPage() {
                 <input className="form-input" style={{width:'140px'}} placeholder="Song ID เช่น USR001"
                   value={songIdInput[s.id] ?? ''} onChange={e => setSongIdInput({...songIdInput, [s.id]: e.target.value})} />
                 <button className="btn btn-outline btn-sm" title="หา Song ID ว่างถัดไปจากคำนำหน้าที่พิมพ์ (เช่น SMR → SMR002)" onClick={() => suggestId(s)}>💡 ID ว่าง</button>
-                <button className="btn btn-jade btn-sm" onClick={() => approveSong(s)}>✓ อนุมัติ + สร้างเพลง (+{pointsFor('song')} ศักดินา)</button>
+                <button className="btn btn-jade btn-sm" disabled={rowLocked(s.id)} onClick={() => approveSong(s)}>✓ อนุมัติ + สร้างเพลง (+{pointsFor('song')} ศักดินา)</button>
                 <button className="btn btn-danger btn-sm" onClick={() => rejectSong(s.id)}>✕ ปฏิเสธ</button>
               </div>
             </div>
@@ -807,12 +878,15 @@ export default function AdminPage() {
                 <By id={a.submitted_by} at={a.created_at} members={members} />
                 <audio controls preload="none" src={url} style={{width:'100%',margin:'0.6rem 0'}} />
                 <div style={{display:'flex',gap:'8px'}}>
-                  <button className="btn btn-jade btn-sm" onClick={async () => {
-                    await supabase.from('song_audio').update({
-                      approved: true, approved_by: user.id, approved_at: new Date().toISOString(),
-                    }).eq('id', a.id);
-                    await award(a.submitted_by, 'audio'); loadAll();
-                  }}>{awardLabel('audio')}</button>
+                  <button className="btn btn-jade btn-sm" disabled={rowLocked(a.id)} onClick={async () => {
+                    if (!lockRow(a.id)) return;
+                    try {
+                      const fresh = await approveRow('song_audio', a.id);
+                      markDone(a.id, setPendingAudio);
+                      if (fresh) await award(a.submitted_by, 'audio', {}, 'song_audio:' + a.id);
+                    } finally { unlockRow(a.id); }
+                    loadAll();
+                  }}>{approveText(a.id, awardLabel('audio'))}</button>
                   <button className="btn btn-danger btn-sm" onClick={async () => {
                     if (!confirm('ปฏิเสธและลบไฟล์เสียงนี้?')) return;
                     await supabase.storage.from('song-audio').remove([a.storage_path]);
@@ -1097,7 +1171,7 @@ export default function AdminPage() {
           {recountMsg && <div style={{fontSize:'0.78rem',color:'var(--jade)',marginBottom:'0.7rem',whiteSpace:'pre-wrap'}}>{recountMsg}</div>}
           <div className="table-wrap">
             <table>
-              <thead><tr><Th k="display_name">ชื่อ / อีเมล</Th><Th k="phone">ติดต่อ</Th><Th k="organization">สำนัก / จังหวัด</Th><Th k="points">ศักดินา</Th><Th k="joined">สมัคร · เข้าใช้ล่าสุด</Th><th style={{whiteSpace:'nowrap'}}>👩‍🏫 ครู</th><Th k="role">สถานะ</Th></tr></thead>
+              <thead><tr><Th k="display_name">ชื่อ / อีเมล</Th><Th k="phone">ติดต่อ</Th><Th k="organization">สำนัก / จังหวัด</Th><Th k="points">ศักดินา</Th><Th k="joined">สมัคร · เข้าใช้ล่าสุด</Th><th style={{whiteSpace:'nowrap'}}>👩‍🏫 ครู</th>{GRANT_GROUPS.map(g => <th key={g.label} style={{whiteSpace:'nowrap'}} title="สิทธิ์พิเศษรายคน — เปิดให้เฉพาะคนที่ติ๊ก">{g.label}</th>)}<Th k="role">สถานะ</Th></tr></thead>
               <tbody>
                 {sortedMembers.map(m => (
                   <tr key={m.id}>
@@ -1120,6 +1194,15 @@ export default function AdminPage() {
                           style={{accentColor:'var(--gold)',width:'18px',height:'18px'}} />
                       </label>
                     </td>
+                    {GRANT_GROUPS.map(g => (
+                      <td key={g.label} style={{textAlign:'center'}}>
+                        <label title={`อนุญาตให้คนนี้: ${g.label}`} style={{cursor:'pointer',display:'inline-flex'}}>
+                          <input type="checkbox" data-grant={g.label} checked={hasGrantGroup(m.grants, g)}
+                            onChange={e => setGrantGroup(m.id, g, e.target.checked)}
+                            style={{accentColor:'var(--gold)',width:'18px',height:'18px'}} />
+                        </label>
+                      </td>
+                    ))}
                     <td style={{whiteSpace:'nowrap'}}>
                       <select className="filter-select" value={m.role ?? 'member'}
                         onChange={e => setMemberRole(m.id, e.target.value)}

@@ -3,15 +3,16 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 export function useMe() {
-  const [me, setMe] = useState({ loading: true, user: null, role: null, tier: 'free', isTeacherFlag: false });
+  const [me, setMe] = useState({ loading: true, user: null, role: null, tier: 'free', isTeacherFlag: false, grants: [] });
   useEffect(() => {
     supabase.auth.getUser().then(async ({ data }) => {
-      if (!data.user) { setMe({ loading: false, user: null, role: null, tier: 'free', isTeacherFlag: false }); return; }
+      if (!data.user) { setMe({ loading: false, user: null, role: null, tier: 'free', isTeacherFlag: false, grants: [] }); return; }
       // select('*') ไม่ใช่ระบุคอลัมน์ — ถ้ายังไม่ได้รัน sql/25 คอลัมน์ is_teacher จะยังไม่มี
       // การระบุชื่อคอลัมน์ที่ยังไม่มีจะทำให้คำสั่งล้มทั้งอัน แล้วสิทธิ์ของทุกคนหายหมด
       const { data: p } = await supabase.from('profiles').select('*').eq('id', data.user.id).single();
+      // grants = สิทธิ์พิเศษรายคน (sql/45) — คอลัมน์อาจยังไม่มีถ้ายังไม่รัน SQL จึงอ่านแบบเผื่อว่าง
       setMe({ loading: false, user: data.user, role: p?.role ?? 'member', tier: p?.tier ?? 'free',
-              isTeacherFlag: !!p?.is_teacher });
+              isTeacherFlag: !!p?.is_teacher, grants: Array.isArray(p?.grants) ? p.grants : [] });
     });
   }, []);
   // ระดับสิทธิ์ (2026-08-25):
@@ -99,6 +100,7 @@ export function usePermissions() {
   const tier = lenses ? lenses[lenses.length - 1] : null;   // เลนส์เด่นสุด ไว้โชว์เฉย ๆ
   function can(key) {
     if (!lenses || lenses[0] === 'admin') return true;
+    if (me.grants?.includes(key)) return true;   // ได้รับอนุญาตรายคน (แท็บสมาชิก) — เปิดชนะปิด
     const r = perms?.[key];
     if (!r) return true;                 // ไม่มีในตาราง = เปิด
     // คอลัมน์ student/teacher อาจยังไม่มีถ้ายังไม่ได้รัน sql/28
@@ -106,7 +108,7 @@ export function usePermissions() {
     return lenses.some(l => (l in r ? !!r[l] : !!r.free));
   }
   return { can, tier, lenses, isAdmin: me.isAdmin, isRealAdmin: me.isRealAdmin, role: me.role,
-    isTeacher: me.isTeacher, isStudent: me.isStudent,
+    isTeacher: me.isTeacher, isStudent: me.isStudent, grants: me.grants,
     user: me.user, loading: me.loading || perms == null };
 }
 

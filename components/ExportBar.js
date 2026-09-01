@@ -28,9 +28,12 @@ function dl(blob, filename) {
 
 import { usePermissions } from './Gate';
 import SheetExport from './SheetExport';
+import { printRights } from '../lib/ownership';
 
 export default function ExportBar({ song, instrument, verses, targetId }) {
-  const { loading: meLoading, can } = usePermissions();
+  const { loading: meLoading, can, user, isAdmin } = usePermissions();
+  // ★ พิมพ์/ดาวน์โหลดได้เฉพาะโน้ตที่ตัวเองบันทึก — โน้ตคนอื่นดูได้อย่างเดียว (Pk 1 ก.ย. 69)
+  const rights = printRights({ userId: user?.id, isAdmin, verses, song, can });
   const [busy, setBusy] = useState('');
   const [sheetOpen, setSheetOpen] = useState(false);
   const base = `${song.id}_${song.name_th}_${instrument}`.replace(/\s+/g, '_');
@@ -123,7 +126,14 @@ export default function ExportBar({ song, instrument, verses, targetId }) {
   );
 
   if (meLoading) return null;
-  if (!can('export') && !can('print')) {
+  if (!rights.owner && !isAdmin) {
+    return (
+      <div data-export-locked style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
+        <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>🔒 {rights.reason}</span>
+      </div>
+    );
+  }
+  if (!rights.export && !rights.print) {
     return (
       <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
         <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>🖨 พิมพ์/ดาวน์โหลดโน้ต:</span>
@@ -137,15 +147,13 @@ export default function ExportBar({ song, instrument, verses, targetId }) {
   return (
     <div style={{display:'flex',gap:'8px',flexWrap:'wrap',alignItems:'center'}}>
       <span style={{fontSize:'0.72rem',color:'var(--muted)'}}>ดาวน์โหลด:</span>
-      {!can('export') && <a href="/premium" style={{fontSize:'0.7rem',color:'var(--gold)'}}>💎 ดาวน์โหลดไฟล์สำหรับสมาชิกอุปถัมภ์</a>}
-      {can('export') && <>
-      </>}
-      {can('export') && (
-        <button className="btn btn-sm" onClick={() => setSheetOpen(true)}
+      {!rights.export && <a href="/premium" style={{fontSize:'0.7rem',color:'var(--gold)'}}>💎 ดาวน์โหลดไฟล์สำหรับสมาชิกอุปถัมภ์</a>}
+      {rights.export && (
+        <button className="btn btn-sm" data-export-sheet onClick={() => setSheetOpen(true)}
           style={{background:'var(--gold)',color:'var(--navy)',fontWeight:600,fontSize:'0.72rem'}}>
           🖨 ส่งออก Music Sheet (PDF · PNG · DOCX · Excel)</button>
       )}
-      {can('print') && <a href={`/songs/${song?.id}/print`} className="btn btn-outline btn-sm"
+      {rights.print && <a href={`/songs/${song?.id}/print`} data-export-print className="btn btn-outline btn-sm"
         style={{fontSize:'0.72rem'}}>ฉบับพิมพ์ในเบราว์เซอร์</a>}
       {sheetOpen && (
         <SheetExport song={song} instrument={instrument} verses={verses}
