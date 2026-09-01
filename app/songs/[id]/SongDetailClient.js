@@ -381,7 +381,8 @@ export default function SongDetailClient() {
           </div>
           <SongNathab song={song} verses={melody} onRules={setNathabRules} />
           <div id="notation-export-area">
-            <NotationPlayer verses={melody} lyrics={song.lyrics} nathabRules={nathabRules} />
+            <NotationPlayer verses={melody} lyrics={song.lyrics} nathabRules={nathabRules}
+              songName={song.name_th || song.name_en || ""} songId={id} />
           </div>
 
           <div style={{marginTop:'1.4rem'}}>
