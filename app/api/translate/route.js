@@ -49,7 +49,7 @@ const GOOG = clean(process.env.GOOGLE_TRANSLATE_API_KEY);
 const MODEL = process.env.TRANSLATE_MODEL || 'claude-haiku-4-5-20251001';
 
 const MAX_ROWS = 40;     // ต่อการเรียกหนึ่งครั้ง — กันไม่ให้คำสั่งยาวเกินและกันบิลพุ่ง
-const TR_VER = '28 ส.ค. 69 · r5 (รองรับกุญแจแบบใหม่)';
+const TR_VER = '1 ก.ย. 69 · r6 (เพดานค่าแปลรายวัน)';
 
 // ── ตรวจกุญแจโดยไม่เปิดเผยตัวกุญแจ ────────────────────────────────
 //   กุญแจแบบเดิมของ Supabase เป็น JWT — ส่วนกลางถอดได้ ไม่ใช่ความลับ
@@ -241,11 +241,48 @@ async function writeBack(patches) {
   return n;
 }
 
+// ── เพดานค่าแปลรายวัน (sql/43_tr_budget.sql) ─────────────────────
+//   /api/translate เป็นที่เดียวในเว็บที่เสียเงินจริง จึงต้องมีเบรกมือ
+//   จองโควตาก่อนยิงไปหา Anthropic · ใช้ไม่หมดคืนให้ · ฐานยังไม่ได้รันไฟล์ 43 ก็ทำงานได้ตามเดิม
+async function takeBudget(want) {
+  try {
+    const r = await fetch(`${URL_}/rest/v1/rpc/thma_tr_take`, {
+      method: 'POST', headers: { ...authHeaders(SVC), 'content-type': 'application/json' },
+      body: JSON.stringify({ p_want: want }), cache: 'no-store' });
+    if (!r.ok) return { give: want, on: false };      // ยังไม่ได้รัน sql/43 — ไม่ขวางงาน
+    const n = Number(await r.text());
+    return Number.isFinite(n) ? { give: n, on: true } : { give: want, on: false };
+  } catch (e) { return { give: want, on: false }; }
+}
+async function giveBackBudget(n) {
+  if (!(n > 0)) return;
+  try {
+    await fetch(`${URL_}/rest/v1/rpc/thma_tr_give_back`, {
+      method: 'POST', headers: { ...authHeaders(SVC), 'content-type': 'application/json' },
+      body: JSON.stringify({ p_n: n }), cache: 'no-store' });
+  } catch (e) {}
+}
+
 async function runJob(limit) {
-  const rows = await pending(limit);
-  if (rows.length === 0) return { done: 0, rows: 0, note: 'ไม่มีงานค้าง', ver: TR_VER };
+  const bud = await takeBudget(limit);
+  if (bud.on && bud.give === 0)
+    return { done: 0, rows: 0, capped: true, ver: TR_VER,
+      note: 'ถึงเพดานค่าแปลของวันนี้แล้ว — ระบบหยุดไว้เองเพื่อคุมค่าใช้จ่าย เริ่มใหม่พรุ่งนี้ '
+          + '(แก้เพดานได้ที่ฟังก์ชัน thma_tr_daily_cap ในฐานข้อมูล)' };
+
+  const rows = await pending(bud.give);
+  if (rows.length === 0) {
+    await giveBackBudget(bud.on ? bud.give : 0);
+    return { done: 0, rows: 0, note: 'ไม่มีงานค้าง', ver: TR_VER };
+  }
+  // จองไว้เกินที่ใช้จริง → คืนส่วนต่างทันที ไม่กินโควตาคนอื่นฟรี ๆ
+  if (bud.on && bud.give > rows.length) await giveBackBudget(bud.give - rows.length);
+
   const items = buildBatch(rows);
-  if (items.length === 0) return { done: 0, rows: rows.length, note: 'ไม่มีข้อความไทยให้แปล', ver: TR_VER };
+  if (items.length === 0) {
+    await giveBackBudget(bud.on ? rows.length : 0);
+    return { done: 0, rows: rows.length, note: 'ไม่มีข้อความไทยให้แปล', ver: TR_VER };
+  }
   const answer = ANTH ? await askClaude(items) : await askGoogle(items);
   const patches = applyAnswer(rows, items, answer);
   const done = await writeBack(patches);
