@@ -1,6 +1,7 @@
 'use client';
 import { usePermissions } from './Gate';
 import * as AX from '../lib/audioexport';
+import * as VX from '../lib/videoexport';
 import { supabase } from '../lib/supabase';
 import { usePlayerTheme, PLAYER_THEMES } from '../lib/playertheme';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -25,6 +26,8 @@ import { tempoPlan, TEMPO_DEFAULTS, MODE_LABEL, halfCycleOfLevel, bpmAt, isConti
 import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
 import { stepOf, noteOfStep } from '../lib/instruments';
+// ป้ายรุ่นของกล่องอัดไฟล์ — ไว้ตรวจด้วยตาว่าไฟล์นี้ถูกวางขึ้นเว็บแล้ว (ดู pk-delivery-format)
+export const EXPORT_VERSION = '1 ก.ย. 69 · v2 (วิดีโอคาราโอเกะ + แถบความคืบหน้า)';
 const SABAT_DEFAULT = SABAT_GAP_DEFAULT; // 80 ms — ค่าเดียวกับกระดานโน้ต (Pk เคาะ 2026-08-24)
 
 function noteFreq(ch, register) {
@@ -91,6 +94,12 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
   const { can, isAdmin } = usePermissions();
   const [exporting, setExporting] = useState('');   // ข้อความความคืบหน้าตอนอัดไฟล์
   const [exportErr, setExportErr] = useState('');
+  const [exportPct, setExportPct] = useState(null); // 0–100 ระหว่างอัด (ค้าง 100 ตอนเสร็จ) · null = ไม่มีแถบ
+  const busy = exportPct != null && !exporting.startsWith('✓');   // งานอัดกำลังเดินอยู่
+  const [videoLive, setVideoLive] = useState(false); // กำลังอัดวิดีโอ (โชว์ภาพที่กำลังอัดให้ดู)
+  const exportAbort = useRef(null);                  // AbortController ของงานอัดที่กำลังทำ
+  const pctRef = useRef(0);                          // เดินหน้าอย่างเดียว ไม่ถอยหลัง
+  const videoCanvasRef = useRef(null);
   const [introOn, setIntroOn] = useState(true);    // ใส่เสียงพูดนำหน้าไหม
   const introCache = useRef(new Map());
   const { theme, set: setTheme, cls: themeCls } = usePlayerTheme();   // สีกระดาษ (Pk 27 ส.ค. 69)
@@ -579,70 +588,164 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
      ใช้ buildSchedule ตัวเดียวกับตอนกดเล่น ต่างกันแค่ส่ง OfflineAudioContext เข้าไป
      ไฟล์ที่ได้จึงเหมือนที่ได้ยินบนเว็บทุกประการ ไม่มีตรรกะโน้ตชุดที่สอง
      ★ ทำงานในเครื่องของคนกด ไม่แตะเซิร์ฟเวอร์ ไม่มีค่าใช้จ่าย                */
+
+  // ความคืบหน้า: เดินหน้าอย่างเดียว (แต่ละขั้นได้ช่วง % ของตัวเอง)
+  const setProgress = (pct, text) => {
+    const v = Math.max(pctRef.current, Math.min(100, Math.round(pct)));
+    pctRef.current = v; setExportPct(v);
+    if (text != null) setExporting(text);
+  };
+  const beginExport = () => {
+    setExportErr(''); pctRef.current = 0; setExportPct(0);
+    const ac = new AbortController(); exportAbort.current = ac; return ac.signal;
+  };
+  // เสร็จดี → ค้างแถบเต็ม 100% ไว้คู่ข้อความ ✓ · ยกเลิก/พัง → เก็บแถบ
+  const endExport = ok => { exportAbort.current = null; if (!ok) setExportPct(null); setVideoLive(false); };
+  const clearDone = () => { setExporting(''); setExportPct(null); };
+  const cancelExport = () => { exportAbort.current?.abort(); };
+
+  /* เรนเดอร์เสียงทั้งหมด (พูดนำ + เพลง) → คืน AudioBuffer และเส้นเวลาเคอร์เซอร์
+     range = [จาก%, ถึง%] ของแถบความคืบหน้าที่ขั้นนี้ครอบครอง
+     lead = 'intro' (ใส่เสียงพูดถ้าเปิดไว้) · ตัวเลข = ช่วงเงียบหน้าเพลงกี่วินาที (ไว้โชว์หน้าปกวิดีโอ) */
+  async function renderAudio({ signal, range = [0, 100], leadSilence = 0 } = {}) {
+    const [p0, p1] = range;
+    const span = pct => p0 + (p1 - p0) * pct;
+    const tuneNow = tuningBySlug(tunes, tuning);
+    const instNow = insts.find(i => i.slug === sound) || (sound !== 'synth' ? insts[0] : null);
+    const chk = () => { if (signal?.aborted) throw new AX.CancelledError(); };
+
+    // ๑. เสียงพูดนำหน้า (ถ้ามี) — ขอจากเซิร์ฟเวอร์ครั้งเดียวต่อเพลง แล้วถูกแคชไว้
+    let introBuf = null;
+    if (introOn) {
+      setProgress(span(0.01), 'กำลังทำเสียงพูดนำ...');
+      try { introBuf = await fetchIntro(songName); }
+      catch (e) { setExportErr('ทำเสียงพูดนำไม่สำเร็จ — อัดเฉพาะเสียงเพลงให้แทน (' + (e.message ?? e) + ')'); }
+    }
+    chk();
+
+    // ๒. หาความยาวเพลงก่อน ด้วยการนัดคิวบนกระดานทดลอง (เรนเดอร์สั้น ๆ ไม่กินเวลา)
+    setProgress(span(0.05), 'กำลังคำนวณความยาวเพลง...');
+    const probeCtx = new OfflineAudioContext(2, 2048, 44100);
+    const probeBuf = instNow ? await loadMelodyBank(probeCtx, instNow).catch(() => null) : null;
+    const probeTune = { tuning: tuneNow,
+      srcTuning: instNow?.tuning ? tuningBySlug(tunes, instNow.tuning) : null,
+      hzMap: instNow ? notesToHzMap(await loadInstrumentNotes(instNow.slug).catch(() => [])) : null };
+    const probe = await buildSchedule(probeCtx, { t0: 0.25, startStep: 0,
+      buffers: probeBuf, instNow, useReal: !!instNow && !!probeBuf?.count, tuneNow, tuneOpts: probeTune });
+    const tail = 2.5;                       // เผื่อหางเสียงตัวสุดท้าย
+    const songSec = AX.guardSeconds(probe.endTime + tail);
+    chk();
+
+    // ๓. เรนเดอร์จริง — รายงาน % จริงระหว่างทาง ยกเลิกได้
+    setProgress(span(0.1), 'กำลังอัดเสียง 0%');
+    const ctx = new OfflineAudioContext(2, Math.ceil(44100 * songSec), 44100);
+    const buffers = instNow ? await loadMelodyBank(ctx, instNow).catch(() => null) : null;
+    const tuneOpts = { tuning: tuneNow,
+      srcTuning: instNow?.tuning ? tuningBySlug(tunes, instNow.tuning) : null,
+      hzMap: instNow ? notesToHzMap(await loadInstrumentNotes(instNow.slug).catch(() => [])) : null };
+    const sch = await buildSchedule(ctx, { t0: 0.25, startStep: 0,
+      buffers, instNow, useReal: !!instNow && !!buffers?.count, tuneNow, tuneOpts });
+    // นัดทุกเสียงทีเดียว — ไม่มี "เวลาจริง" ให้ต้องทยอยนัดเหมือนตอนเล่น
+    sch.soundEvents.sort((a, b) => a.t - b.t);
+    for (const e of sch.soundEvents) { try { e.fn(); } catch (err) {} }
+    const songBuf = await AX.renderWithProgress(ctx, { signal,
+      onProgress: r => setProgress(span(0.1 + 0.85 * r), `กำลังอัดเสียง ${Math.round(r * 100)}%`) });
+    chk();
+
+    // ๔. ต่อเสียงพูด/ช่วงเงียบหน้าเพลง + ปรับความดัง
+    setProgress(span(0.96), 'กำลังรวมเสียง...');
+    const joinCtx = new OfflineAudioContext(2, 2048, 44100);
+    const lead = introBuf || (leadSilence > 0 ? AX.silence(joinCtx, leadSilence) : null);
+    const gap = 0.35;
+    const finalBuf = lead ? AX.joinBuffers(joinCtx, [lead, songBuf], { gap }) : songBuf;
+    AX.normalize(finalBuf);
+    const leadSec = lead ? lead.duration + gap : 0;
+    setProgress(span(1));
+    return {
+      finalBuf, leadSec, introUsed: !!introBuf,
+      songEnd: leadSec + sch.endTime,                                  // วินาทีที่โน้ตตัวสุดท้ายลง (ในไฟล์สุดท้าย)
+      timeline: sch.cursorTimeline.map(c => ({ ...c, time: c.time + leadSec })),
+    };
+  }
+
   async function exportAudio(fmt) {
-    if (exporting) return;
-    setExportErr('');
+    if (exportAbort.current) return;          // กันกดซ้ำระหว่างอัด
+    const signal = beginExport();
     try {
-      setExporting('กำลังเตรียม...');
-      const tuneNow = tuningBySlug(tunes, tuning);
-      const instNow = insts.find(i => i.slug === sound) || (sound !== 'synth' ? insts[0] : null);
-
-      // ๑. เสียงพูดนำหน้า (ถ้ามี) — ขอจากเซิร์ฟเวอร์ครั้งเดียวต่อเพลง แล้วถูกแคชไว้
-      let introBuf = null;
-      if (introOn) {
-        setExporting('กำลังทำเสียงพูดนำ...');
-        try { introBuf = await fetchIntro(songName); }
-        catch (e) { setExportErr('ทำเสียงพูดนำไม่สำเร็จ — อัดเฉพาะเสียงเพลงให้แทน (' + (e.message ?? e) + ')'); }
-      }
-
-      // ๒. หาความยาวเพลงก่อน ด้วยการนัดคิวบนกระดานทดลอง (เรนเดอร์สั้น ๆ ไม่กินเวลา)
-      setExporting('กำลังคำนวณความยาวเพลง...');
-      const probeCtx = new OfflineAudioContext(2, 2048, 44100);
-      const probeBuf = instNow ? await loadMelodyBank(probeCtx, instNow).catch(() => null) : null;
-      const probeTune = { tuning: tuneNow,
-        srcTuning: instNow?.tuning ? tuningBySlug(tunes, instNow.tuning) : null,
-        hzMap: instNow ? notesToHzMap(await loadInstrumentNotes(instNow.slug).catch(() => [])) : null };
-      const probe = await buildSchedule(probeCtx, { t0: 0.25, startStep: 0,
-        buffers: probeBuf, instNow, useReal: !!instNow && !!probeBuf?.count, tuneNow, tuneOpts: probeTune });
-      const tail = 2.5;                       // เผื่อหางเสียงตัวสุดท้าย
-      const songSec = AX.guardSeconds(probe.endTime + tail);
-
-      // ๓. เรนเดอร์จริง
-      setExporting('กำลังอัดเสียง...');
-      const ctx = new OfflineAudioContext(2, Math.ceil(44100 * songSec), 44100);
-      const buffers = instNow ? await loadMelodyBank(ctx, instNow).catch(() => null) : null;
-      const tuneOpts = { tuning: tuneNow,
-        srcTuning: instNow?.tuning ? tuningBySlug(tunes, instNow.tuning) : null,
-        hzMap: instNow ? notesToHzMap(await loadInstrumentNotes(instNow.slug).catch(() => [])) : null };
-      const sch = await buildSchedule(ctx, { t0: 0.25, startStep: 0,
-        buffers, instNow, useReal: !!instNow && !!buffers?.count, tuneNow, tuneOpts });
-      // นัดทุกเสียงทีเดียว — ไม่มี "เวลาจริง" ให้ต้องทยอยนัดเหมือนตอนเล่น
-      sch.soundEvents.sort((a, b) => a.t - b.t);
-      for (const e of sch.soundEvents) { try { e.fn(); } catch (err) {} }
-      let songBuf = await ctx.startRendering();
-
-      // ๔. ต่อเสียงพูด + ปรับความดัง
-      setExporting('กำลังรวมเสียง...');
-      const joinCtx = new OfflineAudioContext(2, 2048, 44100);
-      let finalBuf = introBuf ? AX.joinBuffers(joinCtx, [introBuf, songBuf]) : songBuf;
-      AX.normalize(finalBuf);
+      setProgress(0, 'กำลังเตรียม...');
+      const { finalBuf } = await renderAudio({ signal, range: [0, fmt === AX.MP3 ? 60 : 92] });
 
       // ๕. เข้ารหัสและดาวน์โหลด
       const name = AX.safeName(songName || 'เพลงไทย', fmt);
       if (fmt === AX.MP3) {
-        setExporting('กำลังแปลงเป็น MP3...');
-        const bytes = await AX.encodeMp3(finalBuf, { kbps: 192,
-          onProgress: r => setExporting(`กำลังแปลงเป็น MP3 ${Math.round(r * 100)}%`) });
+        setProgress(60, 'กำลังแปลงเป็น MP3 0%');
+        const bytes = await AX.encodeMp3(finalBuf, { kbps: 192, signal,
+          onProgress: r => setProgress(60 + 38 * r, `กำลังแปลงเป็น MP3 ${Math.round(r * 100)}%`) });
+        if (signal.aborted) throw new AX.CancelledError();
         AX.download(bytes, name, 'audio/mpeg');
       } else {
+        setProgress(94, 'กำลังเขียนไฟล์...');
         AX.download(AX.encodeWav(finalBuf), name, 'audio/wav');
       }
       const mins = Math.floor(finalBuf.duration / 60), secs = Math.round(finalBuf.duration % 60);
-      setExporting(`✓ ได้ไฟล์ ${name} · ยาว ${mins}:${String(secs).padStart(2, '0')}`);
-      setTimeout(() => setExporting(''), 6000);
+      setProgress(100, `✓ ได้ไฟล์ ${name} · ยาว ${mins}:${String(secs).padStart(2, '0')}`);
+      endExport(true);
+      setTimeout(clearDone, 6000);
     } catch (e) {
       setExporting('');
-      setExportErr('อัดไฟล์ไม่สำเร็จ: ' + (e.message ?? e));
+      setExportErr(AX.isCancelled(e) ? 'ยกเลิกแล้ว — ไม่ได้บันทึกไฟล์' : 'อัดไฟล์ไม่สำเร็จ: ' + (e.message ?? e));
+      endExport(false);
+    }
+  }
+
+  /* ── อัดเป็นวิดีโอคาราโอเกะ (Pk 1 ก.ย. 69) ─────────────────────
+     เสียง = ไฟล์เดียวกับ WAV ข้างบน · ภาพ = โน้ตชุดเดียวกับที่เห็นบนจอ (โหมด/ทาง/ธีมที่เลือกอยู่)
+     ★ อัดตามเวลาจริง เร่งไม่ได้ — เพลง 5 นาที ต้องรอ 5 นาที · อย่าสลับแท็บระหว่างอัด */
+  async function exportVideo() {
+    if (exportAbort.current) return;
+    const signal = beginExport();
+    try {
+      if (!VX.canRecordVideo()) throw new Error('เบราว์เซอร์นี้อัดวิดีโอไม่ได้ — ใช้ Chrome หรือ Edge รุ่นใหม่บนคอมพิวเตอร์');
+      const choice = VX.pickVideoMime();
+      setProgress(0, 'กำลังเตรียมเสียง...');
+      // ไม่ใส่เสียงพูดนำ → ยังมีหน้าปก 2.5 วิ (เงียบ) ให้คนดูตั้งตัว
+      const au = await renderAudio({ signal, range: [0, 12], leadSilence: 2.5 });
+      const totalSec = au.finalBuf.duration;
+
+      // ภาพ: โน้ตชุดเดียวกับที่วาดบนจอ + สีจากธีมที่เลือกอยู่
+      setProgress(12, 'กำลังจัดหน้าโน้ต...');
+      const sheet = buildSheet();
+      const L = VX.layoutSheet(sheet);
+      await VX.ensureVideoFonts(L.fontNote);
+      const pal = VX.themePalette(gridRef.current?.parentElement || null, theme);
+      const canvas = videoCanvasRef.current || document.createElement('canvas');
+      canvas.width = L.W; canvas.height = L.H;
+      const instNow = insts.find(i => i.slug === sound) || (sound !== 'synth' ? insts[0] : null);
+      const info = [instNow?.name_th, level, `${bpm} bpm`, tang != null ? tangOf(tang).name : null].filter(Boolean).join(' · ');
+      const paint = VX.makePainter(canvas, L, pal, {
+        title: songName || 'เพลงไทย', info, site: 'thaimusicarchive.com',
+        credit: 'โดย อาจารย์ ดร.ปกป้อง ขำประเสริฐ',
+        leadSec: au.leadSec, songEnd: au.songEnd, totalSec, timeline: au.timeline,
+      });
+      // ช่องให้ชุดทดสอบล้วงตัววาดไปวาดเฟรม ณ เวลาใดก็ได้ โดยไม่ต้องรออัดจริง (ไม่มีผลกับผู้ใช้)
+      if (typeof window !== 'undefined' && typeof window.__thmaVideoDebug === 'function') window.__thmaVideoDebug({ paint, L, sheet, totalSec, leadSec: au.leadSec, songEnd: au.songEnd });
+      setVideoLive(true);
+      const secsAll = Math.round(totalSec);
+      setProgress(13, `กำลังอัดวิดีโอ 0% · เหลืออีก ${VX.formatClock(secsAll)} (อัดตามเวลาจริง)`);
+      const out = await VX.recordVideo({ canvas, audioBuf: au.finalBuf, paint, signal, choice,
+        onProgress: (r, left) => setProgress(13 + 86 * r, `กำลังอัดวิดีโอ ${Math.round(r * 100)}% · เหลืออีก ${VX.formatClock(left)}`) });
+      setVideoLive(false);
+      const name = AX.safeName(songName || 'เพลงไทย', out.ext);
+      VX.downloadBlob(out.blob, name);
+      const mb = (out.blob.size / 1048576).toFixed(1);
+      setProgress(100, `✓ ได้ไฟล์ ${name} · ${out.label} · ${mb} MB · ยาว ${VX.formatClock(totalSec)}`
+        + (out.universal ? '' : ' · เปิดได้ใน Chrome/YouTube (iPhone อาจไม่เล่น — ใช้ Chrome บนคอมจะได้ H.264)'));
+      endExport(true);
+      setTimeout(clearDone, 12000);
+    } catch (e) {
+      setExporting('');
+      setExportErr(AX.isCancelled(e) ? 'ยกเลิกแล้ว — ไม่ได้บันทึกไฟล์' : 'อัดวิดีโอไม่สำเร็จ: ' + (e.message ?? e));
+      endExport(false);
     }
   }
 
@@ -745,13 +848,19 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
   }
 
   // hk = แนวที่กำลังวาด ('r' บน · 'l' ล่าง · 'x' ที่สาม · null = แนวรวม ให้ถือว่าประคบทั้งก้อน)
-  function renderCell(notes, vi, p, hk) {
-    const isSabat = notes.length > 1;
+  // ★ เครื่องหมายของช่องคิดที่นี่ที่เดียว — ทั้งตารางบนจอและวิดีโอใช้ตัวเดียวกัน
+  function cellFlags(vi, p, hk) {
     const step = (parsed[vi]?.offset ?? 0) + p;
     const mk = marksView.markOf(step);
     const mask = marksView.dampOf(step);
     const dp = hk ? !!(mask & HAND_BIT[hk]) : !!mask;      // ประคบแยกอิสระรายมือ (Pk 27 ส.ค.)
     const kro = mk === 'kro' && (!hk || hk === 'r');       // เครื่องหมายกรออยู่แนวบน (มือขวา) แนวเดียว ตามที่ Pk เคาะ
+    return { dp, kro };
+  }
+  const cellText = notes => notes.length ? notes.map(noteKey).join('') : '-';
+  function renderCell(notes, vi, p, hk) {
+    const isSabat = notes.length > 1;
+    const { dp, kro } = cellFlags(vi, p, hk);
     const cls = 'np-cell'
       + (dp ? ' np-damp' : '')
       + (kro ? ' np-kro np-krocover' : '');
@@ -771,7 +880,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
           borderRadius:'50% 50% 0 0',
           pointerEvents:'none',
         }} />}
-        {notes.length ? notes.map(noteKey).join('') : '-'}
+        {cellText(notes)}
       </span>
     );
   }
@@ -901,6 +1010,43 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
     if (cur.length) groups.push(cur);
     return groups;
   }, [parsed, hongsPerLine, hasSrcLines, srcNl]);
+
+  /* ── แผ่นโน้ตสำหรับวิดีโอ: บรรทัด/แนว/ช่อง ชุดเดียวกับที่วาดบนจอ ──
+     (บรรทัดจาก lineGroups · แนวตามโหมดที่เลือก · เครื่องหมายจาก cellFlags · ตัวอักษรจาก cellText) */
+  function buildSheet() {
+    const rowsOf = group => {
+      const mk = (f, label, hk) => ({ label, cells: group.flatMap((vi, si) => f(parsed[vi]).map((notes, p) => ({
+        vi, p, text: cellText(notes), rest: !notes.length, sabat: notes.length > 1,
+        ...cellFlags(vi, p, hk), bar: (p > 0 && p % 4 === 0) || (si > 0 && p === 0),
+      }))) });
+      if (mode === 'hands') return [mk(pv => pv.rh, sysLines[0]?.tag || 'R', 'r'), mk(pv => pv.lh, sysLines[1]?.tag || 'L', 'l')];
+      if (mode === 'khim') return ['1', '0', '-1'].map((reg, li) =>
+        mk(pv => khimRow(pv, reg), rec3 ? (sysLines[li]?.tag || REG_LABEL[reg]) : REG_LABEL[reg], rec3 ? ['r', 'l', 'x'][li] : null));
+      return [mk(pv => pv.cb, mode === 'vocal' ? '♪' : null, null)];
+    };
+    const lines = lineGroups.map(group => {
+      const first = parsed[group[0]].v, last = parsed[group[group.length - 1]].v;
+      const b = secStartAt[group[0]];
+      let sec = null;
+      if (b) {
+        const m = secModes[b.i] || '';
+        const contWhy = CONTINUOUS_WHY({ level: b.level, name: b.name });
+        const bits = [b.level, b.nathab && `🥁 หน้าทับ${b.nathab}`, b.tang && `ทาง${b.tang}`,
+          `${b.verses} วรรค · ${b.hongs} ห้อง`, b.luktok && `ลูกตก ${b.luktok}`,
+          tempoOn && (contWhy ? '⤳ เร่งต่อเนื่อง' : m === 'thon' ? '⤳ ถอน' : m === 'thot' ? '⤳ ทอด' : '')].filter(Boolean);
+        sec = { name: b.name ?? 'ทั้งเพลง', bits: bits.join(' · ') };
+      }
+      const luk = group.map(vi => parsed[vi].v.luktok).filter(Boolean).join(' / ');
+      return {
+        sec,
+        label: (group.length > 1 ? `วรรค ${first.verse_no}–${last.verse_no}` : `วรรค ${first.verse_no}`) + (luk ? ` · ลูกตก ${luk}` : ''),
+        hongs: group.reduce((a, vi) => a + parsed[vi].len / 4, 0),
+        verses: group.map(vi => ({ vi, label: parsed[vi].v.verse_no, hongs: parsed[vi].len / 4, luktok: parsed[vi].v.luktok || null })),
+        rows: rowsOf(group),
+      };
+    });
+    return { title: songName, lines };
+  }
 
   if (!verses || verses.length === 0) {
     return <div style={{color:'var(--muted)',fontSize:'0.85rem'}}>ยังไม่มีข้อมูลโน้ตสำหรับเพลงนี้</div>;
@@ -1203,15 +1349,16 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
         )}
       </div>}
 
-      {/* ── อัดเป็นไฟล์เสียง — แอดมินเท่านั้น (Pk ตัดสิน 1 ก.ย. 69) ── */}
+      {/* ── อัดเป็นไฟล์เสียง / วิดีโอคาราโอเกะ — แอดมินเท่านั้น (Pk ตัดสิน 1 ก.ย. 69) ── */}
       {isAdmin && (
         <div data-export style={{marginTop:'0.7rem',padding:'0.8rem',background:'var(--navy2)',
           borderRadius:'8px',border:'1px solid var(--border)'}}>
           <div style={{display:'flex',alignItems:'center',gap:'8px',flexWrap:'wrap',marginBottom:'6px'}}>
-            <div style={{fontWeight:600,fontSize:'0.9rem',flex:1,minWidth:'150px'}}>🎧 อัดเป็นไฟล์เสียง</div>
+            <div style={{fontWeight:600,fontSize:'0.9rem',flex:1,minWidth:'150px'}}>🎧 อัดเป็นไฟล์เสียง / 🎬 วิดีโอคาราโอเกะ
+              <span data-expver style={{fontWeight:400,fontSize:'0.62rem',color:'var(--muted)',marginLeft:'8px'}}>รุ่น {EXPORT_VERSION}</span></div>
             <label style={{display:'flex',alignItems:'center',gap:'5px',fontSize:'0.78rem',
               color:'var(--muted)',cursor:'pointer'}}>
-              <input type="checkbox" checked={introOn} data-introchk
+              <input type="checkbox" checked={introOn} data-introchk disabled={busy}
                 onChange={e => setIntroOn(e.target.checked)} />
               ใส่เสียงพูดนำ
             </label>
@@ -1219,17 +1366,35 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
           <div style={{fontSize:'0.72rem',color:'var(--muted)',lineHeight:1.8,marginBottom:'8px'}}>
             อัดตามที่ตั้งค่าไว้ข้างบนทุกอย่าง — เครื่องดนตรี ทาง ความเร็ว หน้าทับ ฉิ่ง การกลับต้น
             <br/>ไฟล์ที่ได้จะเหมือนที่ได้ยินตอนกดเล่นทุกประการ · งานเกิดในเครื่องนี้ ไม่ได้ส่งขึ้นเซิร์ฟเวอร์
+            <br/>🎬 วิดีโอ 1920×1080 โน้ตเลื่อนตามเพลงมีไฟวิ่ง สีตามธีมที่เลือกอยู่ · <b>อัดตามเวลาจริง</b> (เพลง 5 นาที รอ 5 นาที) · อย่าสลับแท็บระหว่างอัด
           </div>
           <div className="btn-row" style={{display:'flex',gap:'8px',flexWrap:'wrap'}}>
             <button className="btn btn-outline btn-sm" type="button" data-expwav
-              disabled={!!exporting} onClick={() => exportAudio(AX.WAV)}>
+              disabled={busy} onClick={() => exportAudio(AX.WAV)}>
               ⬇ WAV (คุณภาพเต็ม)
             </button>
             <button className="btn btn-outline btn-sm" type="button" data-expmp3
-              disabled={!!exporting} onClick={() => exportAudio(AX.MP3)}>
+              disabled={busy} onClick={() => exportAudio(AX.MP3)}>
               ⬇ MP3 (ไฟล์เล็ก)
             </button>
+            <button className="btn btn-outline btn-sm" type="button" data-expvideo
+              disabled={busy} onClick={exportVideo}
+              title="วิดีโอ MP4 (หรือ WebM ถ้าเบราว์เซอร์ทำ MP4 ไม่ได้) สำหรับ YouTube / จอคอม">
+              🎬 วิดีโอคาราโอเกะ (MP4)
+            </button>
+            {busy && (
+              <button className="btn btn-outline btn-sm" type="button" data-expcancel onClick={cancelExport}
+                style={{borderColor:'var(--danger)',color:'var(--danger)'}}>✕ ยกเลิก</button>
+            )}
           </div>
+          {exportPct != null && exporting && (
+            <div data-expbar role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={exportPct}
+              aria-label="ความคืบหน้าการอัดไฟล์"
+              style={{marginTop:'8px',height:'8px',borderRadius:'4px',background:'var(--navy3)',
+                border:'1px solid var(--border)',overflow:'hidden'}}>
+              <div style={{width:`${exportPct}%`,height:'100%',background: busy ? 'var(--gold)' : 'var(--jade)',transition:'width .15s linear'}} />
+            </div>
+          )}
           {exporting && (
             <div data-expstat style={{marginTop:'7px',fontSize:'0.78rem',
               color: exporting.startsWith('✓') ? 'var(--jade)' : 'var(--gold2)'}}>{exporting}</div>
@@ -1237,6 +1402,10 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
           {exportErr && (
             <div data-experr style={{marginTop:'7px',fontSize:'0.78rem',color:'var(--rose,#E58B8B)'}}>{exportErr}</div>
           )}
+          {/* ภาพที่กำลังอัด — ให้เห็นว่าไฟวิ่งอยู่ ไม่ต้องเดา · canvas ต้องอยู่ใน DOM เสมอ (captureStream ต้องการ) */}
+          <canvas ref={videoCanvasRef} data-vidcanvas width={VX.VIDEO_W} height={VX.VIDEO_H}
+            style={{display: videoLive ? 'block' : 'none', width:'100%', maxWidth:'720px', marginTop:'10px',
+              borderRadius:'6px', border:'1px solid var(--border)', background:'#000'}} />
         </div>
       )}
     </div>
