@@ -4,7 +4,7 @@ import { parseVerse } from './NotationPlayer';
 import { usePermissions } from './Gate';
 import { toMeasures, checkBars, leadFor, padStream, UNITS_PER_HONG } from '../lib/staff';
 
-export const STAFF_VERSION = '1 ก.ย. 69 · r3 (ห้องเต็ม 2/4 · สีตามธีม · ตกต้นห้องเป็นค่าเริ่มต้น)';
+export const STAFF_VERSION = '2 ก.ย. 69 · r4 (คู่แปดเป็นคู่เสียง · ลากเสียงข้ามห้องไม่กลายเป็น ด · ห้องเต็ม 2/4)';
 
 // ด ร ม ฟ ซ ล ท → C D E F G A B (การปริวรรตโดยอนุโลม)
 const THAI_TO_WESTERN = { 'ด':'c', 'ร':'d', 'ม':'e', 'ฟ':'f', 'ซ':'g', 'ล':'a', 'ท':'b' };
@@ -186,7 +186,10 @@ export default function StaffNotation({ verses, cursor = null, onRows = null, th
 
           const vexNotes = [];
           slice.events.forEach(ev => {
-            const hp = handStream[ev.pos];
+            /* ★★ ต้นเหตุ "ล โยงไป ด" ที่ Pk เห็น (1 ก.ย. 69 ค่ำ): ชิ้นที่ลากเสียงข้ามห้องเคยไปดูมือที่ตำแหน่ง pos
+               ซึ่งเป็นช่องว่าง → ไม่มีคีย์ → ตกไปใช้ c/4 (ด) ทั้งที่จริงคือตัวเดิมลากเสียง
+               ต้องดูมือที่ตำแหน่งเริ่มตี (ev.from) เสมอ */
+            const hp = handStream[ev.from ?? ev.pos];
             // ★ จุดต้องอยู่ใน "ชื่อค่าโน้ต" (qd) ไม่ใช่ไปติดทีหลัง
             //   Dot.buildAndAttach วาดจุดให้แต่ไม่นับความยาว ห้องจึงขาดไป 1 ตำแหน่ง
             const mk = (keys, duration) => new VF.StaveNote({ keys, duration });
@@ -203,9 +206,10 @@ export default function StaffNotation({ verses, cursor = null, onRows = null, th
               if (ev.tieTo) rowTies.push({ from: rowNotes.length - 1 });
               return;
             }
+            // คู่เสียงในช่องเดียว (ดดฺ ฯลฯ) → หลายหัวโน้ตบนก้านเดียว เรียงจากต่ำไปสูงตามที่ VexFlow ต้องการ
             const keys = (hp && hp.rh.length <= 1 && hp.lh.length <= 1)
               ? mergeHands(hp.rh, hp.lh)
-              : ev.notes.map(noteKey);
+              : [...new Set(ev.notes.map(noteKey))].sort((a, b) => keyPitch(a) - keyPitch(b));
             const n = mk(keys.length ? keys : ['c/4'], ev.duration);
             vexNotes.push(n); rowNotes.push(n);
             if (ev.tieTo) rowTies.push({ from: rowNotes.length - 1 });
