@@ -188,6 +188,9 @@ table { max-width: 100%; }
   .tab-row, .btn-row, .filter-row { overflow-x: auto; flex-wrap: nowrap !important;
     -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .tab-row::-webkit-scrollbar, .btn-row::-webkit-scrollbar { display: none; }
+  /* ★ ขาดบรรทัดนี้ไป ปุ่มในแถบจึงถูกบีบจนกว้างเป็นศูนย์ ตัวหนังสือทับกันมั่ว
+     (หน้าผู้ดูแลบนมือถืออ่านไม่ออกเลย — Pk 28 ส.ค. 69) */
+  .tab-row > *, .btn-row > *, .filter-row > * { flex: 0 0 auto; white-space: nowrap; }
 
   /* มือถือใช้นิ้วกด ปุ่มต้องไม่เล็กกว่าเดสก์ท็อป (เดิมย่อลงจนกดพลาด — Pk 27 ส.ค. 69) */
   .btn { font-size: 0.86rem; padding: 0.6rem 0.9rem; min-height: 42px; }
@@ -383,4 +386,17 @@ html.nav-rail .siderail:focus-within .rail-lbl { opacity:1; }
 @media (max-width: 900px) {
   .nav-search-input { display:none; }
   .nav-search-go { border-radius:6px; }
+}
+
+
+/* ═══ แป้นพิมพ์โน้ตบนมือถือ (Pk 28 ส.ค. 69) ═══════════════════════
+   แป้นลอยอยู่ล่างจอ ต้องเว้นที่ให้กระดานเลื่อนพ้นแป้น
+   ไม่งั้นวรรคท้าย ๆ จะถูกแป้นทับ พิมพ์ไม่ได้                        */
+body:has([data-notepad]) { padding-bottom: 330px; }
+[data-notepad] button:active { transform: scale(0.96); }
+[data-notepad] button { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+@media (max-width: 400px) {
+  [data-notepad] [data-padnotes] { grid-template-columns: repeat(4, 1fr) !important; }
+  [data-notepad] [data-padnotes] button { min-height: 46px !important; }
 }

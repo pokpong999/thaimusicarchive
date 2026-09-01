@@ -15,6 +15,7 @@ import { useEffect, useImperativeHandle, useRef, useState, forwardRef, useCallba
 import dynamic from 'next/dynamic';
 import { NotationEngine } from '../lib/notation-engine';
 import NotationImport from './NotationImport';
+import NotationPad from './NotationPad';
 import { textToVerses, versesToRows, hasSound } from '../lib/notation-core';
 import { loadMelodyBank, playMelodyNote } from '../lib/melodybank';
 import { loadInstruments } from '../lib/instruments';
@@ -202,6 +203,29 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
     setDraft(null);
   }
 
+  // ── แป้นพิมพ์โน้ตสำหรับมือถือ (Pk 28 ส.ค. 69) ──
+  //   เปิดเองเมื่อจอแคบและเป็นจอสัมผัส · ปิด/เปิดด้วยมือได้ตลอด
+  const [padOn, setPadOn] = useState(false);
+  const [padTick, setPadTick] = useState(0);
+  const [touch, setTouch] = useState(false);
+  useEffect(() => {
+    if (options.readOnly) return;
+    let t = false;
+    try { t = window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 820; } catch (e) {}
+    setTouch(t);
+    setPadOn(t);
+  }, [options.readOnly]);
+  // กระดานขยับเมื่อไหร่ ให้แถบบอกตำแหน่งบนแป้นอัปเดตตาม
+  useEffect(() => {
+    if (!padOn || !rootRef.current) return;
+    const bump = () => setPadTick(x => x + 1);
+    const el = rootRef.current;
+    el.addEventListener('click', bump);
+    const mo = new MutationObserver(bump);
+    mo.observe(el, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    return () => { el.removeEventListener('click', bump); mo.disconnect(); };
+  }, [padOn]);
+
   const staffOn = options.staff !== false;
   return (
     <div>
@@ -214,6 +238,17 @@ const NotationInput = forwardRef(function NotationInput({ initialVerses, initial
         </div>
       )}
       <div ref={rootRef} />
+
+      {/* ปุ่มเรียกแป้นมือถือ — โผล่เมื่อเป็นจอสัมผัสหรือจอแคบ */}
+      {!options.readOnly && touch && !padOn && (
+        <button className="btn btn-primary btn-sm" type="button" data-padopen
+          onClick={() => setPadOn(true)} style={{marginTop:'0.5rem'}}>
+          ⌨ เปิดแป้นพิมพ์โน้ต
+        </button>
+      )}
+      {!options.readOnly && padOn && (
+        <NotationPad eng={engRef.current} open tick={padTick} onClose={() => setPadOn(false)} />
+      )}
       {staffOn && (
         <div style={{marginTop:'0.6rem'}}>
           <button className="btn btn-outline btn-sm" type="button" onClick={() => setShowStaff(s => !s)}>
