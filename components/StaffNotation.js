@@ -6,7 +6,7 @@ import { toMeasures, checkBars, leadFor, padStream, UNITS_PER_HONG,
          vexBarNotes, measureWeight, drawRowTies,
          layoutStaffLines, barsPerLineFor, findCursorInLine, formatCentered } from '../lib/staff';
 
-export const STAFF_VERSION = '2 ก.ย. 69 · r6 (บรรทัดละ 4 ห้องแนวตั้ง / 6 ห้องแนวนอน · โน้ตอยู่กลางห้อง)';
+export const STAFF_VERSION = '2 ก.ย. 69 · r7 (ป้ายเป็นประโยคที่ N · บรรทัดละ 4/6 ห้อง · โน้ตกลางห้อง)';
 
 // ด ร ม ฟ ซ ล ท → C D E F G A B (การปริวรรตโดยอนุโลม)
 const THAI_TO_WESTERN = { 'ด':'c', 'ร':'d', 'ม':'e', 'ฟ':'f', 'ซ':'g', 'ล':'a', 'ท':'b' };

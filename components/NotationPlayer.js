@@ -2,6 +2,7 @@
 import { usePermissions } from './Gate';
 import * as AX from '../lib/audioexport';
 import * as VX from '../lib/videoexport';
+import { sentenceMap, sentenceRangeLabel } from '../lib/staff';
 import { supabase } from '../lib/supabase';
 import { usePlayerTheme, PLAYER_THEMES } from '../lib/playertheme';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -301,6 +302,8 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
   const viewShift = (tangView === 'real' && tangShift) ? bestShift(allSteps, tangShift) : 0;
   const soundShift = tangView === 'real' ? 0 : tangShift;
 
+  // เลขประโยคของแต่ละวรรค (๒ วรรค = ๑ ประโยค นับใหม่ทุกท่อน) — ใช้ทำป้ายทุกที่แทนเลขวรรค
+  const snoMap = useMemo(() => sentenceMap(verses), [verses]);
   const parsed = useMemo(() => {
     if (!viewShift) return baseParsed;
     const mv = cells => cells.map(c => c.map(n => {
@@ -1043,16 +1046,19 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
         const m = secModes[b.i] || '';
         const contWhy = CONTINUOUS_WHY({ level: b.level, name: b.name });
         const bits = [b.level, b.nathab && `🥁 หน้าทับ${b.nathab}`, b.tang && `ทาง${b.tang}`,
-          `${b.verses} วรรค · ${b.hongs} ห้อง`, b.luktok && `ลูกตก ${b.luktok}`,
+          `${Math.ceil(b.verses / 2)} ประโยค · ${b.hongs} ห้อง`, b.luktok && `ลูกตก ${b.luktok}`,
           tempoOn && (contWhy ? '⤳ เร่งต่อเนื่อง' : m === 'thon' ? '⤳ ถอน' : m === 'thot' ? '⤳ ทอด' : '')].filter(Boolean);
         sec = { name: b.name ?? 'ทั้งเพลง', bits: bits.join(' · ') };
       }
       const luk = group.map(vi => parsed[vi].v.luktok).filter(Boolean).join(' / ');
+      // ★ ป้ายเป็น "ประโยคที่ N" (๒ วรรค = ๑ ประโยค นับใหม่ทุกท่อน — Pk 2 ก.ย. 69 ดึก)
+      const ents = group.map(vi => snoMap.get(vi)).filter(Boolean);
       return {
         sec,
-        label: (group.length > 1 ? `วรรค ${first.verse_no}–${last.verse_no}` : `วรรค ${first.verse_no}`) + (luk ? ` · ลูกตก ${luk}` : ''),
+        label: sentenceRangeLabel(ents, { cont: ents[0]?.half === 1, showSec: false }) + (luk ? ` · ลูกตก ${luk}` : ''),
         hongs: group.reduce((a, vi) => a + parsed[vi].len / 4, 0),
-        verses: group.map(vi => ({ vi, label: parsed[vi].v.verse_no, hongs: parsed[vi].len / 4, luktok: parsed[vi].v.luktok || null })),
+        verses: group.map(vi => ({ vi, label: parsed[vi].v.verse_no, sn: snoMap.get(vi) || null,
+          hongs: parsed[vi].len / 4, luktok: parsed[vi].v.luktok || null })),
         rows: rowsOf(group),
       };
     });
@@ -1304,10 +1310,9 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
       <div ref={gridRef} style={{background:'var(--navy3)',border:'1px solid var(--border)',borderRadius:'8px',
         padding:'1rem',overflowX:'auto',display:'flex',flexDirection:'column',gap:'0.7rem'}}>
         {lineGroups.map((group, gi) => {
-          const first = parsed[group[0]].v;
-          const last = parsed[group[group.length-1]].v;
-          const label = group.length > 1
-            ? `วรรค ${first.verse_no}–${last.verse_no}` : `วรรค ${first.verse_no}`;
+          // ★ ป้ายเป็น "ประโยคที่ N" (๒ วรรค = ๑ ประโยค นับใหม่ทุกท่อน) — ท่อนแสดงที่หัวท่อนอยู่แล้ว
+          const ents = group.map(vi => snoMap.get(vi)).filter(Boolean);
+          const label = sentenceRangeLabel(ents, { cont: ents[0]?.half === 1, showSec: false });
           const luk = group.map(vi => parsed[vi].v.luktok).filter(Boolean).join(' / ');
           const segs = f => group.map(vi => ({ positions: f(parsed[vi]), vi }));
           return (
@@ -1320,7 +1325,7 @@ export default function NotationPlayer({ verses, lyrics, nathabRules = [], songN
                 const contWhy = CONTINUOUS_WHY({ level: b.level, name: b.name });
                 const bits = [
                   b.level, b.nathab && `🥁 หน้าทับ${b.nathab}`, b.tang && `ทาง${b.tang}`,
-                  `${b.verses} วรรค · ${b.hongs} ห้อง`, b.luktok && `ลูกตก ${b.luktok}`,
+                  `${Math.ceil(b.verses / 2)} ประโยค · ${b.hongs} ห้อง`, b.luktok && `ลูกตก ${b.luktok}`,
                   tempoOn && (contWhy ? '⤳ เร่งต่อเนื่อง' : mode === 'thon' ? '⤳ ถอน' : mode === 'thot' ? '⤳ ทอด' : ''),
                 ].filter(Boolean);
                 return (
