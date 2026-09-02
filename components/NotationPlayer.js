@@ -28,7 +28,7 @@ import { linesOf, systemForLines, systemOf } from '../lib/notation-systems';
 import { TANGS, tangOf, pentaText, shiftBetween, bestShift, ensembleOffset, guessTang } from '../lib/tang';
 import { stepOf, noteOfStep } from '../lib/instruments';
 // ป้ายรุ่นของกล่องอัดไฟล์ — ไว้ตรวจด้วยตาว่าไฟล์นี้ถูกวางขึ้นเว็บแล้ว (ดู pk-delivery-format)
-export const EXPORT_VERSION = '1 ก.ย. 69 · v2 (วิดีโอคาราโอเกะ + แถบความคืบหน้า)';
+export const EXPORT_VERSION = '2 ก.ย. 69 · v3 (ภาพ-เสียงตรงกัน)';
 const SABAT_DEFAULT = SABAT_GAP_DEFAULT; // 80 ms — ค่าเดียวกับกระดานโน้ต (Pk เคาะ 2026-08-24)
 
 function noteFreq(ch, register) {
