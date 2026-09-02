@@ -109,9 +109,11 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
     if (opt.notation === 'staff') {
       await loadScript(...CDN.vexflow);
       const VF = (window.Vex && window.Vex.Flow) || window.VexFlow;
+      // ★ r3: โน้ตสากล = "ห้องสากลต่อบรรทัด" ตามกระดาษ — แนวตั้ง 4 · แนวนอน 6 (Pk 2 ก.ย. 69 ค่ำ)
+      //   ถ้าเลือกห้อง/บรรทัดเองในกล่อง ใช้ค่านั้นแทน
       const prepS = prepareStaff(verses, {
         source: opt.handMode === 'hands' ? 'hands' : 'combined',
-        beat: opt.beat, measuresPerLine: opt.hongsPerLine });
+        beat: opt.beat, barsPerLine: o.hongs || (opt.orientation === 'landscape' ? 6 : 4) });
       const layout = paginateStaff(prepS, g, opt);
       total = layout.pages.length;
       layout.pages.forEach((_, pi) => {
@@ -281,7 +283,7 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
             </Row>
             <Row label="ห้อง/บรรทัด">
               <Sel value={String(o.hongs)} onChange={v => set('hongs', +v)}
-                opts={[['0', 'อัตโนมัติ'], ['4', '4'], ['8', '8'], ['16', '16']]} />
+                opts={[['0', 'อัตโนมัติ'], ['4', '4'], ['6', '6'], ['8', '8'], ['16', '16']]} />
               <Sel value={o.spacing} onChange={v => set('spacing', v)}
                 opts={[['compact', 'บรรทัดชิด'], ['normal', 'ปกติ'], ['airy', 'บรรทัดห่าง']]} />
             </Row>

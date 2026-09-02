@@ -3,9 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import { parseVerse } from './NotationPlayer';
 import { usePermissions } from './Gate';
 import { toMeasures, checkBars, leadFor, padStream, UNITS_PER_HONG,
-         vexBarNotes, measureWeight, drawRowTies } from '../lib/staff';
+         vexBarNotes, measureWeight, drawRowTies,
+         layoutStaffLines, barsPerLineFor, findCursorInLine, formatCentered } from '../lib/staff';
 
-export const STAFF_VERSION = '2 ก.ย. 69 · r5 (จุดตัวประจุดกลับมา · ห้องโน้ตแน่นกว้างขึ้น ไม่เบียดเส้นกั้นห้อง)';
+export const STAFF_VERSION = '2 ก.ย. 69 · r6 (บรรทัดละ 4 ห้องแนวตั้ง / 6 ห้องแนวนอน · โน้ตอยู่กลางห้อง)';
 
 // ด ร ม ฟ ซ ล ท → C D E F G A B (การปริวรรตโดยอนุโลม)
 const THAI_TO_WESTERN = { 'ด':'c', 'ร':'d', 'ม':'e', 'ฟ':'f', 'ซ':'g', 'ล':'a', 'ท':'b' };
@@ -36,7 +37,7 @@ function mergeHands(rhNotes, lhNotes) {
 // ★ ตรรกะการแปลงย้ายไปอยู่ lib/staff.js แล้ว เพื่อให้ทดสอบด้วยเครื่องได้
 
 const MW_MIN = 64;       // ความกว้างห้องเต็ม (4 ตำแหน่ง) แคบสุด — ต่ำกว่านี้ยอมให้เลื่อนแนวนอน
-const MW_MAX = 150;      // ความกว้างห้องกว้างสุด
+const MW_MAX = 190;      // ความกว้างห้องกว้างสุด (r6: บรรทัดละ 4-6 ห้อง ให้โน้ตใหญ่ขึ้นได้)
 const CLEF_PAD = 52;     // พื้นที่กุญแจ+เครื่องหมายจังหวะ (ห้องแรกของบรรทัด)
 const ROW_PAD = 30;      // ขอบซ้าย 10 + ขอบขวา 20
 const ROW_H = 185;       // สูงพอสำหรับโน้ตต่ำ-สูงหลายเส้นน้อย
@@ -101,8 +102,9 @@ export default function StaffNotation({ verses, cursor = null, onRows = null, th
       const boxW = (ref.current.clientWidth || 1100) - 34;
       const ink = inkOf(ref.current);   // สีหมึกตามธีมเครื่องเล่น
       const avail = boxW - CLEF_PAD - ROW_PAD;
-      // จำนวนห้องเต็มต่อบรรทัดที่พอดีจอ: ปกติ 8 · จอแคบลดลงตามจริง (อย่างน้อยเท่ากับ 1 วรรค)
-      const fitMeasures = Math.max(1, Math.min(PER_ROW, Math.floor(avail / MW_MIN)));
+      /* ★ r6 (Pk 2 ก.ย. 69 ค่ำ): บรรทัดละ "จำนวนห้องจริง" — จอแนวตั้ง/แคบ 4 ห้อง · จอกว้าง 6 ห้อง
+         เดิมยัด 2 วรรค = 9 ห้องสากลต่อบรรทัด ห้องเล็กและแน่นจนอ่านยาก ("ยังเละอยู่") */
+      const barsPerLine = barsPerLineFor(boxW < 760 ? 'portrait' : 'landscape');
 
       // เตรียมข้อมูลทุกวรรค
       const prepared = verses.map((v, vi) => {
@@ -118,42 +120,22 @@ export default function StaffNotation({ verses, cursor = null, onRows = null, th
         } else {
           positions = parseVerse(v.combined);
         }
-        return { vi, v, positions, handPos, measures: positions.length / 4 };
+        return { vi, v, positions, handPos };
       });
 
-      // จัดกลุ่มวรรคลงบรรทัด: นับเป็นห้องเต็ม (4 ตำแหน่ง) ไม่เกิน fitMeasures — ปกติ 2 วรรค/บรรทัด
-      const rows = [];
-      let cur = [], curCount = 0;
-      prepared.forEach(pv => {
-        if (curCount > 0 && curCount + pv.measures > fitMeasures) {
-          rows.push(cur); cur = []; curCount = 0;
-        }
-        cur.push(pv); curCount += pv.measures;
-      });
-      if (cur.length) rows.push(cur);
+      // ★ ต่อทั้งท่อนเป็นสายเดียวแล้วตัดเป็นบรรทัดละ barsPerLine ห้องพอดี (lib/staff.js)
+      //   วรรคข้ามบรรทัดได้ — verses ของแต่ละบรรทัดบอกช่วง posStart..posStart+len ของวรรคนั้น
+      const staffLines = layoutStaffLines(prepared, { beat, barsPerLine });
 
-      rows.forEach(rowVerses => {
-        // ต่อวรรคในบรรทัดเป็นสายเดียว แล้วค่อยแบ่งห้อง — แบบสากล ห้องยกท้ายวรรคจะรวมกับห้องต้นวรรคถัดไป
-        // (เดิมแบ่งทีละวรรค เกิดห้องเศษ 1 ตำแหน่ง + ห้องยก 3 ตำแหน่งติดกันกลางบรรทัด และกว้างเท่าห้องเต็ม)
-        // ★ ทุกห้องเต็ม 2/4 (Pk 1 ก.ย. 69 ข้อ 2): แบบสากลเติมตัวหยุด 1 ตำแหน่งหน้าสาย ให้ลูกตกไปอยู่ต้นห้อง
-        //   ท้ายสายเติมจนครบห้อง (ลูกตกตัวสุดท้ายลากเสียงจนจบห้อง) — ไม่มีห้องยก 3 ตำแหน่ง / ห้องเศษ 1 ตำแหน่งอีก
-        const lead = leadFor(beat);
-        const raw = [], handRaw = [], verseMap = [];
-        rowVerses.forEach(pv => {
-          verseMap.push({ verseIdx: pv.vi, offset: lead + raw.length, len: pv.positions.length });
-          raw.push(...pv.positions);
-          pv.positions.forEach((_, i) => handRaw.push(pv.handPos ? pv.handPos[i] : null));
-        });
-        const stream = padStream(raw, { lead });
-        const handStream = stream.map((_, i) => (i >= lead && i - lead < handRaw.length) ? handRaw[i - lead] : null);
-        // ★ แปลงด้วย lib/staff.js — รับประกันว่าทุกห้องครบจังหวะ (ทดสอบไว้ 63 ข้อ)
-        const measures = toMeasures(stream);
-        const wrong = checkBars(measures);
+      staffLines.forEach(line => {
+        const wrong = checkBars(line.measures);
         if (wrong.length) console.warn('StaffNotation: ห้องไม่ครบจังหวะ', wrong);
-        const slices = measures.map(m => ({ start: m.start, size: m.size, events: m.events }));
+        const handStream = line.handStream;
+        const verseMap = line.verses;
+        const slices = line.measures;
         /* ★ ความกว้างห้องตาม "ความแน่นของโน้ต" ไม่ใช่แค่ขนาดห้อง (Pk 2 ก.ย. 69: "โน้ตเลยเส้นกั้นห้อง")
            เดิมทุกห้องเต็มกว้างเท่ากัน ห้องที่มีสะบัด/เขบ็ดหลายตัวจึงถูกบีบจนหัวโน้ตเบียดทับเส้นกั้นห้อง */
-        const weights = slices.map(measureWeight);
+        const weights = line.weights;
         const totalWeight = weights.reduce((a, b) => a + b, 0);
         // บีบ/ขยายให้พอดีความกว้างกล่อง — ล้นได้เฉพาะเมื่อแม้แต่วรรคเดียวก็ยังแคบกว่า MW_MIN (แล้วค่อยเลื่อนแนวนอน)
         const unit = Math.max(MW_MIN, Math.min(MW_MAX, Math.floor(avail / totalWeight)));
@@ -161,8 +143,7 @@ export default function StaffNotation({ verses, cursor = null, onRows = null, th
         const rowWidth = CLEF_PAD + widths.reduce((a, b) => a + b, 0) + ROW_PAD;
 
         const label = document.createElement('div');
-        label.textContent = 'วรรค ' + rowVerses.map(pv =>
-          `${pv.v.verse_no}${pv.v.section ? ' (' + pv.v.section + ')' : ''}`).join(' · ');
+        label.textContent = line.label;
         label.style.cssText = 'font-size:0.62rem;color:var(--muted);margin:10px 0 2px';
         ref.current.appendChild(label);
 
@@ -202,7 +183,8 @@ export default function StaffNotation({ verses, cursor = null, onRows = null, th
                (นี่คือต้นเหตุที่ Pk เห็น "โน้ตไม่ครบห้อง" — Pk 1 ก.ย. 69) */
             const voice = new VF.Voice({ num_beats: slice.size, beat_value: 8 }).setStrict(true);
             voice.addTickables(vexNotes);
-            new VF.Formatter().joinVoices([voice]).format([voice], Math.max(20, widths[si] - 26));
+            // ★ r6: จัดโน้ตกึ่งกลางห้อง — เว้นขอบซ้าย-ขวาเท่ากัน ไม่ชิดเส้นกั้นห้อง (Pk 2 ก.ย. 69)
+            formatCentered(VF, voice, stave, widths[si]);
             // คานเชื่อมเขบ็ดตามจังหวะ (กลุ่มละ 1 จังหวะ = 2 เขบ็ด) — ไม่ให้เขบ็ดโดดเดี่ยวมีธงเดี่ยว
             const beams = VF.Beam.generateBeams(vexNotes, {
               groups: [new VF.Fraction(1, 4)],
@@ -251,14 +233,14 @@ export default function StaffNotation({ verses, cursor = null, onRows = null, th
     // ล้างของเก่า
     document.querySelectorAll('.staff-cursor-line, .staff-cursor-band').forEach(el => el.remove());
     if (!cursor) return;
-    // หาบรรทัดที่มีวรรคนี้ แล้วแปลงตำแหน่งในวรรคเป็นตำแหน่งในสายของบรรทัด
-    let g = null, vm = null;
+    // หาบรรทัดที่มี "ช่วง" ของวรรคนี้ (r6: วรรคข้ามบรรทัดได้ — ดู posStart..posStart+len)
+    let g = null, hitc = null;
     for (const row of geomRef.current) {
-      vm = row.verses.find(v => v.verseIdx === cursor.verseIdx);
-      if (vm) { g = row; break; }
+      hitc = findCursorInLine(row.verses, cursor);
+      if (hitc) { g = row; break; }
     }
     if (!g) return;
-    const gpos = vm.offset + cursor.pos;
+    const gpos = hitc.gpos;
     const rect = g.rects.find(r => gpos >= r.start && gpos < r.start + r.size);
     if (!rect) return;
 
