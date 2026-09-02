@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMe } from './Gate';
 import {
   PAPERS, pageGeometry, autoHongs, prepare, paginateThai, drawThaiPage,
-  prepareStaff, paginateStaff, drawStaffPage,
+  prepareStaff, paginateStaff, drawStaffPage, SHEET_VERSION,
 } from '../lib/sheetkit';
 
 function loadScript(src, check) {
@@ -247,7 +247,8 @@ export default function SheetExport({ song, instrument, verses, onClose }) {
       <div style={{ background: 'var(--navy2)', border: '1px solid var(--border)', borderRadius: '12px',
         width: 'min(1060px, 100%)', padding: '1.1rem 1.2rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.8rem' }}>
-          <b style={{ fontSize: '1rem' }}>🖨 ส่งออก Music Sheet</b>
+          <b style={{ fontSize: '1rem' }}>🖨 ส่งออก Music Sheet
+            <span data-sheetver style={{ fontSize: '0.6rem', color: 'var(--muted)', fontWeight: 400, marginLeft: '8px' }}>รุ่น {SHEET_VERSION}</span></b>
           <button className="btn btn-outline btn-sm" onClick={onClose}>✕ ปิด</button>
         </div>
 

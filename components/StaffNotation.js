@@ -2,9 +2,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { parseVerse } from './NotationPlayer';
 import { usePermissions } from './Gate';
-import { toMeasures, checkBars, leadFor, padStream, UNITS_PER_HONG } from '../lib/staff';
+import { toMeasures, checkBars, leadFor, padStream, UNITS_PER_HONG,
+         vexBarNotes, measureWeight, drawRowTies } from '../lib/staff';
 
-export const STAFF_VERSION = '2 ก.ย. 69 · r4 (คู่แปดเป็นคู่เสียง · ลากเสียงข้ามห้องไม่กลายเป็น ด · ห้องเต็ม 2/4)';
+export const STAFF_VERSION = '2 ก.ย. 69 · r5 (จุดตัวประจุดกลับมา · ห้องโน้ตแน่นกว้างขึ้น ไม่เบียดเส้นกั้นห้อง)';
 
 // ด ร ม ฟ ซ ล ท → C D E F G A B (การปริวรรตโดยอนุโลม)
 const THAI_TO_WESTERN = { 'ด':'c', 'ร':'d', 'ม':'e', 'ฟ':'f', 'ซ':'g', 'ล':'a', 'ท':'b' };
@@ -150,10 +151,13 @@ export default function StaffNotation({ verses, cursor = null, onRows = null, th
         const wrong = checkBars(measures);
         if (wrong.length) console.warn('StaffNotation: ห้องไม่ครบจังหวะ', wrong);
         const slices = measures.map(m => ({ start: m.start, size: m.size, events: m.events }));
-        const totalWeight = slices.reduce((s, sl) => s + sliceWeight(sl.size), 0);
+        /* ★ ความกว้างห้องตาม "ความแน่นของโน้ต" ไม่ใช่แค่ขนาดห้อง (Pk 2 ก.ย. 69: "โน้ตเลยเส้นกั้นห้อง")
+           เดิมทุกห้องเต็มกว้างเท่ากัน ห้องที่มีสะบัด/เขบ็ดหลายตัวจึงถูกบีบจนหัวโน้ตเบียดทับเส้นกั้นห้อง */
+        const weights = slices.map(measureWeight);
+        const totalWeight = weights.reduce((a, b) => a + b, 0);
         // บีบ/ขยายให้พอดีความกว้างกล่อง — ล้นได้เฉพาะเมื่อแม้แต่วรรคเดียวก็ยังแคบกว่า MW_MIN (แล้วค่อยเลื่อนแนวนอน)
         const unit = Math.max(MW_MIN, Math.min(MW_MAX, Math.floor(avail / totalWeight)));
-        const widths = slices.map(sl => Math.floor(unit * sliceWeight(sl.size)));
+        const widths = weights.map(wt => Math.floor(unit * wt));
         const rowWidth = CLEF_PAD + widths.reduce((a, b) => a + b, 0) + ROW_PAD;
 
         const label = document.createElement('div');
@@ -184,35 +188,12 @@ export default function StaffNotation({ verses, cursor = null, onRows = null, th
           if (first) stave.addClef('treble').addTimeSignature('2/4');
           stave.setContext(ctx).draw();
 
-          const vexNotes = [];
-          slice.events.forEach(ev => {
-            /* ★★ ต้นเหตุ "ล โยงไป ด" ที่ Pk เห็น (1 ก.ย. 69 ค่ำ): ชิ้นที่ลากเสียงข้ามห้องเคยไปดูมือที่ตำแหน่ง pos
-               ซึ่งเป็นช่องว่าง → ไม่มีคีย์ → ตกไปใช้ c/4 (ด) ทั้งที่จริงคือตัวเดิมลากเสียง
-               ต้องดูมือที่ตำแหน่งเริ่มตี (ev.from) เสมอ */
-            const hp = handStream[ev.from ?? ev.pos];
-            // ★ จุดต้องอยู่ใน "ชื่อค่าโน้ต" (qd) ไม่ใช่ไปติดทีหลัง
-            //   Dot.buildAndAttach วาดจุดให้แต่ไม่นับความยาว ห้องจึงขาดไป 1 ตำแหน่ง
-            const mk = (keys, duration) => new VF.StaveNote({ keys, duration });
-            if (ev.kind === 'rest') {
-              vexNotes.push(mk(['b/4'], ev.duration + 'r'));
-              return;
-            }
-            if (ev.kind === 'sabat') {
-              // สะบัด: เขบ็ดสองชั้นสองตัวใน 1 ตำแหน่ง
-              const pair = ev.notes.slice(0, 2).map(n =>
-                new VF.StaveNote({ keys: [noteKey(n)], duration: '16' }));
-              vexNotes.push(...pair);
-              rowNotes.push(...pair);
-              if (ev.tieTo) rowTies.push({ from: rowNotes.length - 1 });
-              return;
-            }
-            // คู่เสียงในช่องเดียว (ดดฺ ฯลฯ) → หลายหัวโน้ตบนก้านเดียว เรียงจากต่ำไปสูงตามที่ VexFlow ต้องการ
-            const keys = (hp && hp.rh.length <= 1 && hp.lh.length <= 1)
-              ? mergeHands(hp.rh, hp.lh)
-              : [...new Set(ev.notes.map(noteKey))].sort((a, b) => keyPitch(a) - keyPitch(b));
-            const n = mk(keys.length ? keys : ['c/4'], ev.duration);
-            vexNotes.push(n); rowNotes.push(n);
-            if (ev.tieTo) rowTies.push({ from: rowNotes.length - 1 });
+          /* ★ แปลง event → StaveNote ด้วยตัวแปลงกลางใน lib/staff.js — ชุดเดียวกับ PDF (sheetkit)
+             r5: ติดจุดตัวประจุดด้วย Dot.buildAndAttach (VexFlow 4 ไม่วาดจุดจาก 'qd' เอง — Pk 2 ก.ย. 69) */
+          const { vexNotes, sounding } = vexBarNotes(VF, slice.events, handStream);
+          sounding.forEach(sn => {
+            rowNotes.push(sn.note);
+            if (sn.tieTo) rowTies.push({ from: rowNotes.length - 1 });
           });
 
           try {
