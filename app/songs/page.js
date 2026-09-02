@@ -9,7 +9,7 @@ import { useLang } from '../../lib/i18n';
 import { trText } from '../../lib/translate';
 
 // รุ่นของหน้าฐานข้อมูลเพลง — ไว้ตรวจว่าไฟล์นี้ถูกอัพแล้ว
-export const SONGDB_VERSION = '28 ส.ค. 69 · r4 (แก้ค้นหา)';
+export const SONGDB_VERSION = '2 ก.ย. 69 · r5 (ซ่อนเพลงเฉพาะผู้ดูแล)';
 
 const PAGE_SIZE = 25;
 
@@ -54,6 +54,18 @@ export default function SongDatabasePage() {
 
   // ความคืบหน้าการตรวจทาน — โหลดเมื่อเป็นผู้ดูแล
   useEffect(() => { if (isAdmin) proofProgress().then(r => setProg(r.counts)); }, [isAdmin]);
+
+  // ซ่อน/เลิกซ่อนเพลง — เห็นเฉพาะผู้ดูแล (Pk 2 ก.ย. 69) · ผ่าน RPC ที่ตรวจสิทธิ์ในฐานข้อมูล
+  async function adminToggleHidden(s) {
+    const next = !s.hidden;                           // คำนวณก่อนยิง กันค่าเปลี่ยนใต้มือระหว่างรอ
+    const { error } = await supabase.rpc('set_song_hidden', { p_song: s.id, p_hidden: next });
+    if (error) {
+      alert(error.code === 'PGRST202' ? t('hide_need_sql') : t('hide_fail') + ' ' + error.message);
+      return;
+    }
+    // อัปเดตแถวบนจอทันที ไม่ต้องโหลดใหม่ทั้งหน้า
+    setSongs(list => list.map(x => x.id === s.id ? { ...x, hidden: next } : x));
+  }
 
   async function adminDeleteSong(s) {
     if (!confirm(`${t('del_ask')} "${s.name_th}" (${s.id})\n${t('del_warn')}`)) return;
@@ -148,7 +160,7 @@ export default function SongDatabasePage() {
               {loading ? (
                 <tr><td colSpan={isAdmin ? 9 : 7} style={{textAlign:'center',color:'var(--muted)'}}>{t('loading')}</td></tr>
               ) : songs.map(s => (
-                <tr key={s.id}>
+                <tr key={s.id} style={s.hidden ? {opacity:0.55} : undefined}>
                   <td className="song-id">{s.id}</td>
                   <td>
                     <Link href={`/songs/${s.id}`}><span className="song-name">{trText(lang, s, 'name_th')}</span></Link>
@@ -158,6 +170,9 @@ export default function SongDatabasePage() {
                     {/* ให้ผู้ใช้ทั่วไปเห็นด้วยว่าโน้ตเพลงนี้ผ่านการตรวจทานแล้ว */}
                     {s.proof_status === 'ok' && <span title={t('proof_badge')}
                       style={{fontSize:'0.68rem',color:'var(--jade)',marginLeft:'6px'}}>✅</span>}
+                    {/* ป้ายเพลงซ่อน — คนอื่นไม่มีทางเห็นแถวนี้อยู่แล้ว (RLS กรองที่ฐาน) ป้ายนี้เตือนผู้ดูแลเอง */}
+                    {s.hidden && <span data-hidden-badge title={t('hidden_badge')}
+                      style={{fontSize:'0.68rem',color:'var(--danger)',marginLeft:'6px'}}>🙈</span>}
                   </td>
                   <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.type || <span style={{color:'var(--border)'}}>—</span>}</td>
                   <td style={{fontSize:'0.78rem',color:'var(--muted)'}}>{s.style || <span style={{color:'var(--border)'}}>—</span>}</td>
@@ -171,7 +186,12 @@ export default function SongDatabasePage() {
                       onChange={u => { setSongs(list => list.map(x => x.id === u.id ? u : x));
                                        proofProgress().then(r => setProg(r.counts)); }} />
                   </td>}
-                  {isAdmin && <td>
+                  {isAdmin && <td style={{whiteSpace:'nowrap'}}>
+                    <button className="btn btn-outline btn-sm btn-icon" data-hide-btn={s.id}
+                      onClick={() => adminToggleHidden(s)}
+                      title={s.hidden ? t('unhide_song') : t('hide_song')}
+                      style={s.hidden ? {color:'var(--danger)',borderColor:'var(--danger)'} : undefined}>
+                      {s.hidden ? '🙈' : '👁'}</button>{' '}
                     <button className="btn btn-danger btn-sm btn-icon" onClick={() => adminDeleteSong(s)}
                       title={t('del_song')}>🗑</button>
                   </td>}
