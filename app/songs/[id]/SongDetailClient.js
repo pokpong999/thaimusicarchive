@@ -18,7 +18,7 @@ import { useLang } from '../../../lib/i18n';
 import { trText, kickTranslateSoon } from '../../../lib/translate';
 
 // รุ่นของหน้าเพลง — ขึ้นเป็นข้อความเล็ก ๆ ใต้ชื่อเพลง ไว้ตรวจว่าไฟล์นี้ถูกวางทับแล้ว
-export const SONGPAGE_VERSION = '28 ส.ค. 69 · r3 (สองภาษา)';
+export const SONGPAGE_VERSION = '2 ก.ย. 69 · r4 (ซ่อนเพลงเฉพาะผู้ดูแล)';
 
 export default function SongDetailClient() {
   const { can } = usePermissions();
@@ -81,7 +81,7 @@ export default function SongDetailClient() {
   const [msg, setMsg] = useState('');
   // admin edit
   const [editHistory, setEditHistory] = useState(false);
-  const { lang } = useLang();
+  const { lang, t } = useLang();
   // ประวัติเพลง/บทร้อง/ชื่อเพลง — โชว์คำแปลถ้าแปลครบแล้ว (sql/37)
   const T = f => trText(lang, song, f);
   const [historyDraft, setHistoryDraft] = useState('');
@@ -98,9 +98,12 @@ export default function SongDetailClient() {
     load();
   }, [id]);
 
+  const [notFound, setNotFound] = useState(false);   // เพลงไม่มี หรือถูกซ่อนจากคนที่ไม่ใช่ผู้ดูแล (RLS)
+
   async function load() {
     const { data: s } = await supabase.from('songs').select('*').eq('id', id).single();
     setSong(s);
+    setNotFound(!s);
     setHistoryDraft(s?.history ?? '');
     setLyricsDraft(s?.lyrics ?? '');
     const { data: au } = await supabase.from('song_audio').select('*')
@@ -224,7 +227,9 @@ export default function SongDetailClient() {
       .then(({ data }) => setLuktok(data ?? []));
   }, [tab]);
 
-  if (!song) return <main className="container">กำลังโหลด...</main>;
+  if (!song) return <main className="container">{notFound
+    ? <div style={{padding:'2rem 0',color:'var(--muted)'}}>ไม่พบเพลงนี้ — อาจถูกลบหรือถูกซ่อนไว้ · <Link href="/songs">กลับหน้าฐานข้อมูลเพลง</Link></div>
+    : 'กำลังโหลด...'}</main>;
 
   async function uploadAudio() {
     if (!audioFile) { setAudioMsg('⚠ เลือกไฟล์เสียงก่อน'); return; }
@@ -285,8 +290,19 @@ export default function SongDetailClient() {
           ⚠ {melodyWhy}</div>}
         {songOwner && <div style={{fontSize:'0.72rem',color:'var(--jade)',marginTop:'6px'}}>
           ✍️ เพิ่มข้อมูลโดย: {songOwner}{song.created_at && <span style={{color:'var(--muted)'}}> · {fmtDT(song.created_at)}</span>}</div>}
+        {/* เพลงถูกซ่อน — แถบนี้เห็นเฉพาะผู้ดูแลอยู่แล้ว เพราะคนอื่นเปิดหน้านี้ไม่ได้ (RLS ที่ฐาน) */}
+        {song.hidden && <div data-hidden-note style={{marginTop:'0.6rem',padding:'0.55rem 0.8rem',borderRadius:'8px',
+          background:'rgba(212,122,143,0.10)',border:'1px solid var(--danger)',fontSize:'0.8rem',color:'var(--danger)'}}>
+          🙈 {t('hidden_badge')}</div>}
         <div style={{marginTop:'0.8rem',display:'flex',gap:'10px',flexWrap:'wrap',alignItems:'center'}}>
           <ShareBar statType="song" statId={id} title={song.name_th + ' — หอจดหมายเหตุดนตรีไทย'} />
+          {isAdmin && <button className="btn btn-outline btn-sm" data-hide-btn style={{fontSize:'0.7rem',
+              ...(song.hidden ? {color:'var(--danger)',borderColor:'var(--danger)'} : {})}}
+            onClick={async () => {
+              const { error } = await supabase.rpc('set_song_hidden', { p_song: id, p_hidden: !song.hidden });
+              if (error) { alert(error.code === 'PGRST202' ? t('hide_need_sql') : t('hide_fail') + ' ' + error.message); return; }
+              setSong(x => ({ ...x, hidden: !x.hidden }));
+            }}>{song.hidden ? '👁 ' + t('unhide_song') : '🙈 ' + t('hide_song')}</button>}
           {can('cite') && <button className="btn btn-outline btn-sm" style={{fontSize:'0.7rem'}} onClick={copyCitation}>
             {copied ? '✓ คัดลอกแล้ว' : '📚 คัดลอกการอ้างอิง'}</button>}
         </div>
