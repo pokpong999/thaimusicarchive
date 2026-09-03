@@ -9,7 +9,7 @@ import { useLang } from '../../lib/i18n';
 import { trText } from '../../lib/translate';
 
 // รุ่นของหน้าฐานข้อมูลเพลง — ไว้ตรวจว่าไฟล์นี้ถูกอัพแล้ว
-export const SONGDB_VERSION = '2 ก.ย. 69 · r5 (ซ่อนเพลงเฉพาะผู้ดูแล)';
+export const SONGDB_VERSION = '3 ก.ย. 69 · r6 (รหัส - ชื่อไทย - ชื่อโรมัน)';
 
 const PAGE_SIZE = 25;
 
@@ -78,7 +78,7 @@ export default function SongDatabasePage() {
     const my = ++seq.current;
     setLoading(true);
     let query = supabase.from('songs').select('*', { count: 'exact' }).order('name_th');
-    if (q) query = query.or(`name_th.ilike.%${q}%,id.ilike.%${q}%`);
+    if (q) query = query.or(`name_th.ilike.%${q}%,id.ilike.%${q}%,catalog_code.ilike.%${q}%,name_en.ilike.%${q}%`);
     if (fType)  query = query.eq('type', fType);
     if (fStyle) query = query.eq('style', fStyle);
     if (fProof) query = fProof === 'none'
@@ -161,9 +161,13 @@ export default function SongDatabasePage() {
                 <tr><td colSpan={isAdmin ? 9 : 7} style={{textAlign:'center',color:'var(--muted)'}}>{t('loading')}</td></tr>
               ) : songs.map(s => (
                 <tr key={s.id} style={s.hidden ? {opacity:0.55} : undefined}>
-                  <td className="song-id">{s.id}</td>
+                  {/* รหัสระบบใหม่ (catalog_code) — แถวเก่าที่ยังไม่มีรหัสแสดง id เดิม (Pk 3 ก.ย. 69) */}
+                  <td className="song-id" title={s.id}>{s.catalog_code || s.id}</td>
                   <td>
                     <Link href={`/songs/${s.id}`}><span className="song-name">{trText(lang, s, 'name_th')}</span></Link>
+                    {/* ชื่อโรมัน (RTGS) ต่อท้ายชื่อไทย · ในโหมดอังกฤษสลับเป็นชื่อไทย */}
+                    {(lang === 'th' ? s.name_en : s.name_th) && <span data-name-alt
+                      style={{fontSize:'0.74rem',color:'var(--muted)',marginLeft:'8px'}}>{lang === 'th' ? s.name_en : s.name_th}</span>}
                     {/* เพลงย่อยที่แยกจากเพลงเรื่อง — บอกที่มาไว้ จะได้ไม่งงว่ามาจากไหน (Pk 27 ส.ค. 69) */}
                     {s.parent_song_id && <span style={{fontSize:'0.68rem',color:'var(--muted)',marginLeft:'6px'}}
                       title={t('part_of') + ' ' + s.parent_song_id}>🧩 {s.parent_song_id}</span>}
