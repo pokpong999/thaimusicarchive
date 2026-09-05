@@ -3,7 +3,8 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 
-export default function AnniversaryBanner() {
+// boxed: หน้าแรก r6 แสดงเป็นกล่องมุมมน ไม่ใช่แถบเต็มจอ (Pk 5 ก.ย. 69)
+export default function AnniversaryBanner({ boxed = false } = {}) {
   const [events, setEvents] = useState([]);
   const [idx, setIdx] = useState(0);
 
@@ -27,8 +28,10 @@ export default function AnniversaryBanner() {
     <Link href={`/archive/${ev.id}`}>
       <div style={{
         background: 'linear-gradient(90deg, rgba(201,168,76,0.15), rgba(201,168,76,0.05), rgba(201,168,76,0.15))',
+        border: boxed ? '1px solid rgba(201,168,76,0.3)' : 'none',
         borderBottom: '1px solid rgba(201,168,76,0.35)',
-        padding: '10px 2rem',
+        borderRadius: boxed ? 10 : 0, marginBottom: boxed ? '1.2rem' : 0,
+        padding: boxed ? '10px 1rem' : '10px 2rem',
         display: 'flex', alignItems: 'center', gap: '14px',
         cursor: 'pointer', overflow: 'hidden',
       }}>

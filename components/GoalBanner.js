@@ -13,7 +13,8 @@ const GOAL = 300;                 // ขุน — ปลดล็อกระ�
 const PER_RECORD = 15;            // บันทึกที่มีรูป+พิกัด
 const HIDE_KEY = 'thma-goal-hide';
 
-export default function GoalBanner() {
+// homeOnly: หน้าแรก r6 ไม่แสดงสถานะ "ปลดล็อกแล้ว" (ปุ่มบันทึกโน้ต/เหตุการณ์ย้ายไปเมนูอวตารบนแถบเมนู · Pk 5 ก.ย. 69)
+export default function GoalBanner({ homeOnly = false } = {}) {
   const [me, setMe] = useState(undefined);   // undefined = ยังไม่รู้ · null = ไม่ได้ล็อกอิน · {points, role, display_name}
   const [hidden, setHidden] = useState(false);
 
@@ -58,7 +59,7 @@ export default function GoalBanner() {
   // ── สมาชิก ──
   const unlocked = me.points >= GOAL || ['admin', 'moderator', 'superuser', 'student'].includes(me.role);
   if (unlocked) {
-    if (hidden) return null;
+    if (hidden || homeOnly) return null;
     return (
       <section style={{ ...wrap, padding: '0.7rem 1.2rem', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <span style={{ fontSize: '0.88rem' }}>🎼 <b>ปลดล็อกแอปบันทึกโน้ตแล้ว</b> — {me.name || 'คุณ'} {getRank(me.points).icon} {getRank(me.points).name}</span>
